@@ -627,6 +627,73 @@ GLOSSARY: list[tuple[str, str]] = [
      tr("The colour of the paper itself — the lightest 'colour' a print can contain. Profiles measure and account for it.")),
 ]
 
+
+# App-workflow terms (Knut: "patch set, chart layout, layout engine, etc. —
+# it should make a bit longer list").
+GLOSSARY += [
+    (tr("Patch set"),
+     tr("The list of colours a chart will contain — designed by targen or by "
+        "the generators in the chart editor — before anything is laid out on "
+        "paper. Stored as a .ti1 file.")),
+    (tr("Chart layout"),
+     tr("How a patch set is arranged on the page: patch size, margins, "
+        "spacers, strips and page splits. The layout decides what the "
+        "instrument (or scanner) can read reliably.")),
+    (tr("Layout engine"),
+     tr("ChromIQ's own chart-layout generator — an alternative to printtarg. "
+        "It records exactly where every patch sits, so scans of its charts "
+        "can be read with perfect knowledge of the geometry.")),
+    (tr("Preset"),
+     tr("A saved set of chart options you can reload with one click. ChromIQ "
+        "ships built-in presets (marked ★) and stores the ones you save "
+        "yourself; both appear in the Presets dropdown.")),
+    (tr("Chart recipe"),
+     tr("The saved design of a chart's colour set (which generators, how many "
+        "patches, in what order) — carried with the chart so the same design "
+        "can be reloaded, edited or reused later.")),
+    (tr("Preconditioning profile"),
+     tr("A quick first-pass profile used to seed a better second chart: "
+        "patch colours are chosen where the printer actually needs them. See "
+        "the two-pass workflow.")),
+    (tr("Refinement (two-pass)"),
+     tr("Building a profile in two rounds: a first chart maps the printer "
+        "roughly, a second chart — placed using that knowledge — measures "
+        "where it matters. The measurements are merged for the final "
+        "profile.")),
+    (tr("Averaging (measurements)"),
+     tr("Reading the same printed chart more than once and averaging the "
+        "measurements. Evens out instrument noise and print unevenness; "
+        "ChromIQ offers it after the last strip is read.")),
+    (tr("Randomised patch order"),
+     tr("Scrambling the printed order of patches so neighbouring strips "
+        "don't contain similar colours in sequence. Helps strip-reading "
+        "instruments notice when a strip was read wrongly.")),
+    (tr("Patch sample area"),
+     tr("How much of each patch's centre gets read when profiling from a "
+        "scan — shown as the green inner square. Reading only the middle "
+        "avoids edges, bleed and slight grid misplacement.")),
+    (tr("Reading grid (marquee)"),
+     tr("The draggable four-corner frame you place over a scanned target so "
+        "ChromIQ knows where every patch sits. The misalignment check warns "
+        "when it seems off.")),
+    (tr("Demo target"),
+     tr("A rendered stand-in scan for a standard target, with exact known "
+        "colours and realistic softness/noise. Lets you try the scanner "
+        "workflow end-to-end without hardware.")),
+    (tr("Driver colour management"),
+     tr("The printer driver's own colour correction. It MUST be off when "
+        "printing charts — if the driver remaps colours, the measurements "
+        "describe the driver, not the printer.")),
+    (tr("Bit depth (8/16-bit)"),
+     tr("How many steps each colour channel has: 8-bit = 256, 16-bit = "
+        "65536. Charts print fine as 8-bit; 16-bit matters for smooth "
+        "gradients and some editing workflows.")),
+    (tr("Verification (profile check)"),
+     tr("Printing and measuring a small chart THROUGH the finished profile "
+        "to see how close the result lands (in ΔE). The honest way to judge "
+        "a profile — better than trusting the build report.")),
+]
+
 GLOSSARY_CARD: dict = {
     "key": "glossary",
     "title": tr("Dictionary and terminology"),
@@ -1398,7 +1465,8 @@ class WelcomeDialog(QDialog):
                 w.deleteLater()
         if wf.get("kind") == "glossary":
             # Alphabetical term/definition rows — no step badges (Knut, #108).
-            for term, definition in GLOSSARY:
+            for term, definition in sorted(GLOSSARY,
+                                           key=lambda e: e[0].lower()):
                 self._steps_layout.addWidget(self._make_glossary_row(
                     term, definition))
         else:

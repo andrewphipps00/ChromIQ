@@ -1,5 +1,115 @@
 # Changelog
 
+## v3.13.0
+
+The biggest ChromIQ release so far — 143 betas, developed and tested
+end-to-end with Knut Georg Larsson. Three headline features: ChromIQ's
+own chart layout engine, scanner & camera profiling, and profiling a
+printer with a flatbed scanner instead of a spectrophotometer.
+
+### 🧩 The ChromIQ layout engine
+- ChromIQ can now lay out charts itself — a built-in alternative to
+  ArgyllCMS printtarg for i1Pro / i1Pro 3 / ColorMunki / SpectroScan
+  (toggle in Create Chart → Manual; Guided uses it transparently).
+- Your margins are the law: the patch area is exactly the margin box you
+  set, with strip labels, sheet text and the clip band living inside it —
+  charts pack denser than printtarg (e.g. i1/A4 462 vs 441 patches), and
+  "Use instrument margins" fills and locks the jig minimums when you
+  want them.
+- Two layout philosophies: "Prioritise patch size" (set the size, fit as
+  many as possible) or "Prioritise chart area" (pin strips/rows or a
+  minimum patch size and the grid grows to fill the page exactly).
+- Per-chart control of everything: patch size and scale, per-edge
+  margins, coloured/B&W spacers, inter-patch and label gaps, strip-label
+  font/size/rotation/underline, 8/16-bit, compression, resolution.
+- Sheet text with live placeholders ({project}, {paper}, {page}…), and a
+  redesigned clip-border band whose default is an auto-filled Notes box —
+  chart facts printed, labelled lines to hand-write printer/ink/paper.
+- Randomise with a stored seed (reproducible layouts), optional
+  ArgyllCMS .cht emission, SpectroScan hexagons, ColorMunki brick offset
+  and native extra-high density.
+- Everything saves as defaults and in named presets, exactly like the
+  printtarg options, and the chart editor is now a true patch-set
+  editor: layout lives in Create Chart, patches (generate, load from
+  .ti1/.ti2/.ti3/CGATS/hex lists, combine, recolour) live in the editor,
+  and an edited set re-lays-out under your current chart settings.
+
+### 🖨️ Scanner & camera profiling (no target chart needed)
+- Build an ICC profile for a flatbed scanner — or a digital camera —
+  from a chart you printed and measured (its .cht + .cie are written on
+  request from every measurement), or from a standard target you own:
+  Wolf Faust IT8, LaserSoft (Advanced and DCPro), X-Rite ColorCheckers,
+  HutchColor HCT, QPcard, SpyderChecker, CMP and every other target
+  ArgyllCMS knows. Reference files convert themselves (.cie/.txt/.ti3
+  as-is, .cxf via cxf2ti3, raw/spectral .txt via txt2ti3 + spec2cie).
+- ChromIQ bundles Knut Georg Larsson's corrected recognition files —
+  several of Argyll's shipped .cht files had wrong geometry — and all
+  bundled targets read back 100 % of their patches through scanin.
+- A live reading grid with zoom/pan/rotate, mid-side handles, pop-out
+  view, per-target position memory, fiducial-frame support and a "Patch
+  sample area" control (read only the clean patch centres).
+- Average several scans (mean / geometric / trimmed), choose the profile
+  type (Matrix recommended, LUT medium/high), name the profile and
+  install it with one click. Try everything first with a demo scan —
+  a rendered stand-in with known colours, realistic softness and real
+  scanner noise.
+
+### 🖨️→📷 Profile your printer with a flatbed scanner
+- No spectrophotometer? Print a chart (no measuring!), scan every page
+  on your profiled scanner, and ChromIQ reads the patches through the
+  scanner profile and builds the printer ICC — the whole loop without a
+  spectro. Works with ChromIQ charts (engine or printtarg) and with
+  charts made outside ChromIQ (hand it their printtarg .cht pages).
+
+### 🛡️ Misalignment protection (Knut's design)
+- The reading grid is guarded by layered, calibrated checks: a dense
+  placement evaluator ranks your grid position against a 12-step ladder
+  in 8 directions (best position = 100 %), and an edge detector senses
+  patch borders with an 11×11 grid per sample box — full coverage plus
+  an outer ring that fires while a box is still approaching a border,
+  symmetric in every direction, with a connectivity rule so dust can
+  never fake an edge and a clean-nearby rule so a target's own printed
+  bars don't count.
+- A "Check alignment" button dry-runs the page on screen; every build
+  checks all pages and warns (Stop / Build anyway) with the worst
+  patches named; a post-build self-check reads colprof's own fit error.
+  All thresholds editable under Settings → Scanner Limits, each with a
+  plain-language explanation and its default stated.
+
+### 🔗 Device-link tools
+- New Tools: "Create device-link profile" (collink with friendly
+  presets, viewing conditions, image-optimised gamut mapping via
+  tiffgamut in CIECAM02 space, 3DLUT export) and "Apply a device-link
+  to an image" (cctiff → printer-ready TIFF, sidestepping driver colour
+  management; source-space auto-fix with v4→v2 conversion).
+
+### ✨ More
+- New built-in Scanner presets by Knut (A4/Letter one-page 3430/3250 and
+  two-page 6860/6500 patch flatbed charts) that carry their full
+  New-chart design; built-in preset recipes seed the editor.
+- Print Chart can print any TIFF through the colour-management-free
+  pipeline; Tools menu grouped by task; Settings gains a Paths tab
+  (every folder ChromIQ uses, editable profile-install folder) and
+  Scanner Limits; busy indicators with step names on long runs.
+- New Help cards: "Profile my scanner or camera", "Profile my printer
+  with a flatbed scanner", and a "Dictionary and terminology" glossary —
+  60 terms from ChromIQ and colour management in plain language.
+- Scan-resolution guidance everywhere it matters: 600 dpi or more,
+  1200 dpi preferred.
+- The three ISO 12641-2 target entries are labelled as what they are:
+  the three pages of the standard's 3-page target set.
+- macOS builds declare their true minimum (macOS 13); older Macs can run
+  from source with Qt 6.8 (recipe in the README).
+
+### 🌍 Languages
+- Everything above is fully translated in all 13 languages.
+
+### 🙏 Thanks
+- To **Knut Georg Larsson** for designing, testing and calibrating this
+  release across 143 betas — the layout engine, the scanner workflows
+  and the misalignment checks carry his fingerprints throughout — and to
+  Nelson for the Windows scanner-profiling reports.
+
 ## v3.13.0-beta.143
 
 ### ✨ Improvements

@@ -21,9 +21,13 @@ _FRIENDLY: dict[str, str] = {
     "it8": "IT8.7/2 (generic)",
     "it8Wolf": "IT8 / ISO 12641-1 — Wolf Faust",
     "ISO12641_2_1": "IT8 / ISO 12641-2 — LaserSoft Advanced",
-    "ISO12641_2_3_1": "ISO 12641-2 layout 1",
-    "ISO12641_2_3_2": "ISO 12641-2 layout 2",
-    "ISO12641_2_3_3": "ISO 12641-2 layout 3",
+    # The three PAGES of the ISO 12641-2 three-page target set: identical
+    # grid geometry, but each page carries different colours (columns 1–24 /
+    # 25–48 / 49–72 in the reference) — all three are needed, one per sheet
+    # (Knut asked why three seemingly identical layouts exist).
+    "ISO12641_2_3_1": "ISO 12641-2 (3-page set) — page 1",
+    "ISO12641_2_3_2": "ISO 12641-2 (3-page set) — page 2",
+    "ISO12641_2_3_3": "ISO 12641-2 (3-page set) — page 3",
     "LaserSoftDCPro": "LaserSoft DCPro",
     "ColorChecker": "X-Rite ColorChecker (24)",
     "ColorCheckerSG": "ColorChecker SG",

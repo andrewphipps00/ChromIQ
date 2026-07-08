@@ -1168,7 +1168,11 @@ class ScannerProfileDialog(_ToolDialogBase):
         row_sa = QHBoxLayout()
         row_sa.addWidget(self._sa_label)
         self._sample_area = NoScrollSpinBox(self)
-        self._sample_area.setRange(20, 100)
+        # Max 80%: the edge detector's outer sensing ring (one cell of the
+        # 11×11 grid) extends one ninth of the box beyond it — at 80% area it
+        # still sits inside a well-aligned patch; at 100% it would always
+        # touch the borders (Knut, #108).
+        self._sample_area.setRange(20, 80)
         self._sample_area.setValue(50)
         self._sample_area.setSuffix(" %")
         self._sample_area.setMinimumWidth(110)
@@ -1188,7 +1192,9 @@ class ScannerProfileDialog(_ToolDialogBase):
             "small or the grid isn't perfectly aligned, so you stay well clear of "
             "the edges. Raise it (a bigger square) only for large, cleanly-printed "
             "patches with the grid sitting exactly right, to average over more of "
-            "each colour for a touch less noise.")), 0, Qt.AlignmentFlag.AlignVCenter)
+            "each colour for a touch less noise. 80% is the maximum — the "
+            "misalignment check senses one ring beyond the square, and that ring "
+            "must stay inside the patch when the grid is aligned.")), 0, Qt.AlignmentFlag.AlignVCenter)
         form.addLayout(row_sa)
 
         self._build_shot_bar(form)

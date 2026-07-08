@@ -408,13 +408,61 @@ def dense_placement_agreement(
         g = np.maximum(_cgrad(plane, 2), _cgrad(plane, 4))
         grad = g if grad is None else np.maximum(grad, g)
 
+    # The user's marquee quad in the (possibly downscaled) sampling space.
+    # Ring cells OUTSIDE it look past the patch area — at the chart's own
+    # frame, labels and margins, which are expected structure, not a
+    # misplacement (aligned LaserSoft/ISO grids false-flagged their whole
+    # boundary rows without this). Slightly expanded so the quad edge itself
+    # doesn't clip inner cells.
+    _qx = [c[0] * scale for c in corners]
+    _qy = [c[1] * scale for c in corners]
+    _qcx, _qcy = sum(_qx) / 4.0, sum(_qy) / 4.0
+    _quad = [(_qcx + (x - _qcx) * 1.02, _qcy + (y - _qcy) * 1.02)
+             for x, y in zip(_qx, _qy)]
+
+    def _in_quad(px_, py_):
+        sign = 0
+        for i in range(4):
+            ax, ay = _quad[i]
+            bx, by = _quad[(i + 1) % 4]
+            cr = (bx - ax) * (py_ - ay) - (by - ay) * (px_ - ax)
+            if cr != 0:
+                if sign == 0:
+                    sign = 1 if cr > 0 else -1
+                elif (cr > 0) != (sign > 0):
+                    return False
+        return True
+
     def cell_peaks(ix):
+        """Peak gradient per cell of an 11×11 grid: the inner 9×9 tiles the
+        sample box with FULL coverage (float edges — the old integer cells
+        cropped up to 8 px at the right/bottom, so edges entering from those
+        sides went unseen until much deeper: Knut's beta.142 asymmetry), and
+        the outer ring of one cell width sits OUTSIDE the box, detecting a
+        patch border while the box is still APPROACHING it (Knut's 11×11
+        design). Returns 121 values, row-major."""
         xa, ya, xb, yb = ix
-        w9, h9 = (xb - xa) // 9, (yb - ya) // 9
-        if w9 < 1 or h9 < 1:
+        cw, ch = (xb - xa) / 9.0, (yb - ya) / 9.0
+        if cw < 1 or ch < 1:
             return None
-        sub = grad[ya:ya + h9 * 9, xa:xa + w9 * 9]
-        return sub.reshape(9, h9, 9, w9).max(axis=(1, 3)).ravel()
+        x0, y0 = xa - cw, ya - ch
+        xs = [int(round(x0 + i * cw)) for i in range(12)]
+        ys = [int(round(y0 + j * ch)) for j in range(12)]
+        H, W = grad.shape
+        vals = []
+        for j in range(11):
+            for i in range(11):
+                ax, bx = max(0, xs[i]), min(W, xs[i + 1])
+                ay, by = max(0, ys[j]), min(H, ys[j + 1])
+                if bx - ax < 1 or by - ay < 1:
+                    vals.append(0.0)
+                    continue
+                if (i == 0 or i == 10 or j == 0 or j == 10) and \
+                        not _in_quad((ax + bx) / 2.0, (ay + by) / 2.0):
+                    vals.append(0.0)
+                    continue
+                vals.append(float(grad[ay:by, ax:bx].max()))
+        return vals
 
     # Grain floor from the user's own boxes: print grain and scanner noise
     # raise every sub-cell; an edge only the cells it crosses.
@@ -428,7 +476,12 @@ def dense_placement_agreement(
         if c is None:
             continue
         user_cells[b.name] = [float(v) for v in c]
-        all_peaks.extend(user_cells[b.name])
+        # Grain floor from the INNER 9×9 only: the outer ring's whole job is
+        # to sit near borders, so its peaks are edge signal, not grain —
+        # letting them into the floor inflates the threshold until real
+        # edges stop registering.
+        all_peaks.extend(v for k, v in enumerate(user_cells[b.name])
+                         if 1 <= k // 11 <= 9 and 1 <= k % 11 <= 9)
     fbp: dict[str, float] = {}
     if all_peaks:
         gfloor = float(np.percentile(all_peaks, 75))
@@ -447,7 +500,7 @@ def dense_placement_agreement(
             hot9 = [i for i, v in enumerate(vals) if v > thr]
             if len(hot9) < 3:
                 return False
-            cells = {(i // 9, i % 9) for i in hot9}
+            cells = {(i // 11, i % 11) for i in hot9}
             seen: set = set()
             for start in cells:
                 if start in seen:

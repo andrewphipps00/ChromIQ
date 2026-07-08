@@ -376,7 +376,9 @@ def _dense_fixture(tmp_path, offset_frac=0.0):
             boxes.append(b)
             exp[b.name] = v
     from PIL import ImageFilter
-    img = img.filter(ImageFilter.GaussianBlur(3))   # real scans have soft edges
+    # σ1 matches real scans (Knut measured 3–4 px transitions at 300 dpi);
+    # softer blur starves the gradient and no detector should be tuned to it
+    img = img.filter(ImageFilter.GaussianBlur(1))
     path = tmp_path / "chart.png"
     img.save(path)
     dx = offset_frac * cell
@@ -427,7 +429,10 @@ def test_flank_detection_fires_on_edges_only(tmp_path):
     path, boxes, corners, exp = _dense_fixture(tmp_path, 0.0)
     rep = dense_placement_agreement(path, boxes, corners, exp)
     aligned_hits = [n for n, v in rep.flank_by_patch.items() if v > 0.16]
-    path2, boxes2, corners2, exp2 = _dense_fixture(tmp_path, 0.40)
+    # 0.25 of a cell: the sample box's edge has just crossed the border —
+    # the regime the detector must catch (deeper offsets are caught by the
+    # placement-agreement floor long before the edge rule matters)
+    path2, boxes2, corners2, exp2 = _dense_fixture(tmp_path, 0.25)
     rep2 = dense_placement_agreement(path2, boxes2, corners2, exp2)
     crossing_hits = [n for n, v in rep2.flank_by_patch.items() if v > 0.16]
     assert len(aligned_hits) < 7          # noise/dust stays under the 7-box rule
