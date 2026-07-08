@@ -1,5 +1,38 @@
 # Changelog
 
+## v3.13.1
+
+Follow-up fixes and refinements to the 3.13.0 layout engine and scanner
+profiling.
+
+### Fixes
+- **Strip-indicator style now takes effect.** The label font, size,
+  bold/italic, rotation, offset and underline options in Settings → Chart
+  Layout were being ignored on new charts. They now apply to every engine
+  chart — Settings is the single source of truth (a saved preset or "Save as
+  Defaults" no longer silently overrides them).
+- **Scanner targets from more charts.** The ten "by Pharmacist" prebuilt
+  charts and ColorMunki double-density charts couldn't be turned into scanner
+  targets because they carried no patch geometry. ChromIQ now derives that
+  geometry from the printed chart itself — colour-verified patch by patch
+  against the reference — so those charts are scanner-ready. (One bundled
+  i1Pro/A4 TC9.24 chart is left out: its packaged image disagrees with its own
+  reference values and should be regenerated.)
+- **Guided patch count matches the chart.** The Guided "calculated patches"
+  figure and the Chart-layout-information estimate now agree with what the
+  engine actually builds, for every instrument and option (i1Pro / i1Pro 3+ /
+  ColorMunki hand-held/double/triple density / SpectroScan) — including when
+  the Manual layout-engine toggle is off, where the count and estimate could
+  previously be wrong or blank.
+
+### Improvements
+- **ColorMunki extra-high (triple) density honours the patch-size scale**, so
+  it reproduces printtarg's triple-density layout exactly at any scale instead
+  of a single fixed size.
+- **Eleven of the "Full layout setup" presets now build with the ChromIQ
+  layout engine** (verified to match printtarg exactly), so they carry native,
+  scanner-ready geometry.
+
 ## v3.13.0
 
 The biggest ChromIQ release so far — 143 betas, developed and tested
