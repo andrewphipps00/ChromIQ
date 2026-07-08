@@ -50,6 +50,20 @@ Selecting one prompts for a name, copies the bundled files into a fresh
 loads the TIFFs — **no `targen` or `printtarg` runs**, so the parameter panels
 are greyed out while the preset is active.
 
+**Scanner geometry.** Because nothing runs at selection, these bundles used to
+carry no `channels.json` layout block, so the copied runs couldn't be turned
+into scanner targets (Knut). Each bundle now ships a `<stem>.channels.json`
+whose exact patch grid was **derived from the bundled render itself**,
+colour-verified patch by patch against the bundle's own `.ti2`
+(`workflow.layout_from_render`, `engine: "derived"` — same schema as an engine
+chart's exact geometry). Regenerate it with
+`python scripts/derive_prebuilt_geometry.py` after adding or replacing a bundle;
+`_create_prebuilt_target` already copies the sidecar into the run.
+A bundle whose render disagrees with its own `.ti2` (e.g. the i1Pro/A4 `tc924`
+set, whose patch V16 renders white where the `.ti2` says grey) fails
+derivation and ships **without** geometry — correct-or-absent, never guessed —
+and the underlying bundle should be regenerated.
+
 The ten shipped presets (all RGB). Labels follow the same
 `Instrument · Paper-NNNNp-Mpages Name by Pharmacist` convention as the
 ti1→printtarg presets below (patch width / orientation omitted — not stored for

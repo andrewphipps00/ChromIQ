@@ -251,7 +251,14 @@ def placement(geom: Geom, paper_w_mm: float, paper_h_mm: float, layout: Layout) 
     # rlwi reserves a row-label band on the left (SpectroScan only — it labels the
     # grid 2-D: column letters on top + row numbers down the side, #93 Knut), so
     # the patch block starts after it. avail_w already excludes rlwi.
-    _y0 = amints + _lead + g.hxeh + g.offset_y
+    # hxeh shifts the block top only for hex patches (their apexes genuinely
+    # overshoot upward). The ColorMunki strip stagger (row_stagger_mm) also
+    # reserves hxeh, but its overhang is downward-only — printtarg keeps the
+    # grid flush at the top and absorbs the whole overhang below, and shifting
+    # down here ate 3.3 mm of the CM trailer reserve (verified against
+    # printtarg -h: tops 40.4/47.1 mm, trailer stays ≥ tspa 25 mm).
+    _hex_shift = g.hxeh if g.row_stagger_mm <= 0 else 0.0
+    _y0 = amints + _lead + _hex_shift + g.offset_y
     if g.margins_are_law:
         # Strip labels live in the top margin at the text-edge distance from the
         # PAGE EDGE (Knut: 4 mm), but they must NEVER sit behind the patches. So

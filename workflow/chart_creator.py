@@ -1284,17 +1284,30 @@ class ChartCreator:
 
     def _capture_scanner_cht(self, work_dir: Path, stem: str,
                              params: "ChartParams") -> None:
-        """Best-effort: capture printtarg's exact ``.cht`` geometry for this chart
-        and store it in ``channels.json`` so a scanner target can be built later
-        (#8), including for printtarg/preset charts that have no engine geometry.
+        """Best-effort: store this chart's exact scan-recognition geometry in
+        ``channels.json`` so a scanner target can be built later (#8).
+
+        First choice is printtarg's own ``.cht`` (:meth:`_capture_printtarg_cht`
+        re-runs it with ``-s``); when that capture is impossible — scan mode
+        paginates a few tightly-packed layouts differently (e.g. ColorMunki
+        double density at -a0.91–0.93, #108) — fall back to deriving the
+        geometry from the rendered TIFF itself, colour-verified patch by patch
+        against the ``.ti2`` (:mod:`workflow.layout_from_render`). Both paths
+        are correct-or-absent; never raises into the caller."""
+        if not self._capture_printtarg_cht(work_dir, stem, params):
+            self._derive_geometry_from_render(work_dir, stem)
+
+    def _capture_printtarg_cht(self, work_dir: Path, stem: str,
+                               params: "ChartParams") -> bool:
+        """Capture printtarg's exact ``.cht`` geometry into ``channels.json``,
+        returning True when stored.
 
         Re-runs printtarg with ``-s`` on the chart's own ``.ti1`` in a temp dir.
         printtarg's ``.cht`` is **seed-independent** (it encodes loc→position,
         which the random patch assignment doesn't touch — verified), so it matches
         the printed sheet regardless of randomisation; a low render DPI keeps it
         fast. We only persist it after checking its patch locs against the chart's
-        own ``.ti2`` — correct-or-absent, never silently wrong. Never raises into
-        the caller."""
+        own ``.ti2`` — correct-or-absent, never silently wrong."""
         import json
         import shutil
         import subprocess
@@ -1303,13 +1316,13 @@ class ChartCreator:
         try:
             ti1 = work_dir / f"{stem}.ti1"
             if not ti1.is_file():
-                return
+                return False
             from core.resource_path import argyll_binary
             bin_dir = Path(self._settings.get("argyll_bin_path",
                                               "/Applications/Argyll/bin"))
             pt = bin_dir / argyll_binary("printtarg")
             if not pt.exists():
-                return
+                return False
             # Same layout args, but a temp basename, a fast low render DPI (the
             # .cht is in device-independent points), and -s to emit the .cht.
             args = [a for a in self._build_printtarg_args(params)
@@ -1325,7 +1338,7 @@ class ChartCreator:
                          for c in sorted(tdp.glob("cap*.cht"))]
             if not pages:
                 log.warning("Scanner .cht capture produced no file for %s", stem)
-                return
+                return False
             # printtarg's scan mode (-s) needs slightly more room per page,
             # so a chart packed to the last few percent of capacity paginates
             # differently with -s (verified: CM double density at -a0.91–0.93
@@ -1342,7 +1355,7 @@ class ChartCreator:
                     "out %d page(s) but the printed chart has %d — this chart "
                     "type can't carry scan-recognition geometry.",
                     stem, len(pages), printed)
-                return
+                return False
             # Verify the captured geometry against the chart's own .ti2.
             from workflow.scanin_target import _cht_x_box_locs
             from workflow.ti3_analysis import parse_ti3
@@ -1354,7 +1367,7 @@ class ChartCreator:
             if ti2_locs and cht_locs != ti2_locs:
                 log.warning("Scanner .cht capture loc mismatch for %s (%d vs %d) "
                             "— not stored", stem, len(cht_locs), len(ti2_locs))
-                return
+                return False
             sidecar = work_dir / f"{stem}.channels.json"
             doc = json.loads(sidecar.read_text()) if sidecar.exists() else {}
             doc["layout"] = {"engine": "printtarg", "cht_pages": pages,
@@ -1362,8 +1375,35 @@ class ChartCreator:
             sidecar.write_text(json.dumps(doc))
             log.info("Captured scanner .cht geometry for %s: %d page(s), %d patches",
                      stem, len(pages), len(cht_locs))
+            return True
         except Exception as exc:  # noqa: BLE001 — best-effort, never break creation
             log.warning("Scanner .cht capture failed for %s (non-fatal): %s",
+                        stem, exc)
+        return False
+
+    def _derive_geometry_from_render(self, work_dir: Path, stem: str) -> None:
+        """Fallback scan geometry: derive the exact patch grid from the chart's
+        own rendered TIFF(s), colour-verified against the .ti2 patch by patch
+        (workflow.layout_from_render). Correct-or-absent; never raises."""
+        import json
+        try:
+            ti2 = work_dir / f"{stem}.ti2"
+            tiffs = sorted(work_dir.glob(f"{stem}_*.tif"))
+            if not tiffs and (work_dir / f"{stem}.tif").is_file():
+                tiffs = [work_dir / f"{stem}.tif"]
+            if not ti2.is_file() or not tiffs:
+                return
+            from workflow.layout_from_render import derive_layout_from_render
+            layout = derive_layout_from_render(tiffs, ti2)
+            sidecar = work_dir / f"{stem}.channels.json"
+            doc = json.loads(sidecar.read_text()) if sidecar.exists() else {}
+            doc["layout"] = layout
+            sidecar.write_text(json.dumps(doc))
+            log.info("Derived scanner geometry from the render for %s: "
+                     "%d patches, %d page(s)", stem,
+                     len(layout["patches"]), len(tiffs))
+        except Exception as exc:  # noqa: BLE001 — best-effort, never break creation
+            log.warning("Render-derived geometry failed for %s (non-fatal): %s",
                         stem, exc)
 
     # ------------------------------------------------------------------

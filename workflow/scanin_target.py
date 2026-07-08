@@ -76,8 +76,12 @@ def _load_scanner_layout(channels_json: str | Path) -> dict:
     except (OSError, ValueError) as exc:
         raise NotAnEngineChart(f"Couldn't read the chart layout: {exc}") from exc
     engine = layout.get("engine")
-    if engine == "chromiq" and layout.get("patches") and "dpi" in layout \
-            and "paper_mm" in layout:
+    # "chromiq" = the engine's own exact geometry; "derived" = the same schema
+    # recovered from the rendered TIFF + .ti2 (workflow.layout_from_render) for
+    # charts whose creation left no geometry (prebuilt bundles, discarded -s
+    # captures). Both carry per-patch px rects → the engine .cht path.
+    if engine in ("chromiq", "derived") and layout.get("patches") \
+            and "dpi" in layout and "paper_mm" in layout:
         return layout
     if engine == "printtarg" and layout.get("cht_pages"):
         return layout
