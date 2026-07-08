@@ -6331,10 +6331,31 @@ class TabChart(QWidget):
                         pscale=float(pscale),
                         margins=(float(margin),) * 4, border=float(margin),
                         nolimit=bool(nsl))
+        # The strip-reading instruments bracket each strip with a leading +
+        # trailing spacer (chart_creator._engine_build_kwargs does the same for
+        # the real build); those two reserved gaps must be counted here too, or
+        # the estimate over-counts what the engine actually fits (i1 A4 read 575
+        # vs the real 550).
+        if instr in ("i1", "p3", "CM"):
+            kw["edge_spacers"] = True
         if instr in ("i1", "p3"):
             kw["nolpcbord"] = bool(eff_lb)
         elif instr == "CM":
             kw["density"] = 3 if td else (2 if dd else 1)
+            if dd and not td:
+                # Double density couples the tighter rows with a half-patch row
+                # stagger, whose overhang reserves ¼-patch and reduces capacity;
+                # the build sets it, so the count must too (else it over-counts
+                # — CM double A3 read 480 vs the real 460).
+                kw["cm_stagger"] = True
+            if td:
+                # Same printtarg-> engine scale conversion the build applies
+                # (chart_creator._engine_build_kwargs): the guided pscale is the
+                # printtarg -ii1 -a value (1.3 default), and the engine's native
+                # extra-high size reproduces -a1.3 at pscale 1.0. Without this
+                # the count used the raw 1.3 → oversized patches → undercount.
+                from workflow.chart_creator import CM_TRIPLE_PRINTTARG_SCALE
+                kw["pscale"] = float(pscale) / CM_TRIPLE_PRINTTARG_SCALE
         elif instr == "SS":
             kw["hflag"] = bool(dd)
         # Guided mode has no margin boxes and no "Use instrument margins"
