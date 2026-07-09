@@ -1,0 +1,32 @@
+Fill this in while you're in i1Profiler (Test 1, step 4).
+Just type after each colon. Leave anything blank that i1Profiler doesn't show.
+
+Which patch-set file loaded successfully?  (probe.txt or probe.pxf)
+    file loaded: probe.pxf
+
+Measurement device you selected:
+    device: i1Pro 3
+
+Paper / page: 
+    paper size: Letter, 216 x 279 mm
+    orientation (portrait / landscape): landscape
+    page width x height in mm (if shown): 216 x 279 mm
+
+Patch size, as i1Profiler reports it:
+    patch width mm: 8,00
+    patch height mm: 7,0
+
+Grid, as i1Profiler reports it: note that I am writing down here what i see in the chart, i1Profiler does not explicitly state those values
+    columns: 30
+    rows: 20
+    pages: 1
+
+Did i1Profiler warn or complain about anything?
+    warnings: no
+
+Did opening probe-A-autolayout.pwxf and probe-B-reversed.pwxf work at all?
+    A opened: yes
+    B opened: yes
+
+Anything else that seemed odd: both charts from test 2a and 2b seem to look identical to my eye
+
