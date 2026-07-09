@@ -210,8 +210,11 @@ def test_numeric_locs_name_the_i1profiler_cause(tmp_path):
     with pytest.raises(ST.GeometryMismatch) as e:
         ST.build_scanin_target_from_paths(ch, ti3, tmp_path / "chart")
     msg = str(e.value)
-    assert "i1Profiler" in msg and "txt2ti3" in msg
+    assert "i1Profiler" in msg
     assert "Measure tab" in msg
+    # and it must not imply such a measurement is useless — a printer profile
+    # builds from it perfectly well (Build Profile imports it via txt2ti3).
+    assert "PRINTER" in msg and "Build Profile" in msg
 
 
 def test_cht_x_box_locs_skips_f_and_d_boxes():

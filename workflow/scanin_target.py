@@ -185,8 +185,12 @@ def _check_measured(geom_locs: list[str], data: Ti3Data) -> None:
             "This .ti3 numbers its patches (1, 2, 3, …) instead of naming "
             "their positions on the chart (A1, B2, …), so ChromIQ cannot tell "
             "which patch each measurement belongs to. That is what you get "
-            "from converting an i1Profiler measurement with txt2ti3. Measure "
-            "the chart with ChromIQ (Measure tab) and build from that .ti3.")
+            "from converting an i1Profiler measurement (Tools → Convert "
+            "i1Profiler → TI3). Such a measurement still builds a PRINTER "
+            "profile — load it in Build Profile — but a scanner/camera target "
+            "additionally needs to know where each patch sits on the sheet. "
+            "Measure this chart with ChromIQ (Measure tab) and build the "
+            "target from that .ti3.")
     raise GeometryMismatch(
         f"{len(missing)} chart patch(es) have no measurement — the .ti3 "
         f"doesn't match this chart (e.g. {sorted(missing)[:3]}). Re-measure "
