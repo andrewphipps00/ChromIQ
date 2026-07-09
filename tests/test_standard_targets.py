@@ -53,3 +53,53 @@ def test_bundled_cht_parses_and_registers():
     for cht in d.glob("*.cht"):
         g = parse_cht(cht.read_text(errors="ignore"))
         assert g.patches and len(g.fiducials) == 4, f"{cht.name} parse looks wrong"
+
+
+# --- multi-page sets + patch counts (Knut) ---------------------------------
+
+def test_iso12641_2_3_folds_into_one_multipage_target():
+    """The three ISO 12641-2 pages are one physical target, so they collapse to a
+    single multi-page entry (each page's .cht kept, in order) — never three
+    separate rows — and every entry carries its per-page patch count."""
+    import pytest
+    from tests.argyll_env import argyll_bin_dir
+    from workflow.standard_targets import grouped_standard_targets
+    bd = argyll_bin_dir()
+    if bd is None:
+        pytest.skip("Argyll not installed")
+    targets = grouped_standard_targets(_S(argyll_bin_path=str(bd)))
+    keys = [t.key for t in targets]
+    if "ISO12641_2_3" not in keys:
+        pytest.skip("ISO 12641-2 3-page set not in this Argyll ref/")
+    assert "ISO12641_2_3_1" not in keys and "ISO12641_2_3_3" not in keys
+    iso = next(t for t in targets if t.key == "ISO12641_2_3")
+    assert iso.is_multipage and iso.n_pages == 3 and len(iso.cht_paths) == 3
+    assert [p.stem for p in iso.cht_paths] == [
+        "ISO12641_2_3_1", "ISO12641_2_3_2", "ISO12641_2_3_3"]
+    assert all(c > 0 for c in iso.patch_counts)
+    # An ordinary single-sheet target stays single, with its own patch count.
+    single = next(t for t in targets if t.key == "it8Wolf")
+    assert not single.is_multipage and single.patch_counts[0] > 0
+
+
+def test_merge_demo_references_concatenates(tmp_path):
+    """Merging per-page demo references keeps every page's rows (disjoint names)
+    under one summed NUMBER_OF_SETS — the shared reference a set is read against."""
+    import re
+    from workflow.standard_targets import merge_demo_references
+
+    def _cie(names):
+        rows = "\n".join(f"{n} 10 10 10" for n in names)
+        return ("CGATS.17\nNUMBER_OF_FIELDS 4\nBEGIN_DATA_FORMAT\n"
+                "SAMPLE_ID XYZ_X XYZ_Y XYZ_Z\nEND_DATA_FORMAT\n"
+                f"NUMBER_OF_SETS {len(names)}\nBEGIN_DATA\n{rows}\nEND_DATA\n")
+
+    a = tmp_path / "a.cie"; a.write_text(_cie(["A1", "A2"]))
+    b = tmp_path / "b.cie"; b.write_text(_cie(["B1", "B2", "B3"]))
+    out = merge_demo_references([a, b], tmp_path / "m.cie")
+    txt = out.read_text()
+    assert int(re.search(r"NUMBER_OF_SETS (\d+)", txt).group(1)) == 5
+    for name in ("A1", "A2", "B1", "B2", "B3"):
+        assert re.search(rf"(?m)^{name} ", txt)
+    # exactly one data block (BEGIN_DATA_FORMAT must not be miscounted)
+    assert [l.strip() for l in txt.splitlines()].count("BEGIN_DATA") == 1

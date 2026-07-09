@@ -1,5 +1,30 @@
 # Changelog
 
+## v3.13.2
+
+Scanner/camera profiling refinements from Knut, plus a chart-preset fix.
+
+### Improvements
+- **The ISO 12641-2 three-page target is now one selection.** In Build scanner
+  or camera profile → "A standard target I own", the three ISO 12641-2 pages
+  used to appear as three separate list entries even though they're a single
+  multi-page target. They're now one entry that opens a three-page workflow —
+  pick and place a scan for each page, exactly like a multi-page ChromIQ chart —
+  with each page locked to its own recognition file. "Try with a demo scan"
+  loads a practice scan for every page.
+- **Target-type names show their patch count.** Each standard target in the list
+  now says how many patches it has (and, for the multi-page set, the per-page
+  count), so you can tell the sizes apart before picking one.
+
+### Fixes
+- **The i1Pro · A4 924-patch TC9.24 "by Pharmacist" chart is temporarily
+  unavailable.** Its bundled page image disagrees with its own reference values
+  (one patch is printed white where the reference says grey), which would spoil
+  both a print and any scanner target derived from it, so it's greyed out in the
+  Create Chart presets list for now. It returns once the chart is regenerated.
+  Every other "by Pharmacist" chart — including the ColorMunki A3 TC9.24 — is
+  unaffected.
+
 ## v3.13.1
 
 Follow-up fixes and refinements to the 3.13.0 layout engine and scanner

@@ -666,8 +666,12 @@ def builtin_recipe_choices() -> dict[str, dict]:
 
 
 # Built-in presets can be parked here (shown greyed-out, non-selectable) pending
-# a fix from their author; none are parked at the moment.
-DISABLED_BUILTIN_PRESET_KEYS = frozenset()
+# a fix from their author. The i1Pro/A4 TC9.24 chart is parked: its bundled page
+# image disagrees with its own .ti2 reference (one patch renders white where the
+# reference says grey), so both printing it and deriving scanner geometry from it
+# are unsafe — it returns once the bundle is regenerated. Its sibling ColorMunki
+# A3 TC9.24 (TC924_CM_A3_PRESET_KEY) is fine and stays available.
+DISABLED_BUILTIN_PRESET_KEYS = frozenset({TC924_PRESET_KEY})
 
 # Every built-in (non-deletable) preset key — all four are prebuilt-files. Used
 # to protect them from the delete button and to keep disk presets from shadowing

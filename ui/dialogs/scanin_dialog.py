@@ -41,7 +41,7 @@ from workflow.scanin_runner import ScaninParams, ScaninRunner
 from workflow.ti3_average import Ti3AverageError, average_scanner_ti3
 from workflow.scanin_target import (
     ScaninTargetError, build_scanin_target_from_paths, has_scanner_geometry)
-from workflow.standard_targets import list_standard_targets
+from workflow.standard_targets import StandardTarget, grouped_standard_targets
 
 log = get_logger(__name__)
 
@@ -561,7 +561,12 @@ class ScannerProfileDialog(_ToolDialogBase):
         self._shots: dict[int, list[dict]] = {}
         self._shot_idx = 0
         self._jobs: list[dict] = []
-        # Standard-target (own IT8 / ColorChecker) mode state.
+        # Standard-target (own IT8 / ColorChecker) mode state. A target can be
+        # multi-page (the ISO 12641-2 3-page set): _std_chts holds one .cht per
+        # page, locked to it, while _std_cht / _std_grid always mirror the page
+        # currently shown (self._page) so the per-page-agnostic code below is
+        # unchanged. _std_ref is the one reference shared by all pages.
+        self._std_chts: list[Path] = []
         self._std_cht: Path | None = None
         self._std_ref: Path | None = None
         self._std_grid = None
@@ -652,6 +657,23 @@ class ScannerProfileDialog(_ToolDialogBase):
 
     def _standard_mode(self) -> bool:
         return self._mode_standard.isChecked()
+
+    def _target_label(self, t: StandardTarget) -> str:
+        """Combo label for a standard target, annotated with its patch count so
+        the size is visible before picking (Knut). A multi-page set shows its
+        per-page count."""
+        if t.is_multipage:
+            counts = t.patch_counts
+            if len(set(counts)) == 1:
+                return tr("{name}  ·  {pages} pages × {n} patches").format(
+                    name=t.name, pages=t.n_pages, n=counts[0])
+            return tr("{name}  ·  {pages} pages ({counts} patches)").format(
+                name=t.name, pages=t.n_pages,
+                counts=" + ".join(str(c) for c in counts))
+        n = t.patch_counts[0] if t.patch_counts else 0
+        if n <= 0:
+            return t.name
+        return tr("{name}  ·  {n} patches").format(name=t.name, n=n)
 
     def _build_mode_selector(self, form) -> None:
         row = QHBoxLayout()
@@ -858,8 +880,13 @@ class ScannerProfileDialog(_ToolDialogBase):
             "ArgyllCMS).")))
         trow = QHBoxLayout()
         self._target_combo = NoScrollComboBox(self)
-        for name, path in list_standard_targets(self._settings):
-            self._target_combo.addItem(name, str(path))
+        # Every standard target, keyed so a multi-page set (three ISO 12641-2
+        # pages folded into one) can carry all its page .cht files. The label
+        # shows each target's patch count — for a set, the per-page count (Knut).
+        self._std_targets: dict[str, StandardTarget] = {}
+        for t in grouped_standard_targets(self._settings):
+            self._std_targets[t.key] = t
+            self._target_combo.addItem(self._target_label(t), t.key)
         self._target_combo.addItem(tr("Other… (choose a .cht file)"), "")
         self._target_combo.currentIndexChanged.connect(self._on_target_changed)
         trow.addWidget(self._target_combo, 1)
@@ -1552,6 +1579,13 @@ class ScannerProfileDialog(_ToolDialogBase):
         self._chart_geometry_ready()
 
     def _load_page_grid(self) -> None:
+        if self._standard_mode():
+            # Each page of a multi-page set has its own locked .cht — swap the
+            # current grid to it, then show the page's scan/placement.
+            self._sync_std_page()
+            self._sync_shot_view()
+            self._update_std_note()
+            return
         if self._layout is None:
             return
         pg = self._page
@@ -1632,7 +1666,7 @@ class ScannerProfileDialog(_ToolDialogBase):
             self._pages = [0]
             self._page = 0
             self._page_widget.setVisible(False)
-            self._on_target_changed()
+            self._on_target_changed()   # sets pages/selector for the current target
         else:
             self._std_grid = None
             if self._layout is not None:
@@ -1716,15 +1750,16 @@ class ScannerProfileDialog(_ToolDialogBase):
             self._refresh()
 
     def _on_target_changed(self, _idx: int = 0) -> None:
-        data = self._target_combo.currentData()
-        other = not data
+        key = self._target_combo.currentData()
+        other = not key
         self._cht_row_w.setVisible(other)
         self._demo_btn.setEnabled(not other)
         if other:
             txt = self._cht_field.text()
-            self._set_std_target(Path(txt) if txt else None)
+            self._set_std_targets([Path(txt)] if txt else [])
         else:
-            self._set_std_target(Path(data))
+            target = self._std_targets.get(key)
+            self._set_std_targets(list(target.cht_paths) if target else [])
 
     def _reveal_target_files(self) -> None:
         """Generate a synthetic demo scan + matching reference from the selected
@@ -1732,39 +1767,47 @@ class ScannerProfileDialog(_ToolDialogBase):
         read → build) can be tried with no hardware. It is a practice image (each
         patch a flat colour), NOT a real target scan — the same known-colour pair
         the automated tests use to confirm scanin reads correctly."""
-        cht = self._target_combo.currentData()
-        if not cht:
+        if not self._std_chts:
             self._log.appendPlainText(tr("Pick a bundled target above first."))
             return
-        from workflow.standard_targets import make_test_scan
+        from workflow.standard_targets import (
+            make_multipage_test_scans, make_test_scan)
         out = Path.home() / "ChromIQ" / "scanner-test-targets"
         try:
-            tif, ref = make_test_scan(Path(cht), out)
+            if len(self._std_chts) > 1:
+                tifs, ref = make_multipage_test_scans(self._std_chts, out)
+            else:
+                tif, ref = make_test_scan(self._std_chts[0], out)
+                tifs = [tif]
         except Exception as exc:  # noqa: BLE001
             self._log.appendPlainText(
                 tr("Couldn't prepare the demo scan: {e}").format(e=exc))
             return
-        self._cur_shot()["path"] = tif                 # load the demo scan
-        self._scan_field.setText(str(tif))
-        self._marquee.set_image(_load_scan_qimage(tif))
-        if self._cur_shot()["corners"]:
-            self._marquee.set_corners(self._cur_shot()["corners"])
-        elif self._restore_placement():
-            self._cur_shot()["corners"] = self._marquee.corners_image_px()
-        self._std_ref = ref                            # load its matching reference
+        # Load one demo scan into each page's first shot; a multi-page set gets a
+        # demo per page and the one merged reference covering them all.
+        for pg, tif in zip(self._pages, tifs):
+            self._page_shots(pg)[0]["path"] = tif
+        self._std_ref = ref
         self._ref_field.setText(str(ref))
         self._ref_converted_note = ""
+        self._shot_idx = 0
+        self._load_page_grid()                         # grid + current page's scan
+        cur = self._cur_shot()
+        if cur["path"] and not cur["corners"] and self._restore_placement():
+            cur["corners"] = self._marquee.corners_image_px()
         self._update_std_note()
         self._refresh_shot_bar()
         self._refresh()
+        pages_note = (tr(" (one demo scan per page — switch pages with the Page "
+                         "selector)") if len(self._std_chts) > 1 else "")
         self._log.appendPlainText(tr(
-            "Loaded a demo scan + reference to practise on. This is a synthetic "
-            "image ChromIQ drew from the target's recognition file — each patch a "
-            "flat colour — NOT a real target. Place the grid and Build to see the "
-            "read work end-to-end.\n"
+            "Loaded a demo scan + reference to practise on.{pages} This is a "
+            "synthetic image ChromIQ drew from the target's recognition file — "
+            "each patch a flat colour — NOT a real target. Place the grid and "
+            "Build to see the read work end-to-end.\n"
             "For a real profile, load your own scan (.tif) and the reference "
-            "(.cie) that came with your physical target instead. The bundled "
-            "recognition file is:\n  {cht}").format(cht=cht))
+            "(.cie) that came with your physical target instead.").format(
+                pages=pages_note))
 
     def _pick_cht(self) -> None:
         path = open_file_dialog(self, tr("Choose a .cht recognition file"),
@@ -1774,7 +1817,7 @@ class ScannerProfileDialog(_ToolDialogBase):
             return
         self._cht_field.setText(path)
         _remember_dir(self._settings, self.TOOL_KEY, Path(path).parent)
-        self._set_std_target(Path(path))
+        self._set_std_targets([Path(path)])
 
     def _convert_dir(self) -> Path:
         if self._convert_tmp is None:
@@ -1816,36 +1859,55 @@ class ScannerProfileDialog(_ToolDialogBase):
         self._update_std_note()
         self._refresh()
 
-    def _set_std_target(self, cht: Path | None) -> None:
-        changed = (self._std_cht is not None and cht is not None
-                   and Path(cht) != Path(self._std_cht))
-        self._std_cht = cht
+    def _set_std_targets(self, chts: list[Path]) -> None:
+        """Select a standard target: one ``.cht`` for an ordinary target, or one
+        per page for a multi-page set (each locked to its page). Sets up the page
+        selector and shows the current page's grid."""
+        chts = [Path(c) for c in chts if c]
+        changed = (self._std_chts
+                   and [Path(c) for c in chts] != [Path(c) for c in self._std_chts])
+        self._std_chts = chts
+        self._pages = list(range(len(chts))) if chts else [0]
+        if self._page not in self._pages:
+            self._page = self._pages[0] if self._pages else 0
+        self._page_combo.blockSignals(True)
+        self._page_combo.clear()
+        for pg in self._pages:
+            self._page_combo.addItem(tr("Page {n}").format(n=pg + 1), pg)
+        if self._pages:
+            self._page_combo.setCurrentIndex(self._pages.index(self._page))
+        self._page_combo.blockSignals(False)
+        self._page_widget.setVisible(len(self._pages) > 1)
         if changed:
-            # A different target type has different geometry: the previous
-            # placement is meaningless on it, and a DEMO scan belongs to the
-            # previous target outright (Knut: switching types kept showing
-            # the old grid, clearest with Try-a-demo between types).
-            for shot in self._page_shots(self._page):
-                shot["corners"] = None
+            # A different target type has different geometry: previous placements
+            # are meaningless on it, and any DEMO scans belong to the previous
+            # target outright (Knut: switching types kept showing the old grid,
+            # clearest with Try-a-demo between types). Clear every page.
+            self._reset_shots()
             demo_dir = Path.home() / "ChromIQ" / "scanner-test-targets"
-            cur = self._cur_shot().get("path")
-            if cur and demo_dir in Path(cur).parents:
-                self._cur_shot()["path"] = None
-                self._scan_field.setText("")
-                self._marquee.set_image(QImage())
-                if self._std_ref and demo_dir in Path(self._std_ref).parents:
-                    self._std_ref = None
-                    self._ref_field.setText("")
+            self._scan_field.setText("")
+            self._marquee.set_image(QImage())
+            if self._std_ref and demo_dir in Path(self._std_ref).parents:
+                self._std_ref = None
+                self._ref_field.setText("")
+        self._sync_std_page()
         if not self._fiducials_available() and self._use_fiducials_cb.isChecked():
             self._use_fiducials_cb.setChecked(False)   # new target has no fiducials
-        if cht is None or not cht.is_file():
-            self._std_grid = None
-            self._marquee.set_grid(GridSpec([]))
-        else:
-            self._rebuild_std_grid()
         self._update_std_note()
         self._refresh_shot_bar()
         self._refresh()
+
+    def _sync_std_page(self) -> None:
+        """Point ``_std_cht`` / ``_std_grid`` (and the marquee grid) at the page
+        currently shown, so the rest of the standard-mode code stays page-agnostic."""
+        chts = self._std_chts
+        if not chts or not (0 <= self._page < len(chts)) or not chts[self._page].is_file():
+            self._std_cht = chts[self._page] if 0 <= self._page < len(chts) else None
+            self._std_grid = None
+            self._marquee.set_grid(GridSpec([]))
+            return
+        self._std_cht = chts[self._page]
+        self._rebuild_std_grid()
 
     def _rebuild_std_grid(self) -> None:
         """(Re)build the standard-target grid from the current .cht. The marquee
@@ -1921,20 +1983,36 @@ class ScannerProfileDialog(_ToolDialogBase):
         step()
 
     def _update_std_note(self) -> None:
-        if self._std_cht is None:
+        if not self._std_chts or self._std_cht is None:
             self._std_note.setText("")
             return
         n = len(self._std_grid.rects) if self._std_grid else 0
+        multi = len(self._std_chts) > 1
         if n == 0:
             self._std_note.setText(tr(
                 "⚠ Couldn't read this target's patch grid from the .cht."))
         elif self._std_ref is None:
-            self._std_note.setText(tr(
-                "✓ {n} patches. Now choose the reference data file that came "
-                "with your target.").format(n=n))
+            if multi:
+                self._std_note.setText(tr(
+                    "✓ Multi-page target: {pages} pages, {n} patches on this "
+                    "page. Now choose the one reference data file that came with "
+                    "your target — it covers every page.").format(
+                        pages=len(self._std_chts), n=n))
+            else:
+                self._std_note.setText(tr(
+                    "✓ {n} patches. Now choose the reference data file that came "
+                    "with your target.").format(n=n))
         else:
-            msg = tr("✓ Ready — {n} patches, reference loaded. Scan the target "
-                     "and place the corners on its registration marks.").format(n=n)
+            if multi:
+                done = sum(1 for pg in self._pages if self._page_ready(pg))
+                msg = tr("✓ Ready — {pages}-page target, reference loaded. Scan "
+                         "each page and place the corners on its marks "
+                         "({done} of {pages} pages ready).").format(
+                             pages=len(self._std_chts), done=done)
+            else:
+                msg = tr("✓ Ready — {n} patches, reference loaded. Scan the "
+                         "target and place the corners on its registration "
+                         "marks.").format(n=n)
             if self._ref_converted_note:
                 msg += "  " + self._ref_converted_note
             self._std_note.setText(msg)
@@ -2076,9 +2154,9 @@ class ScannerProfileDialog(_ToolDialogBase):
     # ------------------------------------------------------------------ run
     def _can_run(self) -> bool:
         if self._standard_mode():
-            return (self._std_cht is not None and self._std_ref is not None
+            return (bool(self._std_chts) and self._std_ref is not None
                     and self._std_grid is not None and bool(self._std_grid.rects)
-                    and self._page_ready(0))
+                    and all(self._page_ready(pg) for pg in self._pages))
         if self._printer_mode() and self._printer_scan_profile is None:
             return False                         # printer mode needs a scanner ICC
         if not self._printer_mode() and not self._chart_measured:
@@ -2090,7 +2168,9 @@ class ScannerProfileDialog(_ToolDialogBase):
         """The (.cht, reference) pair for page *pg*: the chosen standard target,
         or the chart's own per-page .cht + .cie."""
         if self._standard_mode():
-            return self._std_cht, self._std_ref
+            cht = (self._std_chts[pg] if 0 <= pg < len(self._std_chts)
+                   else self._std_cht)
+            return cht, self._std_ref
         single = len(self._pages) == 1
         cht = (base.with_suffix(".cht") if single
                else base.parent / f"{base.name}_{pg + 1:02d}.cht")
@@ -2196,8 +2276,9 @@ class ScannerProfileDialog(_ToolDialogBase):
         self._run_diags: list[Path] = []         # diagnostic images this run writes
         method = self._avg_method.currentData() or "mean"
         if self._standard_mode():
-            pages = [0]
-            first = next(s["path"] for s in self._page_shots(0) if s["path"])
+            pages = self._pages
+            first = next(s["path"] for pg in pages
+                         for s in self._page_shots(pg) if s["path"])
             base = first.parent / first.stem
             # Keep the result folder self-contained: drop the reference .cie (a
             # converted one otherwise lives in a temp dir) next to the scan +

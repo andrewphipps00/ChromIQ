@@ -164,6 +164,50 @@ def test_standard_mode_lists_targets_and_loads_grid(_app):
         dlg.deleteLater()
 
 
+def test_standard_multipage_set_is_one_entry_with_per_page_chts(_app, tmp_path):
+    """The ISO 12641-2 3-page set shows as ONE dropdown entry that opens a
+    3-page selector, each page locked to its own .cht, and needs a scan on every
+    page before it can build — like a multi-page ChromIQ chart (Knut)."""
+    if not _has_it8():
+        import pytest as _pt
+        _pt.skip("Argyll ref/ not present")
+    dlg = _dialog(_app)
+    try:
+        dlg._mode_standard.setChecked(True)
+        idx = dlg._target_combo.findData("ISO12641_2_3")
+        if idx < 0:
+            import pytest as _pt
+            _pt.skip("ISO 12641-2 3-page set not in this Argyll ref/")
+        # The folded label carries the per-page patch count (Knut's second ask).
+        assert "patches" in dlg._target_combo.itemText(idx)
+        dlg._target_combo.setCurrentIndex(idx)
+        assert dlg._pages == [0, 1, 2]
+        assert len(dlg._std_chts) == 3
+        # Each page reads its own locked .cht.
+        stems = {dlg._files_for_page(pg, tmp_path / "b")[0].stem for pg in dlg._pages}
+        assert stems == {"ISO12641_2_3_1", "ISO12641_2_3_2", "ISO12641_2_3_3"}
+        # A reference alone isn't enough — every page needs a scan.
+        dlg._std_ref = tmp_path / "ref.txt"; dlg._std_ref.write_text("x")
+        assert dlg._can_run() is False
+        # The demo loads a scan into every page and one merged reference.
+        dlg._reveal_target_files()
+        assert all(dlg._page_ready(pg) for pg in dlg._pages)
+        for pg in dlg._pages:
+            for sh in dlg._page_shots(pg):
+                if sh["path"]:
+                    sh["corners"] = [(0, 0), (10, 0), (10, 10), (0, 10)]
+        assert dlg._can_run() is True
+        # Switching pages swaps the locked grid to that page's .cht.
+        dlg._page_combo.setCurrentIndex(1)
+        assert dlg._std_cht.stem == "ISO12641_2_3_2"
+        assert dlg._std_grid is not None and len(dlg._std_grid.rects) == 288
+        # Selecting an ordinary single target collapses back to one page.
+        dlg._target_combo.setCurrentIndex(dlg._target_combo.findData("it8Wolf"))
+        assert dlg._pages == [0] and len(dlg._std_chts) == 1
+    finally:
+        dlg.deleteLater()
+
+
 def test_standard_mode_execute_uses_chosen_cht_and_reference(_app, tmp_path):
     """_execute_standard pairs the chosen .cht with the target's reference file,
     reads the scan, and writes the profile next to the scan."""
@@ -178,7 +222,7 @@ def test_standard_mode_execute_uses_chosen_cht_and_reference(_app, tmp_path):
         ref = tmp_path / "R123.txt"
         ref.write_text("dummy reference")
         cht = _it8()
-        dlg._set_std_target(cht)
+        dlg._set_std_targets([cht])
         dlg._std_ref = ref
         dlg._cur_shot()["path"] = scan
         dlg._cur_shot()["corners"] = [(0, 0), (10, 0), (10, 10), (0, 10)]
@@ -214,7 +258,7 @@ def test_multi_scan_averaging_pipeline(_app, tmp_path):
     dlg = _dialog(_app)
     try:
         dlg._mode_standard.setChecked(True)
-        dlg._set_std_target(_it8())
+        dlg._set_std_targets([_it8()])
         dlg._std_ref = tmp_path / "ref.txt"
         dlg._std_ref.write_text("x")
         s1 = tmp_path / "s1.tif"; s1.write_bytes(b"II*\0")
@@ -283,7 +327,7 @@ def test_demo_scan_button_loads_files(_app, tmp_path, monkeypatch):
     dlg = _dialog(_app)
     dlg._mode_standard.setChecked(True)
     dlg._on_mode_changed()
-    dlg._set_std_target(Path("data/scanner_targets/it8Wolf.cht").resolve())
+    dlg._set_std_targets([Path("data/scanner_targets/it8Wolf.cht").resolve()])
 
     real = st.make_test_scan            # write into a temp dir, not real ~/ChromIQ
     monkeypatch.setattr(st, "make_test_scan", lambda cht, _out: real(cht, tmp_path))

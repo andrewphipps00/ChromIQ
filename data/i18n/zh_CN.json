@@ -2355,7 +2355,6 @@
   "Couldn't prepare the demo scan: {e}": "无法准备演示扫描：{e}",
   "Try with a demo scan": "用演示扫描试试",
   "Loads a synthetic practice scan of this target — each patch a flat colour, drawn from the recognition file — plus its matching reference, so you can try placing the grid and building a profile with no scanner. It is NOT a real target: for a real profile, load your own scan and the reference that came with your physical target instead.": "加载此目标的合成练习扫描——每个色块为从识别文件生成的纯色——并附带匹配的参考值，让你无需扫描仪即可尝试放置网格并构建配置文件。这不是真实目标：要获得真实配置文件，请改为加载你自己的扫描和随实体目标附带的参考文件。",
-  "Loaded a demo scan + reference to practise on. This is a synthetic image ChromIQ drew from the target's recognition file — each patch a flat colour — NOT a real target. Place the grid and Build to see the read work end-to-end.\nFor a real profile, load your own scan (.tif) and the reference (.cie) that came with your physical target instead. The bundled recognition file is:\n  {cht}": "已加载用于练习的演示扫描和参考。这是 ChromIQ 从目标的识别文件生成的合成图像——每个色块为纯色——并非真实目标。放置网格并点击“构建”即可完整查看读取过程。\n要获得真实配置文件，请改为加载你自己的扫描 (.tif) 和随实体目标附带的参考 (.cie)。随附的识别文件为：\n  {cht}",
   "Note: 1 patch that didn't read (no usable pixels) was left out so the profile can still build — re-check the grid covers every patch inside the image.": "注意：已略过 1 个无法读取的色块（无可用像素），以便仍能构建配置文件——请重新检查网格是否覆盖图像内的每个色块。",
   "Note: {n} patches that didn't read (no usable pixels) were left out so the profile can still build — re-check the grid covers every patch inside the image.": "注意：已略过 {n} 个无法读取的色块（无可用像素），以便仍能构建配置文件——请重新检查网格是否覆盖图像内的每个色块。",
   "Note: some patches had an undefined noise figure; it was set to zero (no effect on the measured colour).": "注意：部分色块的噪声值未定义，已设为零（不影响测得的颜色）。",
@@ -2624,5 +2623,12 @@
   "The list of colours a chart will contain — designed by targen or by the generators in the chart editor — before anything is laid out on paper. Stored as a .ti1 file.": "一张色卡将包含的颜色清单——由 targen 或编辑器中的生成器设计——在排版到纸面之前的阶段。保存为 .ti1 文件。",
   "The printer driver's own colour correction. It MUST be off when printing charts — if the driver remaps colours, the measurements describe the driver, not the printer.": "打印机驱动自带的色彩校正。打印色卡时必须关闭——如果驱动重映射了颜色，测量描述的就是驱动而不是打印机。",
   "The saved design of a chart's colour set (which generators, how many patches, in what order) — carried with the chart so the same design can be reloaded, edited or reused later.": "色卡颜色集合的保存设计（用了哪些生成器、多少色块、什么顺序）——随色卡保存，同一设计以后可以重新载入、编辑或复用。",
-  "Verification (profile check)": "验证（配置文件检查）"
+  "Verification (profile check)": "验证（配置文件检查）",
+  " (one demo scan per page — switch pages with the Page selector)": " (one demo scan per page — switch pages with the Page selector)",
+  "Loaded a demo scan + reference to practise on.{pages} This is a synthetic image ChromIQ drew from the target's recognition file — each patch a flat colour — NOT a real target. Place the grid and Build to see the read work end-to-end.\nFor a real profile, load your own scan (.tif) and the reference (.cie) that came with your physical target instead.": "Loaded a demo scan + reference to practise on.{pages} This is a synthetic image ChromIQ drew from the target's recognition file — each patch a flat colour — NOT a real target. Place the grid and Build to see the read work end-to-end.\nFor a real profile, load your own scan (.tif) and the reference (.cie) that came with your physical target instead.",
+  "{name}  ·  {n} patches": "{name}  ·  {n} patches",
+  "{name}  ·  {pages} pages ({counts} patches)": "{name}  ·  {pages} pages ({counts} patches)",
+  "{name}  ·  {pages} pages × {n} patches": "{name}  ·  {pages} pages × {n} patches",
+  "✓ Multi-page target: {pages} pages, {n} patches on this page. Now choose the one reference data file that came with your target — it covers every page.": "✓ Multi-page target: {pages} pages, {n} patches on this page. Now choose the one reference data file that came with your target — it covers every page.",
+  "✓ Ready — {pages}-page target, reference loaded. Scan each page and place the corners on its marks ({done} of {pages} pages ready).": "✓ Ready — {pages}-page target, reference loaded. Scan each page and place the corners on its marks ({done} of {pages} pages ready)."
 }

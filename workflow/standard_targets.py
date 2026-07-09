@@ -10,6 +10,7 @@ physical target batch and must come from the target's vendor.
 """
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 
 from core.resource_path import resource_path
@@ -23,8 +24,10 @@ _FRIENDLY: dict[str, str] = {
     "ISO12641_2_1": "IT8 / ISO 12641-2 — LaserSoft Advanced",
     # The three PAGES of the ISO 12641-2 three-page target set: identical
     # grid geometry, but each page carries different colours (columns 1–24 /
-    # 25–48 / 49–72 in the reference) — all three are needed, one per sheet
-    # (Knut asked why three seemingly identical layouts exist).
+    # 25–48 / 49–72 in the reference) — all three are needed, one per sheet.
+    # They are a SINGLE physical target, so ChromIQ folds them into one dropdown
+    # entry (see MULTIPAGE_SETS) rather than three; these names are only used as
+    # a fallback when a page is missing and the set can't be assembled.
     "ISO12641_2_3_1": "ISO 12641-2 (3-page set) — page 1",
     "ISO12641_2_3_2": "ISO 12641-2 (3-page set) — page 2",
     "ISO12641_2_3_3": "ISO 12641-2 (3-page set) — page 3",
@@ -57,6 +60,83 @@ _ORDER = [
     "SpyderChecker", "SpyderChecker24", "QPcard_201", "QPcard_202",
     "Hutchcolor", "i1_RGB_Scan_1.4",
 ]
+
+
+# Standard targets that are physically ONE multi-page sheet set but ship as
+# several ``.cht`` files, one per page. ChromIQ shows them as a single dropdown
+# entry that then asks for one scan per page (each page's ``.cht`` is locked to
+# its page), exactly like a multi-page ChromIQ chart — Knut's request, since the
+# three ISO 12641-2 pages read against one shared reference and build one profile.
+#   key -> (display name, (page-1 stem, page-2 stem, …))  in page order.
+MULTIPAGE_SETS: dict[str, tuple[str, tuple[str, ...]]] = {
+    "ISO12641_2_3": (
+        "ISO 12641-2 (3-page set)",
+        ("ISO12641_2_3_1", "ISO12641_2_3_2", "ISO12641_2_3_3"),
+    ),
+}
+
+
+@dataclass(frozen=True)
+class StandardTarget:
+    """One selectable target in the "standard target I own" list — a single
+    ``.cht`` sheet, or a multi-page set folded into one entry (:data:`MULTIPAGE_SETS`).
+
+    ``cht_paths`` is one path for an ordinary target, or several (one per page)
+    for a set; ``patch_counts`` is the patch total of each page, in the same
+    order, used to annotate the dropdown name (Knut)."""
+    key: str
+    name: str                          # friendly name, WITHOUT the patch-count tail
+    cht_paths: tuple[Path, ...]
+    patch_counts: tuple[int, ...]
+
+    @property
+    def is_multipage(self) -> bool:
+        return len(self.cht_paths) > 1
+
+    @property
+    def n_pages(self) -> int:
+        return len(self.cht_paths)
+
+
+def patch_count(cht: Path) -> int:
+    """Number of patches described by a ``.cht`` (0 if it can't be parsed)."""
+    from workflow.cht_parser import ChtParseError, parse_cht
+    try:
+        return len(parse_cht(cht.read_text(errors="ignore")).patches)
+    except (OSError, ChtParseError):
+        return 0
+
+
+def grouped_standard_targets(settings) -> list[StandardTarget]:
+    """:func:`list_standard_targets`, with multi-page sets folded into a single
+    :class:`StandardTarget` and every entry carrying its per-page patch counts.
+
+    A set appears where its first page would have sorted; its individual pages
+    are removed. If a set is incomplete (a page's ``.cht`` is missing), its
+    available pages fall back to ordinary single entries so nothing vanishes."""
+    raw = list_standard_targets(settings)
+    by_stem: dict[str, Path] = {p.stem: p for _n, p in raw}
+    stem_to_set: dict[str, str] = {
+        stem: key for key, (_n, stems) in MULTIPAGE_SETS.items() for stem in stems}
+    out: list[StandardTarget] = []
+    emitted: set[str] = set()
+    for name, p in raw:
+        set_key = stem_to_set.get(p.stem)
+        if set_key is None:
+            out.append(StandardTarget(p.stem, name, (p,), (patch_count(p),)))
+            continue
+        if set_key in emitted:
+            continue                       # a later page of an already-emitted set
+        set_name, stems = MULTIPAGE_SETS[set_key]
+        paths = [by_stem[s] for s in stems if s in by_stem]
+        if len(paths) == len(stems):       # complete set → one folded entry
+            out.append(StandardTarget(
+                set_key, set_name, tuple(paths),
+                tuple(patch_count(x) for x in paths)))
+            emitted.add(set_key)
+        else:                              # incomplete → keep this page standalone
+            out.append(StandardTarget(p.stem, name, (p,), (patch_count(p),)))
+    return out
 
 
 def argyll_ref_dir(settings) -> Path | None:
@@ -203,3 +283,46 @@ def make_test_scan(cht_path, out_dir):
     tif = out_dir / f"{cht_path.stem}-test.tif"; ref = out_dir / f"{cht_path.stem}-test.cie"
     img.save(tif); ref.write_text("\n".join(cie))
     return tif, ref
+
+
+def merge_demo_references(cie_paths, out_path):
+    """Concatenate several single-page demo ``.cie`` files into one reference
+    covering every page — the shared reference a multi-page set is read against
+    (the pages' patch names are disjoint, so no row collides). Returns
+    ``out_path``."""
+    from pathlib import Path as _P
+    out_path = _P(out_path)
+    header: list[str] | None = None
+    rows: list[str] = []
+    for cp in cie_paths:
+        lines = _P(cp).read_text().splitlines()
+        ds = next(i for i, l in enumerate(lines) if l.strip() == "BEGIN_DATA")
+        de = next(i for i, l in enumerate(lines) if l.strip() == "END_DATA")
+        if header is None:
+            header = lines[:ds + 1]
+        rows += [l for l in lines[ds + 1:de] if l.strip()]
+    out: list[str] = []
+    for l in (header or []):
+        out.append(f"NUMBER_OF_SETS {len(rows)}"
+                   if l.strip().startswith("NUMBER_OF_SETS") else l)
+    out += rows + ["END_DATA", ""]
+    out_path.write_text("\n".join(out))
+    return out_path
+
+
+def make_multipage_test_scans(cht_paths, out_dir):
+    """A demo scan for each page of a multi-page set plus one merged reference
+    covering all pages — the multi-page analogue of :func:`make_test_scan`, so a
+    set can be tried end-to-end with no hardware. Returns ``(tif_paths, cie_path)``."""
+    from pathlib import Path as _P
+    cht_paths = [_P(c) for c in cht_paths]
+    tifs: list[Path] = []
+    cies: list[Path] = []
+    for cht in cht_paths:
+        tif, cie = make_test_scan(cht, out_dir)
+        tifs.append(tif)
+        cies.append(cie)
+    stems = "+".join(c.stem for c in cht_paths)
+    merged = _P(out_dir) / f"{stems}-test.cie"
+    merge_demo_references(cies, merged)
+    return tifs, merged
