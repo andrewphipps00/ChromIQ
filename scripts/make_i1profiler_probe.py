@@ -112,16 +112,21 @@ scanner/camera target from a chart that i1Profiler printed (issue #120).
 
 You do NOT need a measurement device.
 You do NOT need an i1Profiler profiling licence.
-Nothing has to be printed on paper — "Save as PDF" is enough.
+Nothing has to be printed on paper.
+
+*** Save the chart as a TIFF if i1Profiler offers it. ***
+TIFF is better than PDF for us: it's the chart's real pixels, at a known
+resolution, with nothing re-drawn in between. If TIFF isn't offered, print to
+PDF instead — that works too. Keep the same file names, just with .tif.
 
 This folder has two subfolders:
 
     1 - LOAD THESE INTO i1PROFILER     the files you feed to i1Profiler
-    2 - PUT YOUR RESULTS HERE          drop your PDFs and settings.txt in here
+    2 - PUT YOUR RESULTS HERE          drop your charts and settings.txt in here
 
 Every patch in this chart is painted a colour that encodes its own number. So
-from the PDFs alone we can work out the exact grid, the margins, the patch
-pitch, the page breaks, and the order in which i1Profiler fills the page.
+from the saved charts alone we can work out the exact grid, the margins, the
+patch pitch, the page breaks, and the order in which i1Profiler fills the page.
 Nothing needs to be measured.
 
 
@@ -140,20 +145,20 @@ TEST 1 — how does i1Profiler lay out a plain patch set?
    "2 - PUT YOUR RESULTS HERE/settings.txt" with what i1Profiler shows you
    (patch size in mm, paper, orientation, columns, rows, pages).
 
-5. Print the chart to PDF.
-   (macOS print dialog -> the PDF button at the bottom left -> Save as PDF.)
+5. Save the chart as a TIFF (or, failing that, print it to PDF — on macOS
+   the PDF button at the bottom left of the print dialog -> Save as PDF).
 
-   Save it as:   2 - PUT YOUR RESULTS HERE/test1-autolayout.pdf
+   Save it as:   2 - PUT YOUR RESULTS HERE/test1-autolayout.tif
 
 
 -------------------------------------------------------------------------
 TEST 2 — does i1Profiler honour positions we give it?   (the important one)
 -------------------------------------------------------------------------
 6. Open  "1 - LOAD THESE INTO i1PROFILER/probe-A-autolayout.pwxf".
-   Print to PDF  ->  2 - PUT YOUR RESULTS HERE/test2a-nolocations.pdf
+   Save as TIFF  ->  2 - PUT YOUR RESULTS HERE/test2a-nolocations.tif
 
 7. Open  "1 - LOAD THESE INTO i1PROFILER/probe-B-reversed.pwxf".
-   Print to PDF  ->  2 - PUT YOUR RESULTS HERE/test2b-reversed.pdf
+   Save as TIFF  ->  2 - PUT YOUR RESULTS HERE/test2b-reversed.tif
 
 That's the whole experiment.
 
@@ -189,9 +194,9 @@ WHEN YOU'RE DONE
 -------------------------------------------------------------------------
 "2 - PUT YOUR RESULTS HERE" should contain:
 
-    test1-autolayout.pdf
-    test2a-nolocations.pdf
-    test2b-reversed.pdf
+    test1-autolayout.tif        (or .pdf)
+    test2a-nolocations.tif      (or .pdf)
+    test2b-reversed.tif         (or .pdf)
     settings.txt            (filled in)
     ...and anything from test 3
 

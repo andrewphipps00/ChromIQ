@@ -1,8 +1,9 @@
 """Read i1Profiler's layout straight off a printed probe chart (#120).
 
 Companion to ``scripts/make_i1profiler_probe.py``. That script paints every
-patch with a colour that encodes its own index; this one takes the PDF (or
-image) of the chart i1Profiler printed and recovers:
+patch with a colour that encodes its own index; this one takes the chart
+i1Profiler saved — a TIFF (preferred: real pixels, real dpi, multi-page charts
+arrive as multi-frame files) or a PDF — and recovers:
 
   * the grid — columns, rows, pages;
   * the fill order — which patch of the list landed in which cell;
@@ -10,15 +11,18 @@ image) of the chart i1Profiler printed and recovers:
 
 Nothing is measured and no instrument is involved. Run it as::
 
-    python scripts/decode_i1profiler_probe.py test1-autolayout.pdf
+    python scripts/decode_i1profiler_probe.py test1-autolayout.tif
 
-The grid is not assumed: every plausible (columns, rows) is tried and only one
-that decodes EVERY cell to a distinct, in-range patch index is accepted. So a
-wrong grid cannot silently produce a wrong answer — it produces no answer.
+The grid is not assumed: every plausible (columns, rows) is tried, and one is
+accepted only if every INKED cell decodes to a distinct index inside the chart's
+patch range. Paper-white cells are allowed (the last page of a multi-page chart
+is rarely full) but never counted as patches — white is 15x17 on all three
+channels and would otherwise decode to a perfectly plausible index 4094. So a
+wrong grid cannot silently produce a wrong answer; it produces no answer.
 
 Pass two charts to compare them, which is the whole point of tests 2a/2b::
 
-    python scripts/decode_i1profiler_probe.py test2a-nolocations.pdf test2b-reversed.pdf
+    python scripts/decode_i1profiler_probe.py test2a-nolocations.tif test2b-reversed.tif
 
 If the two fill orders differ, i1Profiler honoured the Location tags we wrote
 and ``emit_locations=True`` is viable. If they agree, it recomputes the grid
@@ -60,11 +64,18 @@ def load_pages(path: Path) -> list[tuple[np.ndarray, float]]:
             out.append((np.asarray(bmp.to_pil().convert("RGB")),
                         RENDER_DPI / 25.4))
         return out
-    from PIL import Image
+    # TIFF is the preferred input: i1Profiler writes the chart's real pixels,
+    # so nothing is rasterised and the dpi tag gives us mm directly. A
+    # multi-page chart arrives as a multi-FRAME tiff — read every frame.
+    from PIL import Image, ImageSequence
     Image.MAX_IMAGE_PIXELS = None
     im = Image.open(path)
-    dpi = (im.info.get("dpi") or (RENDER_DPI, RENDER_DPI))[0] or RENDER_DPI
-    return [(np.asarray(im.convert("RGB")), float(dpi) / 25.4)]
+    out = []
+    for frame in ImageSequence.Iterator(im):
+        dpi = (frame.info.get("dpi") or im.info.get("dpi")
+               or (RENDER_DPI, RENDER_DPI))[0] or RENDER_DPI
+        out.append((np.asarray(frame.convert("RGB")), float(dpi) / 25.4))
+    return out
 
 
 def ink_bbox(img: np.ndarray) -> tuple[int, int, int, int]:
@@ -96,43 +107,60 @@ def _read_cells(img, bbox, cols, rows, frac=0.4):
     return out
 
 
-def solve_grid(img: np.ndarray, bbox, n_hint: int | None):
-    """Find (cols, rows) such that every cell decodes to a distinct index."""
+def _is_blank(rgb) -> bool:
+    return all(c >= WHITE for c in rgb)
+
+
+def solve_grid(img: np.ndarray, bbox, n_patches: int):
+    """Find (cols, rows) such that every INKED cell decodes to a distinct,
+    in-range patch index.
+
+    A page may be partly filled (the last page of a multi-page chart), so
+    paper-white cells are allowed and skipped — but at least half the cells
+    must carry a patch, otherwise a nonsense grid could "pass" on a handful
+    of accidental hits.
+
+    The range check matters: pure white is (255,255,255) = 15x17 on every
+    channel, so it decodes to a perfectly well-formed index 4094. Without
+    ``0 <= d < n_patches`` an empty cell would look like a patch.
+    """
     x0, y0, x1, y1 = bbox
     best = None
-    for cols in range(2, 61):
-        for rows in range(2, 41):
-            if n_hint and cols * rows > n_hint:
-                continue
+    for cols in range(1, 61):
+        for rows in range(1, 41):
+            if cols * rows > n_patches:      # a page can't hold more cells
+                continue                     # than the chart has patches
             cw, ch = (x1 - x0) / cols, (y1 - y0) / rows
             if cw < 6 or ch < 6:
                 continue
             cells = _read_cells(img, bbox, cols, rows)
             if cells is None:
                 continue
-            idx = {}
-            ok = True
+            idx, blanks, ok = {}, 0, True
             for pos, rgb in cells:
+                if _is_blank(rgb):
+                    blanks += 1
+                    continue
                 d = decode(rgb)
-                if d is None or d in idx:
+                if d is None or not (0 <= d < n_patches) or d in idx:
                     ok = False
                     break
                 idx[d] = pos
-            if ok:
-                # prefer the grid that uses the most cells
-                if best is None or len(idx) > len(best[2]):
-                    best = (cols, rows, idx)
+            if not ok or not idx or len(idx) < 0.5 * len(cells):
+                continue
+            if best is None or len(idx) > len(best[2]):
+                best = (cols, rows, idx)
     return best
 
 
-def describe(path: Path, n_hint: int | None):
+def describe(path: Path, n_patches: int):
     pages = load_pages(path)
     print(f"\n=== {path.name}  ({len(pages)} page(s))")
     fill: dict[int, tuple[int, int, int]] = {}     # patch idx -> (page, col, row)
     for pno, (img, px_mm) in enumerate(pages, start=1):
         h, w = img.shape[:2]
         bb = ink_bbox(img)
-        sol = solve_grid(img, bb, n_hint)
+        sol = solve_grid(img, bb, n_patches)
         if sol is None:
             print(f"  page {pno}: could not find a grid that decodes cleanly "
                   f"— is this the probe chart?")
@@ -140,8 +168,10 @@ def describe(path: Path, n_hint: int | None):
         cols, rows, idx = sol
         x0, y0, x1, y1 = bb
         cw, ch = (x1 - x0) / cols, (y1 - y0) / rows
-        print(f"  page {pno}: {cols} columns x {rows} rows = {cols*rows} cells, "
-              f"all decoded")
+        blank = cols * rows - len(idx)
+        print(f"  page {pno}: {cols} columns x {rows} rows = {cols*rows} cells; "
+              f"{len(idx)} patches decoded"
+              + (f", {blank} cells empty" if blank else ", none empty"))
         print(f"    page size      {w/px_mm:7.2f} x {h/px_mm:7.2f} mm")
         print(f"    chart origin   {x0/px_mm:7.2f} , {y0/px_mm:7.2f} mm "
               f"(top-left of the patch area)")
