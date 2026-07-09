@@ -141,6 +141,7 @@ def main() -> int:
     app.installEventFilter(_tooltip_wrap_filter)
 
     settings = AppSettings()
+    settings.migrate()   # drop persisted values that only echo a superseded default
     from core.platform_paths import set_icc_install_override
     set_icc_install_override(str(settings.get("profile_install_dir", "")))
 

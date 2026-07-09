@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v3.13.3
 
 Knut's scanner-profiling round: the full 1/2/3-page scanner preset set, and a
 misalignment check that finally catches a pulled grid corner.
@@ -40,6 +40,11 @@ misalignment check that finally catches a pulled grid corner.
   message.** `txt2ti3` writes the exported SampleID into `SAMPLE_LOC`, so every
   chart patch read as unmeasured and the error looked like a corrupt
   measurement.
+- **The new edge limit actually reaches existing installs.** Saving Settings
+  writes every value, so anyone who had ever opened the Settings dialog had the
+  old `0.30` stored and would have kept it forever — receiving none of the fix
+  above. On first start, a stored value that merely echoes the old default is
+  dropped once. A limit you deliberately chose yourself is left alone.
 
 ## v3.13.2
 

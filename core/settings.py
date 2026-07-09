@@ -220,6 +220,8 @@ DEFAULTS: dict[str, Any] = {
     "scanner_flank_limit":       0.20,
     # 0 = edge detection off (the other misalignment checks stay active).
     "scanner_flank_min_boxes":   3,
+    # Bumped by AppSettings.migrate() — see SETTINGS_SCHEMA.
+    "settings_schema":           0,
     # Settings → Paths (Knut #108): where "Install profile" copies the .icc.
     # Empty = the platform's per-user colour-profile folder.
     "profile_install_dir":       "",
@@ -400,10 +402,49 @@ def thresholds_for_combo(
     return (table or {}).get(margin_combo_key(label, name, orientation))
 
 
+# Bump when a shipped default changes in a way that must reach users who have
+# the OLD default persisted. Settings → Save writes every key, so a stored
+# value otherwise pins a user to the old behaviour for good.
+SETTINGS_SCHEMA = 1
+
+# key → the old default it must no longer be stuck on. Only a stored value
+# EQUAL to the old default is dropped (so it falls through to the new one); a
+# value the user deliberately chose is never touched.
+_SUPERSEDED_DEFAULTS: dict[str, float] = {
+    # #119: the old pair (0.30 + a hard-coded 7 boxes) could not detect a grid
+    # with one corner pulled in — at 0.30 a pulled corner leaves 0 flagged
+    # boxes on a Wolf Faust. Anyone who had ever pressed Save in Settings had
+    # 0.30 persisted and would never have received the fix.
+    "scanner_flank_limit": 0.30,
+}
+
+
 class AppSettings:
     def __init__(self) -> None:
         self._qs = QSettings("ChromIQ", "ChromIQ")
         log.debug("Settings loaded from %s", self._qs.fileName())
+
+    def migrate(self) -> list[str]:
+        """One-time cleanup of persisted values that merely echo a superseded
+        default. Returns the keys dropped. Call once at startup."""
+        if int(self._qs.value("settings_schema", 0) or 0) >= SETTINGS_SCHEMA:
+            return []
+        dropped = []
+        for key, old in _SUPERSEDED_DEFAULTS.items():
+            raw = self._qs.value(key, None)
+            if raw is None:
+                continue
+            try:
+                if abs(float(raw) - old) < 1e-9:
+                    self._qs.remove(key)
+                    dropped.append(key)
+            except (TypeError, ValueError):
+                continue
+        self._qs.setValue("settings_schema", SETTINGS_SCHEMA)
+        if dropped:
+            log.info("Settings migrated to schema %d; dropped stale defaults: %s",
+                     SETTINGS_SCHEMA, ", ".join(dropped))
+        return dropped
 
     def get(self, key: str, default: Any = None) -> Any:
         # On Windows the OS print dialog is the only path that works (no CUPS,

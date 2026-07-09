@@ -526,3 +526,36 @@ def test_clean_nearby_ring_tracks_step_frac(tmp_path):
     assert coarse and fine
     overlap = len(coarse & fine) / len(coarse | fine)
     assert overlap > 0.8, f"ring moved with the rung size (overlap {overlap:.2f})"
+
+
+def test_migrate_frees_users_pinned_to_the_old_flank_limit(tmp_path):
+    """#119: Settings → Save writes every key, so anyone who had ever opened
+    Settings had scanner_flank_limit=0.30 persisted. Combined with the new
+    3-box count that STILL misses a pulled corner, so the stored echo of the
+    old default has to be dropped once — but a value the user chose on purpose
+    must survive."""
+    from PyQt6.QtCore import QSettings
+    from core.settings import AppSettings, SETTINGS_SCHEMA
+
+    def _fresh(stored=None):
+        s = AppSettings()
+        s._qs = QSettings(str(tmp_path / f"m{stored}.ini"),
+                          QSettings.Format.IniFormat)
+        s._qs.clear()
+        if stored is not None:
+            s._qs.setValue("scanner_flank_limit", stored)
+        return s
+
+    s = _fresh(0.30)                       # the old default, echoed
+    assert s.migrate() == ["scanner_flank_limit"]
+    assert float(s.get("scanner_flank_limit")) == 0.20
+    assert int(s.get("settings_schema")) == SETTINGS_SCHEMA
+    assert s.migrate() == []               # idempotent — runs once
+
+    s = _fresh(0.42)                       # a deliberate choice
+    assert s.migrate() == []
+    assert float(s.get("scanner_flank_limit")) == 0.42
+
+    s = _fresh(None)                       # never saved
+    assert s.migrate() == []
+    assert float(s.get("scanner_flank_limit")) == 0.20
