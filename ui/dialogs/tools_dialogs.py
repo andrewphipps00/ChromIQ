@@ -1209,23 +1209,30 @@ class Ti1ToI1ProfilerDialog(_ToolDialogBase):
             page_height_mm=h,
             title=base,
         )
-        # With the size box unchecked we leave UsePatchSettingDefaults=True and
-        # i1Profiler picks its own (sensible) patch size. When set, we switch it
-        # off and encode the requested size as the per-device slider percent — i1Profiler
-        # reads the percent, not the mm value, and still computes the grid itself.
+        # i1Profiler reads the patch size from the per-device slider *percent*,
+        # not the mm value — and percent 0 is the slider MINIMUM (6 mm on an
+        # i1Pro 3, below its 7 mm scan minimum), NOT "let i1Profiler decide". A
+        # .pwxf with UsePatchSettingDefaults="True" + percent 0 was verified to
+        # render at that minimum, so we never write that combination: every
+        # genuine X-Rite workflow file sets UsePatchSettingDefaults="False" with
+        # a real percent. With the box unchecked we substitute the device's
+        # warning-free default size (8×7 for i1Pro/i1iO); when checked we encode
+        # the requested size. i1Profiler still computes the column/row grid itself.
         if self._wf_size.isChecked():
-            pw, ph = self._wf_w.value(), self._wf_h.value()
-            opt.use_patch_defaults = False
-            opt.patch_w_mm, opt.patch_h_mm = float(pw), float(ph)
-            opt.patch_w_percent = _patch_percent(pw, wlo, whi)
-            opt.patch_h_percent = _patch_percent(ph, hlo, hhi)
-            # i1iSis needs a valid HeaderEdgeSizePercent (the "Vorlauf" lead-in)
-            # rather than the non-iSis -2147483648 sentinel. We write 0 (=32 mm):
-            # i1Profiler does not persist the lead-in — it resets to that minimum
-            # on load regardless of what any file (even its own) contains — so the
-            # value is fixed, not user-controllable, and there is no UI for it.
-            if vorlauf:
-                opt.header_edge_percent = 0.0
+            pw, ph = float(self._wf_w.value()), float(self._wf_h.value())
+        else:
+            pw, ph = (float(v) for v in _device_default_size(wlo, whi, hlo, hhi))
+        opt.use_patch_defaults = False
+        opt.patch_w_mm, opt.patch_h_mm = pw, ph
+        opt.patch_w_percent = _patch_percent(pw, wlo, whi)
+        opt.patch_h_percent = _patch_percent(ph, hlo, hhi)
+        # i1iSis needs a valid HeaderEdgeSizePercent (the "Vorlauf" lead-in)
+        # rather than the non-iSis -2147483648 sentinel. We write 0 (=32 mm):
+        # i1Profiler does not persist the lead-in — it resets to that minimum
+        # on load regardless of what any file (even its own) contains — so the
+        # value is fixed, not user-controllable, and there is no UI for it.
+        if vorlauf:
+            opt.header_edge_percent = 0.0
         write_pwxf(target, out_path, base, opt)
 
 

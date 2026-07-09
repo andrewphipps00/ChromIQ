@@ -340,3 +340,35 @@ def test_roundtrip_pwxf_export_then_import(tmp_path):
     patches = parse_pxf(pwxf)
     assert (patches[0].r, patches[0].g, patches[0].b) == pytest.approx((100, 100, 0), abs=0.5)
     assert (patches[1].r, patches[1].g, patches[1].b) == pytest.approx((0, 0, 100), abs=0.5)
+
+
+def test_pwxf_never_pairs_defaults_true_with_zero_percent(tmp_path):
+    """i1Profiler sizes patches from the slider *percent*, and percent 0 is the
+    slider MINIMUM (6 mm on i1Pro 3, below its 7 mm scan minimum), not "auto".
+    A .pwxf saved with UsePatchSettingDefaults="True" + percent 0 was verified
+    to render at that minimum; no genuine X-Rite file writes that combination.
+    A bare WorkflowOptions() must therefore describe the real 8×7 default. (#120)
+    """
+    from workflow.i1profiler_export import WorkflowOptions, parse_ti1, write_pwxf
+
+    src = _write(
+        tmp_path, "src.ti1",
+        "CTI1\n\nCOLOR_REP \"RGB\"\n\nNUMBER_OF_FIELDS 4\nBEGIN_DATA_FORMAT\n"
+        "SAMPLE_ID RGB_R RGB_G RGB_B\nEND_DATA_FORMAT\n\n"
+        "NUMBER_OF_SETS 1\nBEGIN_DATA\n1 50 50 50\nEND_DATA\n",
+    )
+    pwxf = tmp_path / "wf.pwxf"
+    write_pwxf(parse_ti1(src), pwxf, "rt", WorkflowOptions())
+    txt = pwxf.read_text()
+
+    def attr(name):
+        import re
+        return re.search(rf'{name}="([^"]*)"', txt).group(1)
+
+    assert attr("UsePatchSettingDefaults") == "False"
+    assert float(attr("PatchSizeWidthPercent")) > 0
+    assert float(attr("PatchSizeHeightPercent")) > 0
+    # 8×7 mm on the i1Pro 3 slider range (6–25 / 6–12 mm).
+    assert attr("PatchSizeWidthValue") == "8.00"
+    assert attr("PatchSizeHeightValue") == "7.00"
+    assert float(attr("PatchSizeWidthPercent")) == pytest.approx((8 - 6) / (25 - 6) * 100)

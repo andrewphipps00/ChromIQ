@@ -570,9 +570,12 @@ class WorkflowOptions:
     pages: int = 1
     patch_w_mm: float = 8.0
     patch_h_mm: float = 7.0
-    patch_w_percent: float = 0.0       # derived/optional; 0 is accepted by i1Profiler
-    patch_h_percent: float = 0.0
-    use_patch_defaults: bool = True
+    # i1Profiler sizes patches from the slider PERCENT, not the mm value, and
+    # percent 0 is the slider MINIMUM (6 mm on i1Pro 3), NOT "auto". These match
+    # 8×7 mm on the i1Pro 3 range (6–25 / 6–12); callers recompute per device.
+    patch_w_percent: float = (8.0 - 6) / (25 - 6) * 100
+    patch_h_percent: float = (7.0 - 6) / (12 - 6) * 100
+    use_patch_defaults: bool = False
     title: str = "ChromIQ Chart"
     emit_locations: bool = False
     # iSis lead-in ("Vorlauf"), as the HeaderEdgeSizePercent slider position.
@@ -636,9 +639,9 @@ def _pwxf_custom_attributes(n_patches: int, opt: WorkflowOptions) -> str:
         ("PaperFormat", str(opt.paper_format)),
         ("PaperOrientation", opt.paper_orientation),
         ("PaperType", "Not Specified (default)"),
-        ("PatchSizeHeightPercent", str(opt.patch_h_percent)),
+        ("PatchSizeHeightPercent", _pct(opt.patch_h_percent)),
         ("PatchSizeHeightValue", _mm(opt.patch_h_mm)),
-        ("PatchSizeWidthPercent", str(opt.patch_w_percent)),
+        ("PatchSizeWidthPercent", _pct(opt.patch_w_percent)),
         ("PatchSizeWidthValue", _mm(opt.patch_w_mm)),
         ("PrintMarginBottom", "0.00"),
         ("PrintMarginLeft", "0.00"),
