@@ -19,13 +19,17 @@ Sixteen levels per channel, each a multiple of 17, so every patch is a distinct
 8-bit-exact colour that survives PDF rendering and quantisation. Decode with
 ``scripts/decode_i1profiler_probe.py``.
 
-Writes into ``--out``:
+Writes a ready-to-hand-over folder into ``--out``::
 
-    probe.ti1                 the patch set (ChromIQ/Argyll form)
-    probe.txt / probe.pxf     what you load into i1Profiler (patch set only)
-    probe-A-autolayout.pwxf   workflow, NO Location tags → i1Profiler must lay out
-    probe-B-reversed.pwxf     workflow, Location tags in REVERSED order
-    README.txt                step-by-step for the person running it
+    README.txt                          step-by-step for whoever runs it
+    1 - LOAD THESE INTO i1PROFILER/
+        probe.txt / probe.pxf           the patch set to load
+        probe-A-autolayout.pwxf         workflow, NO Location tags
+        probe-B-reversed.pwxf           workflow, Location tags REVERSED
+    2 - PUT YOUR RESULTS HERE/
+        settings.txt                    form to fill in while in i1Profiler
+    reference (not needed by you)/
+        probe.ti1                       the patch set in Argyll form
 
 Test B is the discriminator: its Location tags deliberately place patch 1 where
 i1Profiler's own column-major fill would put the LAST patch. If the printed
@@ -106,67 +110,130 @@ ChromIQ — i1Profiler layout probe
 Goal: find out how i1Profiler lays out a chart, so ChromIQ can build a
 scanner/camera target from a chart that i1Profiler printed (issue #120).
 
-You do NOT need a measurement device for any of this.
+You do NOT need a measurement device.
+You do NOT need an i1Profiler profiling licence.
+Nothing has to be printed on paper — "Save as PDF" is enough.
 
-You have these files:
+This folder has two subfolders:
 
-    probe.txt                 patch set, CGATS  (try this first)
-    probe.pxf                 patch set, CxF3   (use if .txt won't load)
-    probe-A-autolayout.pwxf   workflow, no patch positions
-    probe-B-reversed.pwxf     workflow, patch positions in reverse order
+    1 - LOAD THESE INTO i1PROFILER     the files you feed to i1Profiler
+    2 - PUT YOUR RESULTS HERE          drop your PDFs and settings.txt in here
 
-Run all three tests below. For each one, export/print the chart to PDF and
-keep the PDF. Name them exactly as shown.
+Every patch in this chart is painted a colour that encodes its own number. So
+from the PDFs alone we can work out the exact grid, the margins, the patch
+pitch, the page breaks, and the order in which i1Profiler fills the page.
+Nothing needs to be measured.
+
 
 -------------------------------------------------------------------------
 TEST 1 — how does i1Profiler lay out a plain patch set?
 -------------------------------------------------------------------------
-1. Open i1Profiler, choose Printer Profiling → Testchart.
-2. Load "probe.txt" as the patch set. (If it refuses, use "probe.pxf".)
-3. Choose a measurement device: pick "i1Pro 3" if offered, otherwise ANY
-   device — just write down which one you picked.
-4. Leave patch size and page settings at their defaults. Write down what
-   they say: patch width/height in mm, paper size, orientation, and the
-   number of columns / rows / pages it reports.
-5. Print the chart to PDF  →  save as  test1-autolayout.pdf
-   (macOS: in the print dialog, PDF ▸ Save as PDF.)
+1. Open i1Profiler and choose Printer Profiling -> Testchart.
+
+2. Load  "1 - LOAD THESE INTO i1PROFILER/probe.txt"  as the patch set.
+   If it refuses that file, use  probe.pxf  instead.
+
+3. Pick a measurement device. Choose "i1Pro 3" if it's offered; otherwise any
+   device at all — just write down which one you picked.
+
+4. Leave patch size and page settings at their defaults, and fill in
+   "2 - PUT YOUR RESULTS HERE/settings.txt" with what i1Profiler shows you
+   (patch size in mm, paper, orientation, columns, rows, pages).
+
+5. Print the chart to PDF.
+   (macOS print dialog -> the PDF button at the bottom left -> Save as PDF.)
+
+   Save it as:   2 - PUT YOUR RESULTS HERE/test1-autolayout.pdf
+
 
 -------------------------------------------------------------------------
-TEST 2 — does it honour positions we supply?  (the important one)
+TEST 2 — does i1Profiler honour positions we give it?   (the important one)
 -------------------------------------------------------------------------
-6. Open "probe-A-autolayout.pwxf" in i1Profiler.
-   Print to PDF  →  test2a-nolocations.pdf
-7. Open "probe-B-reversed.pwxf" in i1Profiler.
-   Print to PDF  →  test2b-reversed.pdf
+6. Open  "1 - LOAD THESE INTO i1PROFILER/probe-A-autolayout.pwxf".
+   Print to PDF  ->  2 - PUT YOUR RESULTS HERE/test2a-nolocations.pdf
 
-That's the whole experiment. File B contains the same patches as A, but with
-each patch's grid position reversed. So:
+7. Open  "1 - LOAD THESE INTO i1PROFILER/probe-B-reversed.pwxf".
+   Print to PDF  ->  2 - PUT YOUR RESULTS HERE/test2b-reversed.pdf
 
-  * if test2b looks like test2a MIRRORED, i1Profiler honours our positions;
-  * if test2a and test2b look IDENTICAL, it ignores them and lays out itself.
+That's the whole experiment.
 
-Either answer is useful. We just have to know which.
+File B holds exactly the same patches as file A, but each patch carries a grid
+position that is the reverse of A's. So when the two charts are compared:
+
+  * if B is A turned back-to-front, i1Profiler honours our positions — and
+    ChromIQ can tell it precisely where to put every patch;
+
+  * if A and B come out identical, i1Profiler ignores them and always lays the
+    chart out its own way — and ChromIQ must instead work the layout out from
+    the printed chart itself.
+
+Either answer moves us forward. We simply have to know which one is true.
+
+You don't have to judge this by eye. The colours encode it, and the analysis
+script will say for certain.
+
 
 -------------------------------------------------------------------------
-TEST 3 — (only if you can, no device needed)
+TEST 3 — optional, only if it turns out to be easy
 -------------------------------------------------------------------------
-8. If i1Profiler will let you save or export a measurement file WITHOUT
-   having measured anything (an empty or partial one is fine), save it.
-   We want to see its columns and headers, not its numbers.
+8. If i1Profiler will let you save or export a measurement file WITHOUT having
+   measured anything — an empty or half-finished one is perfectly fine — save
+   it into  "2 - PUT YOUR RESULTS HERE".
+
+   We only want to see its columns and headers, not any numbers. If it won't
+   let you, skip it: tests 1 and 2 may well make it unnecessary.
+
 
 -------------------------------------------------------------------------
-What to send back
+WHEN YOU'RE DONE
 -------------------------------------------------------------------------
-  * the three PDFs
-  * the settings you noted in step 4 (device, patch size, paper, columns,
-    rows, pages)
-  * anything i1Profiler complained about
-  * the measurement file from step 8, if you managed one
+"2 - PUT YOUR RESULTS HERE" should contain:
 
-Every patch in this chart is painted a colour that encodes its own number, so
-from the PDFs alone we can work out the exact grid, the margins, the patch
-pitch, the page breaks, and the order in which i1Profiler fills the page.
-Nothing needs to be measured.
+    test1-autolayout.pdf
+    test2a-nolocations.pdf
+    test2b-reversed.pdf
+    settings.txt            (filled in)
+    ...and anything from test 3
+
+Then just say so, and the analysis runs from there.
+
+If i1Profiler refuses one of the files, that is a result too — note which one
+and what it said in settings.txt, and carry on with the rest.
+"""
+
+SETTINGS_FORM = """\
+Fill this in while you're in i1Profiler (Test 1, step 4).
+Just type after each colon. Leave anything blank that i1Profiler doesn't show.
+
+Which patch-set file loaded successfully?  (probe.txt or probe.pxf)
+    file loaded:
+
+Measurement device you selected:
+    device:
+
+Paper / page:
+    paper size:
+    orientation (portrait / landscape):
+    page width x height in mm (if shown):
+
+Patch size, as i1Profiler reports it:
+    patch width mm:
+    patch height mm:
+
+Grid, as i1Profiler reports it:
+    columns:
+    rows:
+    pages:
+
+Did i1Profiler warn or complain about anything?
+    warnings:
+
+Did opening probe-A-autolayout.pwxf and probe-B-reversed.pwxf work at all?
+    A opened:
+    B opened:
+
+Anything else that seemed odd:
+
 """
 
 
@@ -182,30 +249,36 @@ def main() -> None:
         raise SystemExit("the colour encoding addresses at most 4096 patches")
 
     out = a.out.expanduser()
-    out.mkdir(parents=True, exist_ok=True)
+    load = out / "1 - LOAD THESE INTO i1PROFILER"
+    results = out / "2 - PUT YOUR RESULTS HERE"
+    ref = out / "reference (not needed by you)"
+    for d in (load, results, ref):
+        d.mkdir(parents=True, exist_ok=True)
 
-    ti1 = out / "probe.ti1"
+    ti1 = ref / "probe.ti1"
     write_ti1(ti1, a.patches)
     target = parse_ti1(ti1)
     assert len(target.rows) == a.patches
 
-    txt, pxf = export_from_ti1(ti1, out, "probe",
+    txt, pxf = export_from_ti1(ti1, load, "probe",
                                descriptor="ChromIQ i1Profiler layout probe")
 
     pages = -(-a.patches // (a.columns * a.rows))
     base = dict(columns=a.columns, rows=a.rows, pages=pages,
                 title="ChromIQ layout probe")
-    write_pwxf(target, out / "probe-A-autolayout.pwxf", "probe",
+    write_pwxf(target, load / "probe-A-autolayout.pwxf", "probe",
                WorkflowOptions(emit_locations=False, **base))
-    b = out / "probe-B-reversed.pwxf"
+    b = load / "probe-B-reversed.pwxf"
     write_pwxf(target, b, "probe", WorkflowOptions(emit_locations=True, **base))
     reverse_locations(b)
 
     (out / "README.txt").write_text(README, encoding="utf-8")
+    (results / "settings.txt").write_text(SETTINGS_FORM, encoding="utf-8")
 
     print(f"{a.patches} patches → {out}")
-    for p in sorted(out.iterdir()):
-        print(f"  {p.name:28s} {p.stat().st_size:>9,} bytes")
+    for p in sorted(out.rglob("*")):
+        if p.is_file():
+            print(f"  {str(p.relative_to(out)):55s} {p.stat().st_size:>9,} bytes")
     r, g, bl = encode(0)
     print(f"\nsanity: patch 0 → RGB8 ({r},{g},{bl}) → decodes to {decode((r, g, bl))}")
     r, g, bl = encode(a.patches - 1)
