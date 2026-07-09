@@ -435,5 +435,94 @@ def test_flank_detection_fires_on_edges_only(tmp_path):
     path2, boxes2, corners2, exp2 = _dense_fixture(tmp_path, 0.25)
     rep2 = dense_placement_agreement(path2, boxes2, corners2, exp2)
     crossing_hits = [n for n, v in rep2.flank_by_patch.items() if v > 0.16]
-    assert len(aligned_hits) < 7          # noise/dust stays under the 7-box rule
-    assert len(crossing_hits) >= 7        # boxes on edges are named
+    # default scanner_flank_min_boxes = 3 (#119)
+    assert len(aligned_hits) < 3
+    assert len(crossing_hits) >= 3        # boxes on edges are named
+
+
+def test_pulled_corner_is_detected(tmp_path):
+    """Knut's #119 case: only ONE corner of the reading grid is dragged
+    inwards, until a few patches in that corner have their sample-box edge on
+    top of a patch edge. The rest of the page stays perfectly placed, so the
+    page-wide ladder barely moves — the edge detector has to catch it, and
+    with the shipped default of 3 boxes it must."""
+    from workflow.placement_probe import dense_placement_agreement
+    path, boxes, corners, exp = _dense_fixture(tmp_path, 0.0)
+
+    base = dense_placement_agreement(path, boxes, corners, exp)
+    aligned = [n for n, v in base.flank_by_patch.items() if v > 0.20]
+    assert len(aligned) < 3, f"aligned grid already flags {aligned}"
+
+    # cell = 40 px, sample box = 50 % of it, so a box rim reaches its border
+    # at 25 % = 10 px. Drag the top-left corner exactly that far in both axes:
+    # the handful of patches beside it now have box edge on patch edge, the
+    # opposite corner is untouched.
+    pulled = [(corners[0][0] + 10, corners[0][1] + 10)] + list(corners[1:])
+    rep = dense_placement_agreement(path, boxes, pulled, exp)
+    on_edge = [n for n, v in rep.flank_by_patch.items() if v > 0.20]
+    assert len(on_edge) >= 3, (
+        f"pulled corner left only {len(on_edge)} edge-carrying boxes "
+        f"({on_edge})")
+
+    # The point of the whole feature: the ladder cannot see this — the page is
+    # correctly placed everywhere except one corner, so its agreement stays at
+    # the ceiling and the placement floor never fires. Only the edge detector
+    # catches it, and only because the count is 3: the 7-box rule shipped
+    # before #119 left this page silent.
+    assert rep.agreement_pct > 99.0
+    assert len([v for v in rep.flank_by_patch.values() if v > 0.30]) < 7
+
+
+def test_flank_min_boxes_setting_gates_the_warning():
+    """OFF disables edge detection; N requires N boxes over the limit."""
+    from ui.dialogs.scanin_dialog import ScannerProfileDialog
+
+    class _Rep:
+        flank_by_patch = {"A1": 0.9, "A2": 0.8, "A3": 0.7, "A4": 0.1}
+
+    class _S(dict):
+        def get(self, k, d=None):          # AppSettings-like
+            return dict.get(self, k, d)
+
+    def offenders(min_boxes, limit=0.20):
+        dlg = ScannerProfileDialog.__new__(ScannerProfileDialog)
+        dlg._settings = _S({"scanner_flank_min_boxes": min_boxes,
+                            "scanner_flank_limit": limit})
+        return ScannerProfileDialog._flank_offenders(dlg, _Rep())
+
+    assert offenders(0) == []                    # Off
+    assert len(offenders(1)) == 3
+    assert len(offenders(3)) == 3                # exactly at the threshold
+    assert offenders(4) == []                    # one short → silent
+
+
+def test_report_carries_average_alongside_worst(tmp_path):
+    """Knut (#119): the verdict is the worst-patch score; the page average is
+    shown next to it on the same ladder scale. An aligned grid averages at
+    least as well as its worst patch."""
+    from workflow.placement_probe import dense_placement_agreement
+    path, boxes, corners, exp = _dense_fixture(tmp_path, 0.0)
+    rep = dense_placement_agreement(path, boxes, corners, exp)
+    assert rep is not None
+    assert 0.0 <= rep.average_pct <= 100.0
+    assert rep.average_pct >= rep.agreement_pct - 1e-9
+
+
+def test_clean_nearby_ring_tracks_step_frac(tmp_path):
+    """The clean-nearby ring is a physical 20 % of the pitch. Before #119 it
+    was hard-coded to ladder rung 2, so a 24x5 % ladder silently probed at
+    ±10 % and a 60x2 % one at ±4 %. Same geometry ⇒ same flank verdicts,
+    whatever the rung size."""
+    from workflow.placement_probe import dense_placement_agreement
+    path, boxes, corners, exp = _dense_fixture(tmp_path, 0.25)
+
+    def hits(steps, step_frac):
+        rep = dense_placement_agreement(path, boxes, corners, exp,
+                                        steps=steps, step_frac=step_frac)
+        return {n for n, v in rep.flank_by_patch.items() if v > 0.16}
+
+    coarse, fine = hits(12, 0.10), hits(24, 0.05)
+    # the ring lands on the same physical offset, so the same boxes are named
+    assert coarse and fine
+    overlap = len(coarse & fine) / len(coarse | fine)
+    assert overlap > 0.8, f"ring moved with the rung size (overlap {overlap:.2f})"

@@ -2501,10 +2501,10 @@ class ScannerProfileDialog(_ToolDialogBase):
             if on_edge:
                 msg = tr(
                     "{w}: sample boxes sit on patch edges — realign the "
-                    "grid. Worst placed: {worst}. (Placement agreement "
-                    "{a} %.)").format(
+                    "grid. Worst placed: {worst}. (Placement agreement: "
+                    "{a}.)").format(
                         w=where, worst=", ".join(on_edge[:6]),
-                        a=f"{report.agreement_pct:.2f}")
+                        a=self._agreement_txt(report))
                 self._log.appendPlainText("⚠ " + msg)
                 self._align_warnings.append(msg)
             elif report is not None and report.agreement_pct < floor:
@@ -2512,10 +2512,10 @@ class ScannerProfileDialog(_ToolDialogBase):
                 msg = tr(
                     "{w}: a nearby grid position matches the chart better "
                     "than the current one — the grid probably sits a "
-                    "fraction of a patch off (placement agreement {a} %, "
+                    "fraction of a patch off (placement agreement: {a}, "
                     "floor {f} %). Patches reading furthest from "
                     "expectation: {worst}.").format(
-                        w=where, a=f"{report.agreement_pct:.2f}",
+                        w=where, a=self._agreement_txt(report),
                         f=f"{floor:.0f}", worst=worst)
                 self._log.appendPlainText("⚠ " + msg)
                 self._align_warnings.append(msg)
@@ -2722,10 +2722,10 @@ class ScannerProfileDialog(_ToolDialogBase):
             if on_edge:
                 out.append(tr(
                     "⚠ {w}: sample boxes sit on patch edges — realign the "
-                    "grid. Worst placed: {worst}. (Placement agreement "
-                    "{a} %.)").format(
+                    "grid. Worst placed: {worst}. (Placement agreement: "
+                    "{a}.)").format(
                         w=where, worst=", ".join(on_edge[:6]),
-                        a=f"{agree:.2f}"))
+                        a=self._agreement_txt(report)))
             floor = 100.0 * float(self._settings.get(
                 "scanner_check_agreement", 0.85))
             if not on_edge and agree < floor:
@@ -2734,16 +2734,16 @@ class ScannerProfileDialog(_ToolDialogBase):
                     "⚠ {w}: a nearby grid position matches the chart better "
                     "than the current one — the grid probably sits a "
                     "fraction of a patch off. Nudge it and check again. "
-                    "(Placement agreement {a} %, floor {f} %. Patches "
+                    "(Placement agreement: {a}, floor {f} %. Patches "
                     "reading furthest from expectation: {worst}.)").format(
-                        w=where, a=f"{agree:.2f}", f=f"{floor:.0f}",
-                        worst=worst))
+                        w=where, a=self._agreement_txt(report),
+                        f=f"{floor:.0f}", worst=worst))
         if not out:
             if agree is not None:
                 out.append(tr(
                     "✓ {w}: the current grid position keeps all sample "
-                    "boxes within their chart patches (placement agreement "
-                    "{r} %).").format(w=where, r=f"{agree:.2f}"))
+                    "boxes within their chart patches (placement agreement: "
+                    "{r}).").format(w=where, r=self._agreement_txt(report)))
             else:
                 r_txt = f"{rho:.2f}" if rho is not None else "—"
                 out.append(tr(
@@ -2751,19 +2751,32 @@ class ScannerProfileDialog(_ToolDialogBase):
                     "the chart (agreement {r}).").format(w=where, r=r_txt))
         return out
 
+    @staticmethod
+    def _agreement_txt(report) -> str:
+        """"worst 56.88 %, average 96.70 %" — the verdict is the worst-patch
+        number (it alone decides), with the page average alongside so a few
+        bad patches read differently from a wholesale misplacement (Knut)."""
+        return tr("worst {w} %, average {a} %").format(
+            w=f"{report.agreement_pct:.2f}", a=f"{report.average_pct:.2f}")
+
     def _flank_offenders(self, report) -> list[str]:
         """Patches whose sample box sits ON a patch border flank (Knut):
-        the box contains a patch-border LINE: three or more CONNECTED
-        sub-cells of its 9×9 grid carry a gradient peak above the page's
-        grain floor (a line crosses adjacent cells; dust scatters, Knut),
-        and the box reads clean at some nearby position. Seven or more such
-        boxes = the grid is on edges, whatever the ladder says (fewer can
-        be a target's own printed features near box rims — LaserSoft's
-        bars leave up to six on a perfectly aligned grid)."""
-        lim = float(self._settings.get("scanner_flank_limit", 0.30))
+        the box contains a patch-border LINE — three or more CONNECTED
+        sub-cells of its 11×11 grid carry a gradient peak above the page's
+        grain floor (a line crosses adjacent cells; dust scatters, Knut) —
+        and the box reads clean at some nearby position.
+
+        ``scanner_flank_min_boxes`` such boxes flag the page whatever the
+        ladder says; 0 turns edge detection off. A few boxes can be a
+        target's own printed features near box rims (Knut's aligned
+        LaserSoft leaves two), which is why the default is 3 and not 1."""
+        need = int(self._settings.get("scanner_flank_min_boxes", 3))
+        if need <= 0:
+            return []
+        lim = float(self._settings.get("scanner_flank_limit", 0.20))
         hits = sorted(((n, v) for n, v in report.flank_by_patch.items()
                        if v > lim), key=lambda t: -t[1])
-        return [n for n, _v in hits] if len(hits) >= 7 else []
+        return [n for n, _v in hits] if len(hits) >= need else []
 
     def _dense_report(self, params, printer: bool, exp: dict):
         """Run Knut's dense ladder on the dry-run's scan: patch boxes from

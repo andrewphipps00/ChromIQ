@@ -913,13 +913,23 @@ class SettingsDialog(QDialog):
         g.setHorizontalSpacing(8)
         g.setVerticalSpacing(8)
 
-        defaults = {0: "30", 1: "12", 2: "0.85", 3: "0.30"}
+        # Rows are grouped by which check they belong to, with a blank row
+        # between groups so it's visible at a glance which limits work
+        # together (Knut, #119):
+        #   0,1  profile self-check      3  placement agreement
+        #   5,6  patch-edge detection
+        defaults = {0: "30", 1: "12", 3: "0.85", 5: "3", 6: "0.20"}
 
         def _row(r: int, label: str, spin, tip_title: str, tip_body: str) -> None:
             g.addWidget(QLabel(label, grp), r, 0)
             g.addWidget(spin, r, 1)
             body = tip_body + "\n\n" + tr("Default: {v}.").format(v=defaults[r])
             g.addWidget(TooltipButton(tip_title, body, grp), r, 2)
+
+        def _gap(r: int) -> None:
+            sp = QLabel("", grp)
+            sp.setFixedHeight(10)
+            g.addWidget(sp, r, 0)
 
         s = self._settings
         self._scan_peak_spin = NoScrollDoubleSpinBox(grp)
@@ -940,64 +950,126 @@ class SettingsDialog(QDialog):
                 "to check the diagnostic images before trusting the "
                 "profile."))
 
+        _gap(2)
         self._scan_check_spin = NoScrollDoubleSpinBox(grp)
         self._scan_check_spin.setRange(0.5, 0.99)
         self._scan_check_spin.setDecimals(2)
         self._scan_check_spin.setSingleStep(0.01)
         self._scan_check_spin.setValue(float(s.get("scanner_check_agreement", 0.85)))
         self._scan_check_spin.setMinimumWidth(120)
-        _row(2, tr("Check alignment: flag placements below (0.5–0.99):"),
+        _row(3, tr("Check alignment: flag placements below (0.5–0.99):"),
              self._scan_check_spin,
              tr("Placement agreement (Check alignment and building)"),
-             tr("Check alignment samples the scan densely and compares your "
-                "grid position with every position of a step ladder around "
-                "it — 12 steps of 10 % of a patch in all 8 directions. The "
-                "best position of the ladder is 100 %, the worst position "
-                "in your grid's direction is 0 %, and your position lands "
-                "in between, shown with 2 decimals.\n\n"
-                "Below this floor (as a fraction of 100 %), the check tells "
-                "you a nearby position matches better and names the patches "
-                "reading furthest from expectation. The default is "
-                "calibrated on real scanned targets so that a grid offset "
-                "of a quarter patch is flagged while offsets under about "
-                "15 % of a patch pass (at 50 % patch sample area).\n\n"
+             tr("In short: this asks \"is my reading grid really on the "
+                "patches, or would it fit better a little to one side?\" If a "
+                "nearby position would fit better, ChromIQ tells you, and "
+                "names the patches that look most wrong.\n\n"
+                "You'll see two percentages, like \"worst 56.88 %, average "
+                "96.70 %\". 100 % means the grid is exactly where it fits "
+                "best. The \"worst\" number is the one that decides — when it "
+                "falls below this setting, you get a warning. The \"average\" "
+                "number is only there to tell you what kind of problem you "
+                "have: a low worst with a high average means a few patches "
+                "are off, while both low means the whole grid has slipped.\n\n"
+                "What to change: if you get warnings on scans you've checked "
+                "by eye and know are fine, lower this. Raise it to be warned "
+                "earlier. The default is calibrated on real scanned targets, "
+                "so a grid sitting a quarter of a patch off is flagged, while "
+                "anything under about 15 % of a patch passes.\n\n"
+                "How it works, if you're curious: ChromIQ samples the scan at "
+                "your grid position and again at every rung of a ladder around "
+                "it — 24 steps of 5 % of a patch, in all 8 directions. Each "
+                "position is scored by comparing every patch with the colour "
+                "the chart says it should be. The ladder's best position is "
+                "100 %, the worst one in your grid's direction is 0 %, and "
+                "your position lands somewhere between.\n\n"
                 "The same check runs for every page when you build — a "
                 "flagged page is listed in the warning popup before "
                 "anything is built."))
+        _gap(4)
+        self._scan_flank_min_combo = NoScrollComboBox(grp)
+        self._scan_flank_min_combo.addItem(tr("Off — don't detect patch edges"), 0)
+        for _n in range(1, 10):
+            self._scan_flank_min_combo.addItem(str(_n), _n)
+        _cur = int(s.get("scanner_flank_min_boxes", 3))
+        self._scan_flank_min_combo.setCurrentIndex(
+            max(0, self._scan_flank_min_combo.findData(_cur)))
+        self._scan_flank_min_combo.setMinimumWidth(120)
+        _row(5, tr("Warn when this many patches sit on an edge (Off, 1–9):"),
+             self._scan_flank_min_combo,
+             tr("How many patches on an edge before you're warned"),
+             tr("In short: ChromIQ checks each reading box separately to see "
+                "whether it is sitting on the border between two patches "
+                "instead of squarely inside one. This setting says how many "
+                "patches have to be caught doing that, at the same time, "
+                "before you get a misalignment warning.\n\n"
+                "It counts whole patches of the reading grid — not the small "
+                "sensing cells inside a single patch. Choose Off to switch "
+                "edge detection off completely; the placement-agreement check "
+                "above keeps running either way.\n\n"
+                "What to change: lower it (1 or 2) to be warned as soon as a "
+                "single patch lands on a border. Raise it if a target's own "
+                "printed design keeps triggering warnings on grids you know "
+                "are correct.\n\n"
+                "Why the default is 3: a target's own printed features — the "
+                "bars and wedges on a LaserSoft, the step borders on an IT8 — "
+                "are real edges, and even on a perfectly placed grid one or "
+                "two of them fall close enough to a box rim to be counted. On "
+                "real 600 dpi scans of a LaserSoft DC Pro and a Wolf Faust "
+                "IT8, a correct grid leaves at most 2 such patches. Dragging "
+                "one corner of the grid inwards, until a few patches in that "
+                "corner straddle their borders, leaves 4 or more; sliding the "
+                "whole grid a fifth of a patch sideways leaves over a "
+                "hundred. So 3 catches a pulled corner without ever crying "
+                "wolf, while 1 or 2 would warn on a correct grid."))
         self._scan_flank_spin = NoScrollDoubleSpinBox(grp)
         self._scan_flank_spin.setRange(0.02, 0.50)
         self._scan_flank_spin.setDecimals(2)
         self._scan_flank_spin.setSingleStep(0.01)
-        self._scan_flank_spin.setValue(float(s.get("scanner_flank_limit", 0.30)))
+        self._scan_flank_spin.setValue(float(s.get("scanner_flank_limit", 0.20)))
         self._scan_flank_spin.setMinimumWidth(120)
-        _row(3, tr("Flag sample boxes on patch edges above (0.02–0.5):"),
+        _row(6, tr("…counting a patch as on an edge above (0.02–0.5):"),
              self._scan_flank_spin,
-             tr("Edge-flank detection"),
-             tr("How the edge detector works (Knut's design): a patch "
-                "border is a LINE of sudden colour change — a spatial "
-                "derivative. Every sample box carries an 11×11 sensing "
-                "grid: the inner 9×9 covers the box itself completely, and "
-                "the outer ring of cells sits just OUTSIDE it, so a border "
-                "is sensed while the box is still approaching it — at the "
-                "same small distance from every side. Each cell records its "
-                "PEAK colour-change (in brightness and two opponent-colour "
-                "planes; peaks, not means, so an edge is never averaged "
-                "away). Print grain raises every cell equally, so the "
-                "page's own median sets the noise floor.\n\n"
-                "A box is ON an edge when three or more CONNECTED "
-                "cells stand above the floor by more than this limit — "
-                "a border line runs through adjacent cells, while dust "
-                "specks scatter and never connect — AND the box reads clean "
-                "at some nearby grid position (colour bars or wedges inside "
-                "the patch itself stay hot everywhere and never count).\n\n"
-                "Seven or more such boxes flag the page IMMEDIATELY, "
-                "overriding the placement floor above, and the worst-placed "
-                "patches are named. Lower = stricter. Calibrated on real "
-                "scanned targets and all bundled demo targets: an aligned "
-                "grid stays under the trigger (a target's own printed "
-                "features can leave a few edge-carrying boxes), a grid "
-                "whose boxes just cross their borders shows twenty to a "
-                "hundred and more, in every direction."))
+             tr("How strong an edge has to be to count"),
+             tr("In short: this is how obvious a patch border has to look "
+                "before ChromIQ decides a reading box is sitting on it. "
+                "Lower = stricter, so fainter borders count. It works "
+                "together with the setting above: this one decides which "
+                "patches are \"on an edge\", that one decides how many of "
+                "them it takes to warn you.\n\n"
+                "What the number means: it is NOT a percentage difference "
+                "between two patches. It measures how STEEPLY the colour "
+                "changes inside the box, compared with the gentle speckle of "
+                "print grain and scanner noise on the same page. 0.20 means "
+                "the box contains a colour change a fifth of the page's whole "
+                "brightness range steeper than that grain. A patch border is "
+                "a sharp step, so it towers over grain even when the two "
+                "patches themselves are similar in colour.\n\n"
+                "What to change: below about 0.06 you start counting the "
+                "grain itself and will get false warnings. Above about 0.30, "
+                "genuinely misplaced boxes go unnoticed. If you scan a very "
+                "noisy or textured paper, raise it a little.\n\n"
+                "How it works, if you're curious: every reading box carries "
+                "an 11×11 grid of small sensing cells. The inner 9×9 cover "
+                "the box itself; the outer ring sits just outside it, so a "
+                "border is spotted while the box is still approaching it, "
+                "equally from every side. Each cell records the steepest "
+                "colour change it can see — in brightness and in two "
+                "colour-opponent channels, so a border between two patches of "
+                "the same brightness is still caught. A box counts as being "
+                "on an edge only when three or more NEIGHBOURING cells light "
+                "up (a border is a line, so it crosses adjacent cells, while "
+                "dust specks scatter and never connect) AND the box reads "
+                "clean a little to one side — that last rule is what stops a "
+                "target's own printed bars and wedges from counting. The "
+                "box's edge strength is then its third-strongest cell, "
+                "matching the three-cell rule.\n\n"
+                "Where the default comes from: on real 600 dpi IT8 scans the "
+                "page grain sits around 0.04 and reaches 0.05 on the noisiest "
+                "patches. Half of all real patch borders are above 0.08, and "
+                "the borders a misplaced box actually lands on read 0.20 and "
+                "up. Together with a count of 3 above, 0.20 leaves a correctly "
+                "placed grid completely silent."))
         self._scan_avg_spin = NoScrollDoubleSpinBox(grp)
         self._scan_avg_spin.setRange(2.0, 60.0)
         self._scan_avg_spin.setDecimals(1)
@@ -1282,7 +1354,9 @@ class SettingsDialog(QDialog):
         self._scan_peak_spin.setValue(float(s.get("scanner_selfcheck_peak", 30.0)))
         self._scan_avg_spin.setValue(float(s.get("scanner_selfcheck_avg", 12.0)))
         self._scan_check_spin.setValue(float(s.get("scanner_check_agreement", 0.85)))
-        self._scan_flank_spin.setValue(float(s.get("scanner_flank_limit", 0.30)))
+        self._scan_flank_spin.setValue(float(s.get("scanner_flank_limit", 0.20)))
+        self._scan_flank_min_combo.setCurrentIndex(max(0, self._scan_flank_min_combo
+            .findData(int(s.get("scanner_flank_min_boxes", 3)))))
         self._chromiq_refine_check.setChecked(bool(s.get("chromiq_refinement", False)))
         self._averaging_check.setChecked(bool(s.get("averaging_enabled", False)))
         self._native_print_check.setChecked(bool(s.get("use_native_print_dialog", False)))
@@ -1923,6 +1997,7 @@ class SettingsDialog(QDialog):
         s.set("scanner_selfcheck_avg",     float(self._scan_avg_spin.value()))
         s.set("scanner_check_agreement",   float(self._scan_check_spin.value()))
         s.set("scanner_flank_limit",       float(self._scan_flank_spin.value()))
+        s.set("scanner_flank_min_boxes",   int(self._scan_flank_min_combo.currentData()))
         s.set("profile_install_dir",       self._profile_dir_edit.text().strip())
         from core.platform_paths import set_icc_install_override
         set_icc_install_override(self._profile_dir_edit.text())

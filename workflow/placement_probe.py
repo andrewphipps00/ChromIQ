@@ -3,22 +3,27 @@
 
 Knut's design, adopted: instead of re-running scanin at a handful of probe
 positions, measure the scan densely ONCE and evaluate his full step ladder —
-12 steps of 10 % of a patch pitch in 8 directions — as pure lookups. His
+24 steps of 5 % of a patch pitch in 8 directions — as pure lookups. His
 proposal reached the dense measurements by generating a high-density .cht and
 sending it through scanin; this implementation samples the image directly with
 the same maths scanin uses for manually-placed grids (the -F homography and
 per-box mean over the sample area), which produces the same numbers without
 the detour, so the whole ladder costs milliseconds instead of minutes.
 
-Per patch (his ranking): every candidate position's sampled colour is compared
-with the patch's expected value through a monotone response map (fitted
-page-wide, so an unprofiled scanner's response and a printer's gamut
-compression cancel out; because the ranking is per patch, any per-patch offset
-the response map can't express cancels too). The closest position within the
-1.5-patch search circumference is the baseline (100 %), the worst position in
-the octant the grid sits in from the baseline is 0 %, and the grid's own
-position ranks between them. The page's agreement is the WORST patch — no
-averaging (Knut) — and the patches below the floor are named.
+Every candidate position's sampled colour is compared with the patch's
+expected value through a monotone response map (fitted page-wide, so an
+unprofiled scanner's response and a printer's gamut compression cancel out).
+A position's page score is the 95th-percentile |residual| over the patches:
+worst-rules, with enough immunity that one dust speck can't condemn a page.
+The ladder's best position is 100 %, the least-worst of the eight directions
+is 0 %, and the grid's own position ranks between them.
+
+So the verdict is driven by the page's WORST patches — no averaging (Knut) —
+and those patches are named. ``average_pct`` re-runs the same normalisation
+on the MEAN residual, purely to show alongside the verdict: it tells the user
+whether a few patches are off or the whole grid is. Individual patches cannot
+be ranked against each other this way — a patch's residual measures how well
+the page's response model fits its COLOUR, not how well its box is placed.
 """
 from __future__ import annotations
 
@@ -37,8 +42,14 @@ class PlacementReport:
                  offenders: list[tuple[str, float]],
                  s_user: float | None = None,
                  s_best: float | None = None,
-                 s_floor: float | None = None) -> None:
+                 s_floor: float | None = None,
+                 average_pct: float | None = None) -> None:
         self.agreement_pct = agreement_pct
+        # Same ladder scale as agreement_pct, but driven by the page's MEAN
+        # patch instead of its worst (Knut, #119) — shown alongside the
+        # verdict, never used for it.
+        self.average_pct = (agreement_pct if average_pct is None
+                            else average_pct)
         self.per_patch = per_patch
         self.offenders = offenders
         self.s_user = s_user          # raw score of the user's position
@@ -86,8 +97,8 @@ def dense_placement_agreement(
         corners: list[tuple[float, float]],
         expected_by_id: dict[str, float],
         sample_frac: float = 0.5,
-        steps: int = 12,
-        step_frac: float = 0.10,
+        steps: int = 24,
+        step_frac: float = 0.05,
         max_side: int = 2200,
         objective: str = "response",
         src_quad: list[tuple[float, float]] | None = None) -> PlacementReport | None:
@@ -187,7 +198,17 @@ def dense_placement_agreement(
     px = _pitch([b.x1 for b in named], widths[len(widths) // 2])
     py = _pitch([b.y1 for b in named], heights[len(heights) // 2])
 
-    # Knut's ladder: 12 steps × 10 % in 8 directions (+ the centre).
+    # Knut's ladder: 24 steps × 5 % in 8 directions (+ the centre), reaching
+    # the same 120 % of a pitch as the old 12 × 10 %.
+    #
+    # 5 % and not 2 %: the image is downscaled to max_side BEFORE sampling, so
+    # the scan's dpi does not set the step size — the patch pitch in sampled
+    # pixels does. At max_side=2200 a 4 mm patch (ChromIQ's densest scanner
+    # chart, A4) spans ~30 px, so 5 % = 1.5 px but 2 % = 0.6 px. _box_ixs
+    # rounds the sample box to whole pixels, so a sub-pixel rung lands on the
+    # box its predecessor already measured: 60 × 2 % costs 5× the work and
+    # returns duplicate positions. 5 % is the finest rung that still moves the
+    # box on the smallest patch we support (Knut, #119).
     dirs = [(1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (1, -1), (-1, 1), (-1, -1)]
     offsets = [(0.0, 0.0)]
     for ddx, ddy in dirs:
@@ -342,40 +363,71 @@ def dense_placement_agreement(
     if s_user is None:
         return None
     scores: list[tuple[float, int]] = [(s_user, 0)]
+    per_by_pos: dict[int, dict[str, float]] = {0: per_user}
     for i in range(1, len(offsets)):
-        sc_i, _ = page_score(i)
+        sc_i, per_i = page_score(i)
         if sc_i is not None:
             scores.append((sc_i, i))
+            per_by_pos[i] = per_i
     if len(scores) < 9:
         return None
-    s_best, i_best = min(scores)
+    s_best = min(scores)[0]
     # Knut's normalisation, tightened per his beta.136 analysis: each of the
     # 8 directions has its own worst value; the LEAST worst of those eight
     # is the 0 % end. Directions with worse values then fall towards (and
     # past) 0 % more easily, and the scale no longer depends on guessing
     # which octant the grid sits in.
-    per_dir_worst: list[float] = []
-    for d in range(8):
-        lo = 1 + d * steps
-        vals_d = [sc_i for sc_i, i in scores if lo <= i < lo + steps]
-        if vals_d:
-            per_dir_worst.append(max(vals_d))
-    if not per_dir_worst:
-        agree = 100.0
-    else:
-        w0 = min(per_dir_worst)
-        agree = (100.0 if w0 - s_best < 1e-9
-                 else 100.0 * (w0 - s_user) / (w0 - s_best))
-        agree = max(0.0, min(100.0, agree))
+    def _rank(by_pos: list[tuple[float, int]]) -> tuple[float, float | None]:
+        """Knut's normalisation of the grid's own position (index 0) against a
+        per-position score; also returns the 0 %-end score. Tightened per his
+        beta.136 analysis: each of the 8 directions has its own worst value;
+        the LEAST worst of those eight is the 0 % end. Directions with worse
+        values then fall towards (and past) 0 % more easily, and the scale no
+        longer depends on guessing which octant the grid sits in."""
+        dir_worst = []
+        for d in range(8):
+            lo = 1 + d * steps
+            vals_d = [v for v, i in by_pos if lo <= i < lo + steps]
+            if vals_d:
+                dir_worst.append(max(vals_d))
+        if not dir_worst:
+            return 100.0, None
+        w0 = min(dir_worst)
+        best = min(v for v, _i in by_pos)
+        user = next(v for v, i in by_pos if i == 0)
+        if w0 - best < 1e-9:
+            return 100.0, w0
+        return max(0.0, min(100.0, 100.0 * (w0 - user) / (w0 - best))), w0
+
+    agree, s_floor = _rank(scores)
+
+    # The page's average agreement, on the SAME ladder scale (Knut, #119). The
+    # verdict above is driven by the page's worst patches (the pooled score is
+    # their 95th-percentile residual, worst-rules with dust immunity); this
+    # second number re-runs the identical normalisation on the MEAN residual,
+    # so "worst 56.88 %, average 96.70 %" tells the user whether a few patches
+    # are off or the whole grid is.
+    #
+    # It is NOT the mean of per_patch below: a single patch's residual says how
+    # well the page-wide response model fits that COLOUR, not how well its box
+    # is placed, so per-patch percentages cannot be ranked against each other
+    # (measured on Knut's scans: the worst patch of a perfectly aligned Wolf
+    # Faust ranks no better than that of a 20 %-shifted one). Only the pooled
+    # statistic separates placements.
+    means = [(sum(p.values()) / len(p), i)
+             for i, p in per_by_pos.items() if p]
+    agree_avg = _rank(means)[0] if len(means) >= 9 else agree
+
     # Per-patch report at the user's position: how far each patch reads from
     # the page's own response, as a share of the worst patch (100 = clean).
+    # Used to NAME the offenders, not to rank placements (see above).
     worst_res = max(per_user.values()) or 1.0
     per_patch = {n: 100.0 * (1.0 - r / worst_res) for n, r in per_user.items()}
     offenders = sorted(per_user.items(), key=lambda t: -t[1])
     offenders = [(n, per_patch[n]) for n, _r in offenders]
     rep = PlacementReport(agree, per_patch, offenders, s_user=s_user,
-                          s_best=s_best,
-                          s_floor=min(per_dir_worst) if per_dir_worst else None)
+                          s_best=s_best, s_floor=s_floor,
+                          average_pct=agree_avg)
     # Flank detection, Knut's derivative design (#108): a patch border is a
     # LINE of high spatial gradient. Each sample box (at the user's
     # position) is split into a 9×9 sub-grid and each sub-cell records its
@@ -486,8 +538,13 @@ def dense_placement_agreement(
     if all_peaks:
         gfloor = float(np.percentile(all_peaks, 75))
         thr = gfloor + 0.5 * (float(np.percentile(all_peaks, 99)) - gfloor)
-        # ring of ±20 % positions (ladder step k=2) for the clean-nearby test
-        ring_ix = [1 + d * steps + 1 for d in range(8)]
+        # Ring of ±20 % positions for the clean-nearby test. The radius is a
+        # PHYSICAL 20 % of the patch pitch, so the ladder rung has to be
+        # derived from step_frac — hard-coding rung 2 silently turned the ring
+        # into ±10 % at a 24×5 % ladder and ±4 % at 60×2 %, and a ring that
+        # close to the box never clears a border (Knut, #119).
+        k_ring = min(steps, max(1, int(round(0.20 / step_frac))))
+        ring_ix = [1 + d * steps + (k_ring - 1) for d in range(8)]
 
         def hot_count(vals) -> int:
             return int(sum(1 for v in vals if v > thr))

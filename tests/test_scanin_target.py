@@ -199,6 +199,21 @@ def test_printtarg_unmeasured_patch_raises(tmp_path):
         ST.build_scanin_target_from_paths(ch, ti3, tmp_path / "chart")
 
 
+def test_numeric_locs_name_the_i1profiler_cause(tmp_path):
+    """#120: a .ti3 converted from an i1Profiler measurement with txt2ti3
+    carries the exported SampleID in SAMPLE_LOC — plain numbers — so every
+    chart patch reads as unmeasured. The error has to say that, not look like
+    a corrupt measurement."""
+    ch, _ = _printtarg_channels(tmp_path, [["A1", "A2"]])
+    ti3 = _ti3(tmp_path, [("1", 100, 100, 100, 95, 100, 108),
+                          ("2", 0, 0, 0, 0, 0, 0)])
+    with pytest.raises(ST.GeometryMismatch) as e:
+        ST.build_scanin_target_from_paths(ch, ti3, tmp_path / "chart")
+    msg = str(e.value)
+    assert "i1Profiler" in msg and "txt2ti3" in msg
+    assert "Measure tab" in msg
+
+
 def test_cht_x_box_locs_skips_f_and_d_boxes():
     locs = ST._cht_x_box_locs(_printtarg_cht(["A1", "A2", "B3"]))
     assert locs == ["A1", "A2", "B3"]   # F and D MARK0 skipped

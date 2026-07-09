@@ -600,6 +600,21 @@ KNUT_PRESETS: list[_Ti1Preset] = [
                white=3, black=3, tiff_16bit=False, suffix=KNUT_SCANNER_SUFFIX,
                group="Scanner",
                layout_recipe=dict(_KNUT_SCANNER_RECIPE, paper="LetterR")),
+    # Three-page variants (Knut, #118), completing the 1/2/3-page set per paper.
+    _Ti1Preset("scanner_a4_10290p_3pages_landscape",
+               "A4-10290p-3pages-Landscape-w4.0mm" + KNUT_SCANNER_SUFFIX,
+               "SS", "A4R", 1.0, 4, 3,
+               ti1_asset=f"{_KNUT_SCANNER_DIR}/a4_3page/chart.ti1", patches=10290,
+               white=3, black=3, tiff_16bit=False, suffix=KNUT_SCANNER_SUFFIX,
+               group="Scanner",
+               layout_recipe=dict(_KNUT_SCANNER_RECIPE, paper="A4R")),
+    _Ti1Preset("scanner_letter_9750p_3pages_landscape",
+               "Letter-9750p-3pages-Landscape-w4.0mm" + KNUT_SCANNER_SUFFIX,
+               "SS", "LetterR", 1.0, 4, 3,
+               ti1_asset=f"{_KNUT_SCANNER_DIR}/letter_3page/chart.ti1", patches=9750,
+               white=3, black=3, tiff_16bit=False, suffix=KNUT_SCANNER_SUFFIX,
+               group="Scanner",
+               layout_recipe=dict(_KNUT_SCANNER_RECIPE, paper="LetterR")),
 ]
 KNUT_PRESETS_BY_KEY: dict[str, _Ti1Preset] = {p.key: p for p in KNUT_PRESETS}
 KNUT_PRESET_KEYS = frozenset(KNUT_PRESETS_BY_KEY)

@@ -200,12 +200,26 @@ DEFAULTS: dict[str, Any] = {
     # Flank override (Knut's derivative design): patch borders are LINES of
     # high spatial gradient (centred, two scales — symmetric in all 8
     # directions); a box is ON an edge when 3+ CONNECTED sub-cells of its
-    # 9x9 grid carry a peak above the grain floor (a line crosses adjacent
+    # 11x11 grid carry a peak above the grain floor (a line crosses adjacent
     # cells, dust scatters) AND the box is clean at some nearby position.
-    # 7+ such boxes flag the page over the ladder floor. Calibrated on his
-    # real scans: aligned <=6 boxes (LaserSoft's printed bars ARE edges
-    # near some box rims), just-crossing offsets 20-160.
-    "scanner_flank_limit":       0.30,
+    # The box's value is its 3rd-hottest cell, minus the page's grain floor,
+    # over the page's luminance range — a normalised gradient PEAK, not a
+    # step height between neighbouring cells.
+    #
+    # Both numbers come from scripts/scanner_edge_study.py run on Knut's two
+    # real 600 dpi IT8 scans, against scanin's own placement (#119). Boxes
+    # over the limit, per case:
+    #                          aligned  +5%  +10%  |  +20%  corner-pull
+    #   Wolf Faust  @0.20            1    1     2  |   131        4
+    #   LaserSoft   @0.20            2    2     1  |   258      160
+    # so min_boxes must exceed 2 and not exceed 4 → 3, which is exactly the
+    # number Knut specified in the #108 design. 2 raises a false alarm on his
+    # own aligned LaserSoft (its printed bars are real edges near box rims);
+    # the 7 previously shipped misses the pulled-corner case entirely, since
+    # only a handful of patches near that corner ever straddle a border.
+    "scanner_flank_limit":       0.20,
+    # 0 = edge detection off (the other misalignment checks stay active).
+    "scanner_flank_min_boxes":   3,
     # Settings → Paths (Knut #108): where "Install profile" copies the .icc.
     # Empty = the platform's per-user colour-profile folder.
     "profile_install_dir":       "",

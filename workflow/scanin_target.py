@@ -173,11 +173,24 @@ def _check_measured(geom_locs: list[str], data: Ti3Data) -> None:
     if len(geom_set) != len(geom_locs):
         raise GeometryMismatch("The chart geometry has duplicate patch locations.")
     missing = geom_set - set(data.sample_locs)
-    if missing:
+    if not missing:
+        return
+    # A .ti3 converted from an i1Profiler measurement (txt2ti3) carries the
+    # exported SampleID in SAMPLE_LOC — plain numbers — instead of the chart's
+    # "A1"/"B2" patch locations, so EVERY patch reads as unmeasured. Say that,
+    # rather than let it look like a corrupt measurement (#120).
+    if data.sample_locs and all(loc.strip().isdigit()
+                                for loc in data.sample_locs):
         raise GeometryMismatch(
-            f"{len(missing)} chart patch(es) have no measurement — the .ti3 "
-            f"doesn't match this chart (e.g. {sorted(missing)[:3]}). Re-measure "
-            "the whole chart before building scanner files.")
+            "This .ti3 numbers its patches (1, 2, 3, …) instead of naming "
+            "their positions on the chart (A1, B2, …), so ChromIQ cannot tell "
+            "which patch each measurement belongs to. That is what you get "
+            "from converting an i1Profiler measurement with txt2ti3. Measure "
+            "the chart with ChromIQ (Measure tab) and build from that .ti3.")
+    raise GeometryMismatch(
+        f"{len(missing)} chart patch(es) have no measurement — the .ti3 "
+        f"doesn't match this chart (e.g. {sorted(missing)[:3]}). Re-measure "
+        "the whole chart before building scanner files.")
 
 
 def build_scanin_target_from_paths(channels_json: str | Path, ti3_path: str | Path,

@@ -223,10 +223,10 @@ def test_dropdown_lists_only_presets_with_recipe(qapp, monkeypatch):
 def test_builtin_fulllayout_recipes_appear_starred(qapp):
     d = _NewChartDialog(Path("/x"), _FakeSettings())
     starred = [n for n in d._preset_recipes if n.startswith("★")]
-    # Every Full-layout-setup chart (#63) + the two Scanner charts (#107)
-    # carry a sidecar recipe.json.
-    assert len(starred) == 19
-    assert sum(1 for n in starred if "Scanner" in n) == 4
+    # Every Full-layout-setup chart (#63) + the six Scanner charts (#107,
+    # #108, #118) carry a sidecar recipe.json.
+    assert len(starred) == 21
+    assert sum(1 for n in starred if "Scanner" in n) == 6
     assert any("A4-924p" in n for n in starred)
 
 

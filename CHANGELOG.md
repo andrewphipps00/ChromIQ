@@ -1,5 +1,46 @@
 # Changelog
 
+## Unreleased
+
+Knut's scanner-profiling round: the full 1/2/3-page scanner preset set, and a
+misalignment check that finally catches a pulled grid corner.
+
+### Improvements
+- **Scanner presets: three page counts for each paper.** Both A4 and US-Letter
+  now offer a 1-page, a 2-page and a 3-page scanner chart (3430 / 6860 / 10290
+  patches on A4, 3250 / 6500 / 9750 on Letter).
+- **The misalignment check reports two numbers**, e.g. *"placement agreement:
+  worst 56.88 %, average 96.70 %"*. The worst-patch number still decides; the
+  average tells you whether a few patches are off or the whole grid has slipped.
+- **Patch-edge detection is now configurable.** Settings → Scanner Limits gained
+  *"Warn when this many patches sit on an edge"* (Off, 1–9). The Scanner Limits
+  tab is grouped so it's visible which limits belong to which check, and its
+  help text now explains, in plain language, what each number actually measures.
+- **The alignment ladder is finer**: 24 steps of 5 % of a patch, replacing 12
+  steps of 10 %. (2 % steps were measured and rejected — on ChromIQ's 4 mm
+  scanner charts they fall below one sampled pixel and just repeat positions.)
+
+### Fixes
+- **A grid with one corner pulled inwards is now detected.** It never was: the
+  page-wide ladder barely moves when only one corner is off, and the edge
+  detector needed **seven** patches on a border before it said anything, while a
+  pulled corner puts only a handful there. The threshold is now 3 — the number
+  Knut specified originally — and the edge limit moved from 0.30 to 0.20. Both
+  values were re-derived from his real 600 dpi LaserSoft and Wolf Faust scans
+  (`docs/dev_scanner_misalignment.md`, `scripts/scanner_edge_study.py`); an
+  aligned grid leaves at most 2 edge-carrying patches, a pulled corner 4 or more.
+- **Scanner charts had one near-neutral ring instead of two.** The two 1-page
+  presets were built with `nearneutral_rings: 1`; all six now use 2, with the
+  other colour sets rebalanced so the patch counts are unchanged.
+- **The clean-nearby probe drifted with the ladder step.** It was pinned to
+  ladder rung 2 rather than to a physical 20 % of the patch pitch, so any change
+  to the step size would have silently moved it (to ±4 % at 2 % steps) and
+  quietly disabled edge detection.
+- **A `.ti3` converted from an i1Profiler measurement now fails with a useful
+  message.** `txt2ti3` writes the exported SampleID into `SAMPLE_LOC`, so every
+  chart patch read as unmeasured and the error looked like a corrupt
+  measurement.
+
 ## v3.13.2
 
 Scanner/camera profiling refinements from Knut, plus a chart-preset fix.

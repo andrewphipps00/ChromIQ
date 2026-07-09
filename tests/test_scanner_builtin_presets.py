@@ -1,10 +1,10 @@
 """Scanner built-in presets (#100) — Knut's flatbed-scanner printer-profiling
 charts as engine-built built-ins in their own "Scanner" preset group.
 
-Each bundles a fixed .ti1 (3430p A4 / 3250p Letter, plus the two-page
-6860p A4 / 6500p Letter variants, #108) with a full ChromIQ layout-engine
-recipe; selecting one turns the engine on, seeds the layout panel from the
-recipe, and builds from the bundled patch set.
+Each bundles a fixed .ti1 with a full ChromIQ layout-engine recipe; selecting
+one turns the engine on, seeds the layout panel from the recipe, and builds
+from the bundled patch set. Both papers carry a 1/2/3-page variant (#118):
+3430p / 6860p / 10290p on A4 and 3250p / 6500p / 9750p on Letter.
 """
 import os
 import re
@@ -27,6 +27,8 @@ _A4_KEY = "__chromiq_knut_scanner_a4_3430p_1page_landscape__"
 _LETTER_KEY = "__chromiq_knut_scanner_letter_3250p_1page_landscape__"
 _A4_2P_KEY = "__chromiq_knut_scanner_a4_6860p_2pages_landscape__"
 _LETTER_2P_KEY = "__chromiq_knut_scanner_letter_6500p_2pages_landscape__"
+_A4_3P_KEY = "__chromiq_knut_scanner_a4_10290p_3pages_landscape__"
+_LETTER_3P_KEY = "__chromiq_knut_scanner_letter_9750p_3pages_landscape__"
 
 
 @pytest.fixture(scope="module")
@@ -51,17 +53,19 @@ def _make_tab(qapp, tmp_path):
 # ---------------------------------------------------------------------------
 
 def test_scanner_family_registered():
-    assert {p.key for p in _SCANNER} == {_A4_KEY, _LETTER_KEY,
-                                          _A4_2P_KEY, _LETTER_2P_KEY}
+    assert {p.key for p in _SCANNER} == {_A4_KEY, _A4_2P_KEY, _A4_3P_KEY,
+                                          _LETTER_KEY, _LETTER_2P_KEY,
+                                          _LETTER_3P_KEY}
     assert all(p.layout_recipe is not None for p in _SCANNER)
     assert all(p.key in BUILTIN_PRESET_KEYS for p in _SCANNER)
     assert all(p.combo_label in BUILTIN_PRESET_LABELS for p in _SCANNER)
-    # Own "Scanner" group in the dropdown/overlay registry, holding exactly
-    # the four charts.
+    # Own "Scanner" group in the dropdown/overlay registry: both papers carry a
+    # 1/2/3-page variant, A4 before Letter, page count ascending (#118).
     groups = dict(BUILTIN_PRESET_GROUPS)
     assert "Scanner" in groups
     assert [k for (_c, _o, k) in groups["Scanner"]] == [
-        _A4_KEY, _A4_2P_KEY, _LETTER_KEY, _LETTER_2P_KEY]
+        _A4_KEY, _A4_2P_KEY, _A4_3P_KEY,
+        _LETTER_KEY, _LETTER_2P_KEY, _LETTER_3P_KEY]
 
 
 def test_scanner_assets_match_declared_counts():
@@ -76,7 +80,18 @@ def test_scanner_assets_match_declared_counts():
         assert txt.count("NUMBER_OF_SETS") == 3
 
 
-def test_scanner_recipes_reproduce_one_page():
+def test_scanner_sidecar_recipes_use_two_nearneutral_rings():
+    """#118: the two 1-page charts shipped with a single near-neutral ring.
+    Every scanner chart now carries two, so guard all six sidecars."""
+    import json
+    for p in _SCANNER:
+        rec = json.loads((resource_path(p.ti1_asset).parent / "recipe.json")
+                         .read_text(encoding="utf-8"))
+        assert rec["sp"]["nearneutral_rings"] == 2, p.key
+        assert rec["sp"]["fill_to"] == p.patches, p.key
+
+
+def test_scanner_recipes_reproduce_declared_page_count():
     """The bundled recipe + .ti1 must lay out to exactly the advertised page
     count — a threshold/margin regression in the engine would silently
     spill."""

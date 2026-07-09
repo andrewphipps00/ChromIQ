@@ -1,0 +1,140 @@
+ChromIQ scanner edge study — ladder 24x5%
+
+==============================================================================
+Wolf Faust IT8 (R230122W)
+==============================================================================
+aligned grid = scanin's own placement; reproduces its .ti3 on 288 patches to 0.19 % mean device error
+sampling resolution 2200x1555 px (scale 0.529); page luminance range 185.4
+
+-- A. noise floor (inner 9x9 cell gradient peaks, aligned grid) --
+   cells=23328  min=2.00  mean=7.58  max=89.00
+   P50=7.00  P75=9.00 (= grain floor)  P99=18.00
+   as fraction of page luminance range: min=0.0108  mean=0.0409  P75=0.0485  max=0.4800
+   per-patch mean cell peak: min=3.98  avg=7.58  max=13.64   (normalised 0.0214 / 0.0409 / 0.0736)
+
+-- B. edge height to neighbouring patch (max over lum + 2 opponent planes, as fraction of page lum range) --
+   category          dir       n      min      p05   median      max
+   dark              up       88   0.0454   0.0521   0.1472   0.8183
+   dark              down     84   0.0454   0.0512   0.1554   0.8174
+   dark              left     87   0.0131   0.0243   0.1608   1.7802
+   dark              right    95   0.0131   0.0266   0.1781   1.9546
+   light             up        8   0.0917   0.0945   0.1115   0.7568
+   light             down      8   0.0827   0.0886   0.1174   0.6623
+   light             left      8   0.4843   0.4999   0.8713   1.5979
+   light             right     8   0.2160   0.2510   0.4727   0.7576
+   greyscale         up       49   0.0330   0.0516   0.1400   0.9559
+   greyscale         down     55   0.0330   0.0519   0.1236   0.9595
+   greyscale         left     58   0.0081   0.0158   0.0727   1.0893
+   greyscale         right    58   0.0081   0.0158   0.0636   0.9349
+   colour-gradient   up      119   0.0622   0.0718   0.1652   0.9595
+   colour-gradient   down    117   0.0590   0.0698   0.1565   0.9559
+   colour-gradient   left    122   0.0578   0.0746   0.3026   2.2548
+   colour-gradient   right   114   0.0579   0.0842   0.4952   2.2548
+   ALL                      1078   0.0081   0.0449   0.1748   2.2548
+
+-- C. flank response (ladder 24x5%) --
+   one patch is ~81.3 px at the probe's sampling resolution -> a 5% ladder step = 4.06 px
+
+   case                                   flag  agree%  0.02  0.04  0.06  0.08  0.10  0.15  0.20  0.25  0.30
+   aligned                                  no   88.46    10     6     6     4     3     1     0     0     0
+   shift x 2% patch                         no   89.56    10     7     6     4     4     0     0     0     0
+   shift x 5% patch                         no   87.34    12     8     7     5     5     2     1     0     0
+   shift x 10% patch                        no   88.58    19    10     8     6     4     2     2     1     0
+   shift x 20% patch                       YES   88.93   131   131   131   131   131   131   131   121   106
+   shift x 30% patch                       YES   91.07    50    50    50    50    50    50    50    50    50
+   shift y 10% patch                         —   87.70    15    11     7     5     5     3     1     1     1
+   shift y 20% patch                         —   91.80   140   140   139   120    92    58    40    32    22
+   corner pull 0.5% (local 7% of patch)     no   89.69     8     5     5     3     3     0     0     0     0
+   corner pull 1.0% (local 14% of patch)     —   90.61    13     6     6     3     2     0     0     0     0
+   corner pull 2.0% (local 28% of patch)     —   92.01    15     7     7     3     3     0     0     0     0
+   corner pull 3.0% (local 42% of patch)     —   92.17    17    11    11     5     3     2     0     0     0
+   corner pull 4.0% (local 55% of patch)   YES   92.75    25    24    23    16    12     6     4     3     0
+   corner pull 6.0% (local 83% of patch)   YES   95.45    38    38    38    34    28    20     9     8     4
+   (columns = number of sample boxes whose flank value exceeds that limit)
+   flag = must the page be reported misaligned?  '—' = don't care
+
+-- D. admissible (limit, min_boxes) pairs  --
+   limit 0.02: worst silent case =  19 boxes, weakest caught case =   25 boxes  ->  min_boxes in [20, 25]
+   limit 0.04: worst silent case =  10 boxes, weakest caught case =   24 boxes  ->  min_boxes in [11, 24]
+   limit 0.06: worst silent case =   8 boxes, weakest caught case =   23 boxes  ->  min_boxes in [9, 23]
+   limit 0.08: worst silent case =   6 boxes, weakest caught case =   16 boxes  ->  min_boxes in [7, 16]
+   limit 0.10: worst silent case =   5 boxes, weakest caught case =   12 boxes  ->  min_boxes in [6, 12]
+   limit 0.15: worst silent case =   2 boxes, weakest caught case =    6 boxes  ->  min_boxes in [3, 6]
+   limit 0.20: worst silent case =   2 boxes, weakest caught case =    4 boxes  ->  min_boxes in [3, 4]
+   limit 0.25: worst silent case =   1 boxes, weakest caught case =    3 boxes  ->  min_boxes in [2, 3]
+
+==============================================================================
+LaserSoft DC Pro Advanced (R250715)
+==============================================================================
+aligned grid = scanin's own placement; reproduces its .ti3 on 864 patches to 0.20 % mean device error
+sampling resolution 2200x1548 px (scale 0.525); page luminance range 174.5
+
+-- A. noise floor (inner 9x9 cell gradient peaks, aligned grid) --
+   cells=69984  min=2.00  mean=6.76  max=81.00
+   P50=6.00  P75=8.00 (= grain floor)  P99=17.00
+   as fraction of page luminance range: min=0.0115  mean=0.0387  P75=0.0458  max=0.4642
+   per-patch mean cell peak: min=3.14  avg=6.76  max=18.51   (normalised 0.0180 / 0.0387 / 0.1061)
+
+-- B. edge height to neighbouring patch (max over lum + 2 opponent planes, as fraction of page lum range) --
+   category          dir       n      min      p05   median      max
+   dark              up      377   0.0007   0.0214   0.1433   1.1414
+   dark              down    364   0.0007   0.0220   0.1425   0.9360
+   dark              left    370   0.0021   0.0092   0.0454   1.2465
+   dark              right   377   0.0021   0.0092   0.0467   1.6238
+   light             up        8   0.0401   0.0420   0.0521   0.0593
+   light             down      8   0.0401   0.0406   0.0524   0.0572
+   light             left      8   0.2836   0.2865   0.4444   0.8229
+   light             right     8   0.2328   0.2583   0.3576   0.5555
+   greyscale         up      135   0.0017   0.0044   0.0141   0.8310
+   greyscale         down    143   0.0017   0.0046   0.0149   0.1073
+   greyscale         left    146   0.0017   0.0168   0.2329   0.8569
+   greyscale         right   146   0.0017   0.0168   0.1980   0.8983
+   colour-gradient   up      308   0.0116   0.0301   0.0875   1.2651
+   colour-gradient   down    313   0.0116   0.0303   0.1089   1.2651
+   colour-gradient   left    316   0.0053   0.0201   0.1934   1.6238
+   colour-gradient   right   309   0.0053   0.0192   0.0675   1.5964
+   ALL                      3336   0.0007   0.0105   0.0814   1.6238
+
+-- C. flank response (ladder 24x5%) --
+   one patch is ~50.9 px at the probe's sampling resolution -> a 5% ladder step = 2.54 px
+
+   case                                   flag  agree%  0.02  0.04  0.06  0.08  0.10  0.15  0.20  0.25  0.30
+   aligned                                  no   97.31    21    15    10     8     7     5     2     2     1
+   shift x 2% patch                         no   97.48    23    17    12     9     8     6     2     2     1
+   shift x 5% patch                         no   97.31    21    15    10     8     6     5     2     2     1
+   shift x 10% patch                        no   97.68    28    21    14     9     8     4     1     1     1
+   shift x 20% patch                       YES   97.23   358   358   358   349   338   302   258   224   182
+   shift x 30% patch                       YES   95.37   176   176   176   176   176   176   176   176   176
+   shift y 10% patch                         —   97.65   315   315   315   314   290   237   192   169   145
+   shift y 20% patch                         —   99.71   192   192   192   192   192   192   192   192   192
+   corner pull 0.5% (local 12% of patch)     —   97.37    20    11     6     6     5     4     0     0     0
+   corner pull 1.0% (local 23% of patch)     —   97.53    29    23    12    11     6     4     0     0     0
+   corner pull 2.0% (local 46% of patch)     —   97.81   125   124   108    93    81    52    42    36    28
+   corner pull 3.0% (local 69% of patch)   YES   97.92   177   177   177   177   177   156   137   123   104
+   corner pull 4.0% (local 92% of patch)   YES   97.77   160   160   160   160   160   160   160   145   121
+   corner pull 6.0% (local 138% of patch)  YES   96.60   143   143   143   143   143   143   143   143   141
+   (columns = number of sample boxes whose flank value exceeds that limit)
+   flag = must the page be reported misaligned?  '—' = don't care
+
+-- D. admissible (limit, min_boxes) pairs  --
+   limit 0.02: worst silent case =  28 boxes, weakest caught case =  143 boxes  ->  min_boxes in [29, 143]
+   limit 0.04: worst silent case =  21 boxes, weakest caught case =  143 boxes  ->  min_boxes in [22, 143]
+   limit 0.06: worst silent case =  14 boxes, weakest caught case =  143 boxes  ->  min_boxes in [15, 143]
+   limit 0.08: worst silent case =   9 boxes, weakest caught case =  143 boxes  ->  min_boxes in [10, 143]
+   limit 0.10: worst silent case =   8 boxes, weakest caught case =  143 boxes  ->  min_boxes in [9, 143]
+   limit 0.15: worst silent case =   6 boxes, weakest caught case =  143 boxes  ->  min_boxes in [7, 143]
+   limit 0.20: worst silent case =   2 boxes, weakest caught case =  137 boxes  ->  min_boxes in [3, 137]
+   limit 0.25: worst silent case =   2 boxes, weakest caught case =  123 boxes  ->  min_boxes in [3, 123]
+   limit 0.30: worst silent case =   1 boxes, weakest caught case =  104 boxes  ->  min_boxes in [2, 104]
+
+==============================================================================
+COMBINED
+==============================================================================
+
+-- D. admissible (limit, min_boxes) pairs ACROSS BOTH TARGETS --
+   limit 0.04: worst silent case =  21 boxes, weakest caught case =   24 boxes  ->  min_boxes in [22, 24]
+   limit 0.06: worst silent case =  14 boxes, weakest caught case =   23 boxes  ->  min_boxes in [15, 23]
+   limit 0.08: worst silent case =   9 boxes, weakest caught case =   16 boxes  ->  min_boxes in [10, 16]
+   limit 0.10: worst silent case =   8 boxes, weakest caught case =   12 boxes  ->  min_boxes in [9, 12]
+   limit 0.20: worst silent case =   2 boxes, weakest caught case =    4 boxes  ->  min_boxes in [3, 4]
+   limit 0.25: worst silent case =   2 boxes, weakest caught case =    3 boxes  ->  min_boxes in [3, 3]
