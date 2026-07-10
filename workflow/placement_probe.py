@@ -32,6 +32,14 @@ from pathlib import Path
 
 __all__ = ["PlacementReport", "dense_placement_agreement"]
 
+# Largest share of the patch pitch the EDGE check will sense, whatever the
+# user's colour sample area. A zero-gap chart's patches abut, so a bigger box
+# grazes the neighbour border even when perfectly aligned; real misplacement
+# is caught far below this, so the cap silences that false alarm without
+# weakening detection (Knut, #119). Only the flank uses it — the colour mean
+# still spans the user's chosen area.
+FLANK_SAMPLE_CAP = 0.60
+
 
 class PlacementReport:
     """Result of the dense evaluation: page agreement in percent (worst
@@ -242,6 +250,35 @@ def dense_placement_agreement(
         reads[b.name] = vals
         spreads[b.name] = devs
         box_ixs[b.name] = ixs
+
+    # Edge-check sensing box, capped independently of the colour box. The mean
+    # samples the user's chosen area; the flank check must not. On a zero-gap
+    # chart every patch abuts its neighbours, so once the sample area is large
+    # enough the box (and its 11×11 outer ring) grazes the always-present
+    # neighbour border and the edge check fires on a PERFECTLY aligned grid —
+    # Knut's #119: a correctly placed LaserSoft warned at 64 % sample area and
+    # up, where he could use 80 % before. Real misplacement moves a border
+    # WITHIN the pitch and is caught long before this cap bites, so bounding
+    # the sensing box at FLANK_SAMPLE_CAP of the pitch keeps every genuine
+    # detection (all of them measured at 50 %) while leaving a correctly
+    # centred box clear of its neighbours at any user sample area. Below the
+    # cap nothing changes — the flank sees the very same boxes as the ladder.
+    flank_frac = min(sample_frac, FLANK_SAMPLE_CAP)
+    if flank_frac >= sample_frac - 1e-9:
+        flank_ixs = box_ixs
+    else:
+        flank_ixs = {}
+        for b in named:
+            cx, cy = (b.x1 + b.x2) / 2.0, (b.y1 + b.y2) / 2.0
+            hx = (b.x2 - b.x1) * flank_frac / 2.0
+            hy = (b.y2 - b.y1) * flank_frac / 2.0
+            ixs = []
+            for ox, oy in offsets:
+                xa, ya = warp(cx + ox - hx, cy + oy - hy)
+                xb, yb = warp(cx + ox + hx, cy + oy + hy)
+                ixs.append(_box_ixs(min(xa, xb), min(ya, yb),
+                                    max(xa, xb), max(ya, yb)))
+            flank_ixs[b.name] = ixs
 
     # Chroma planes, swept one at a time (two integral images live at once —
     # keeps memory flat): the edge term takes the strongest spread across
@@ -522,7 +559,7 @@ def dense_placement_agreement(
     user_cells: dict[str, list[float]] = {}
     all_peaks: list[float] = []
     for b in named:
-        ix = box_ixs[b.name][0]
+        ix = flank_ixs[b.name][0]
         if ix is None:
             continue
         c = cell_peaks(ix)
@@ -589,7 +626,7 @@ def dense_placement_agreement(
             # bars, wedges) stays hot everywhere and must not count.
             clean_nearby = False
             for ri in ring_ix:
-                ix = box_ixs[n][ri] if ri < len(box_ixs[n]) else None
+                ix = flank_ixs[n][ri] if ri < len(flank_ixs[n]) else None
                 if ix is None:
                     continue
                 c = cell_peaks(ix)

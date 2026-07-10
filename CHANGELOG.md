@@ -1,5 +1,24 @@
 # Changelog
 
+## v3.13.4-beta.2
+
+Follow-up beta for Knut: the edge warning on a well-aligned scan is fixed.
+
+### Fixed
+- **The edge check no longer warns on a perfectly aligned scan at a large
+  sample area (#119).** On a zero-gap target (LaserSoft / ISO 12641-2) every
+  patch touches its neighbours, so once the *Patch sample area* was large the
+  sample box — and its surrounding edge-sensing ring — grazed the always-present
+  neighbour border and the check fired even though the grid was placed exactly
+  right (Knut: a correct LaserSoft warned at 64 % sample area and above, where
+  80 % worked before). The edge-sensing box is now capped at 60 % of the patch
+  pitch, independently of the *colour* sample area you pick: your chosen area
+  still drives the measurement, but the edge check never reaches far enough to
+  mistake a neighbour for an intrusion. Real misplacement moves a border well
+  within the pitch and is still caught (the pulled-corner detection is
+  unchanged — it works at any sample area). You no longer need to cap the sample
+  area at 60 % by hand.
+
 ## v3.13.4-beta.1
 
 A beta for Knut: a new way to build scanner/camera targets from charts laid out

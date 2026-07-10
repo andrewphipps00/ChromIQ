@@ -440,6 +440,32 @@ def test_flank_detection_fires_on_edges_only(tmp_path):
     assert len(crossing_hits) >= 3        # boxes on edges are named
 
 
+def test_flank_sample_area_cap_holds_on_aligned_contiguous_grid(tmp_path):
+    """#119: on a zero-gap chart a large sample area used to make the edge
+    check fire on a PERFECTLY aligned grid — the box grazed the always-present
+    neighbour border (Knut: a correctly placed LaserSoft warned at 64 % sample
+    area, where 80 % worked before). The flank sensing box is capped at
+    ``FLANK_SAMPLE_CAP``, so raising the sample area past it must not raise the
+    edge count on an aligned grid: every sample area stays clean."""
+    from workflow.placement_probe import (dense_placement_agreement,
+                                           FLANK_SAMPLE_CAP)
+    path, boxes, corners, exp = _dense_fixture(tmp_path, 0.0)
+
+    def hits(frac):
+        rep = dense_placement_agreement(path, boxes, corners, exp,
+                                        sample_frac=frac)
+        return sum(1 for v in rep.flank_by_patch.values() if v > 0.20)
+
+    at_cap = hits(FLANK_SAMPLE_CAP)
+    # well past the cap: the sensing box is frozen, so the count cannot climb
+    for frac in (0.70, 0.80, 0.90):
+        assert hits(frac) <= at_cap, (
+            f"{frac:.0%} sample area flags more edges ({hits(frac)}) than the "
+            f"cap ({at_cap}) on an aligned grid")
+    # and an aligned grid stays below the 3-box warning threshold throughout
+    assert at_cap < 3
+
+
 def test_pulled_corner_is_detected(tmp_path):
     """Knut's #119 case: only ONE corner of the reading grid is dragged
     inwards, until a few patches in that corner have their sample-box edge on
