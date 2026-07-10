@@ -1,0 +1,20 @@
+Multi-page probe — fill this in while you're in i1Profiler.
+Just type after each colon.
+
+Which patch-set file loaded successfully?  (probe.pxf, or probe.txt)
+    file loaded: probe.pxf
+
+Measurement device you selected:
+    device: i1Pro 3
+
+How many pages does the page indicator show?  (e.g. "Seite 1 von 3")
+    total pages: Seite 1 von 2
+
+When you saved as TIFF, what happened?
+    one file, or several?: 2 files
+    if several, how many files, and what did i1Profiler name them?: 2 files: ChromIQ i1Profiler layo_1_2.tif and ChromIQ i1Profiler layo_2_2.tif
+
+Did i1Profiler warn or complain about anything?
+    warnings: no
+
+Anything else that seemed odd:
