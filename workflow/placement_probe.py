@@ -11,19 +11,18 @@ per-box mean over the sample area), which produces the same numbers without
 the detour, so the whole ladder costs milliseconds instead of minutes.
 
 Every candidate position's sampled colour is compared with the patch's
-expected value through a monotone response map (fitted page-wide, so an
-unprofiled scanner's response and a printer's gamut compression cancel out).
-A position's page score is the 95th-percentile |residual| over the patches:
-worst-rules, with enough immunity that one dust speck can't condemn a page.
-The ladder's best position is 100 %, the least-worst of the eight directions
-is 0 %, and the grid's own position ranks between them.
+expected value through a response map (fitted page-wide, so an unprofiled
+scanner's response and a printer's gamut compression cancel out). Each patch
+is then normalised on its OWN residual ladder (Knut, #119): its best position
+anywhere is the 100 % floor; each of the 8 directions contributes its worst
+residual, directions that never worsen beyond the noise floor are ignored,
+and the LEAST of the remaining direction-worsts — lowered by a small buffer —
+is the 0 % roof. Because every patch is ranked against itself, per-patch
+offsets the page-wide response model can't express cancel out.
 
-So the verdict is driven by the page's WORST patches — no averaging (Knut) —
-and those patches are named. ``average_pct`` re-runs the same normalisation
-on the MEAN residual, purely to show alongside the verdict: it tells the user
-whether a few patches are off or the whole grid is. Individual patches cannot
-be ranked against each other this way — a patch's residual measures how well
-the page's response model fits its COLOUR, not how well its box is placed.
+The page's ``agreement_pct`` is the single WORST patch (Knut — the verdict
+number), ``average_pct`` is the arithmetic mean of all per-patch agreements,
+and the worst patches are named. worst ≤ average holds by construction.
 """
 from __future__ import annotations
 
@@ -32,13 +31,20 @@ from pathlib import Path
 
 __all__ = ["PlacementReport", "dense_placement_agreement"]
 
-# Largest share of the patch pitch the EDGE check will sense, whatever the
-# user's colour sample area. A zero-gap chart's patches abut, so a bigger box
-# grazes the neighbour border even when perfectly aligned; real misplacement
-# is caught far below this, so the cap silences that false alarm without
-# weakening detection (Knut, #119). Only the flank uses it — the colour mean
-# still spans the user's chosen area.
-FLANK_SAMPLE_CAP = 0.60
+# Largest share of the patch PITCH (the centre-to-centre spacing of the
+# chart's patches — on a zero-gap chart also the patch width) that the EDGE
+# check will sense, whatever colour sample area the user picks. A zero-gap
+# chart's patches abut, so a bigger sensing box unavoidably nears the
+# always-present neighbour border and fires on a PERFECTLY aligned grid
+# (Knut, #119 — measured on his real LaserSoft: the border's blur tail is
+# caught from ≈ 64 % with the coarse ring, and local flatbed distortion at
+# the sheet's corners tips boundary boxes over from ≈ 55 % even with the
+# fine 20×20 ring). The cap pins the edge check to the size it is calibrated
+# at, so every sample area behaves identically; a border that contaminates a
+# LARGER colour box is caught by the per-patch placement agreement instead,
+# which always measures the full sample area. Only the edge check is capped
+# — the colour mean always spans the user's chosen area.
+FLANK_SAMPLE_CAP = 0.50
 
 
 class PlacementReport:
@@ -53,11 +59,12 @@ class PlacementReport:
                  s_floor: float | None = None,
                  average_pct: float | None = None) -> None:
         self.agreement_pct = agreement_pct
-        # Same ladder scale as agreement_pct, but driven by the page's MEAN
-        # patch instead of its worst (Knut, #119) — shown alongside the
-        # verdict, never used for it.
+        # Arithmetic mean of the per-patch agreements (Knut, #119) — shown
+        # alongside the worst-patch verdict, never used for it.
         self.average_pct = (agreement_pct if average_pct is None
                             else average_pct)
+        # Per-patch agreement in percent (100 = the box reads as well as the
+        # ladder's best position for that patch; 0 = as badly as the roof).
         self.per_patch = per_patch
         self.offenders = offenders
         self.s_user = s_user          # raw score of the user's position
@@ -108,8 +115,9 @@ def dense_placement_agreement(
         steps: int = 24,
         step_frac: float = 0.05,
         max_side: int = 2200,
-        objective: str = "response",
-        src_quad: list[tuple[float, float]] | None = None) -> PlacementReport | None:
+        objective: str = "combined",
+        src_quad: list[tuple[float, float]] | None = None,
+        flank_min_cells: int = 3) -> PlacementReport | None:
     """Evaluate the placement *corners* of the patch grid over *image_path*
     against every position of Knut's step ladder. Returns None when the image
     can't be read or too few patches pair with the reference."""
@@ -251,18 +259,9 @@ def dense_placement_agreement(
         spreads[b.name] = devs
         box_ixs[b.name] = ixs
 
-    # Edge-check sensing box, capped independently of the colour box. The mean
-    # samples the user's chosen area; the flank check must not. On a zero-gap
-    # chart every patch abuts its neighbours, so once the sample area is large
-    # enough the box (and its 11×11 outer ring) grazes the always-present
-    # neighbour border and the edge check fires on a PERFECTLY aligned grid —
-    # Knut's #119: a correctly placed LaserSoft warned at 64 % sample area and
-    # up, where he could use 80 % before. Real misplacement moves a border
-    # WITHIN the pitch and is caught long before this cap bites, so bounding
-    # the sensing box at FLANK_SAMPLE_CAP of the pitch keeps every genuine
-    # detection (all of them measured at 50 %) while leaving a correctly
-    # centred box clear of its neighbours at any user sample area. Below the
-    # cap nothing changes — the flank sees the very same boxes as the ladder.
+    # Edge-check sensing boxes, capped at FLANK_SAMPLE_CAP of the pitch
+    # independently of the colour sample area (see the constant). Below the
+    # cap the flank sees the very same boxes as the ladder.
     flank_frac = min(sample_frac, FLANK_SAMPLE_CAP)
     if flank_frac >= sample_frac - 1e-9:
         flank_ixs = box_ixs
@@ -409,75 +408,157 @@ def dense_placement_agreement(
     if len(scores) < 9:
         return None
     s_best = min(scores)[0]
-    # Knut's normalisation, tightened per his beta.136 analysis: each of the
-    # 8 directions has its own worst value; the LEAST worst of those eight
-    # is the 0 % end. Directions with worse values then fall towards (and
-    # past) 0 % more easily, and the scale no longer depends on guessing
-    # which octant the grid sits in.
-    def _rank(by_pos: list[tuple[float, int]]) -> tuple[float, float | None]:
-        """Knut's normalisation of the grid's own position (index 0) against a
-        per-position score; also returns the 0 %-end score. Tightened per his
-        beta.136 analysis: each of the 8 directions has its own worst value;
-        the LEAST worst of those eight is the 0 % end. Directions with worse
-        values then fall towards (and past) 0 % more easily, and the scale no
-        longer depends on guessing which octant the grid sits in."""
-        dir_worst = []
+
+    # Knut's per-patch normalisation (#119): every patch is ranked on its OWN
+    # ladder, so the page's numbers are honest statistics over real per-patch
+    # agreements — worst = the single worst patch, average = the arithmetic
+    # mean of all patches. (The earlier build pooled the residuals into one
+    # page score before normalising; its "average" saturated at 100 % while
+    # the worst still moved, which is impossible for a min-vs-mean pair.)
+    #
+    # Per patch: the FLOOR (100 %) is its best residual anywhere on the
+    # ladder. Each of the 8 directions contributes its own worst residual; a
+    # direction that never worsens beyond the noise floor found no worst case
+    # and is IGNORED (Knut: on a 24×5 % ladder the circle reaches the
+    # neighbours, but a direction along a same-colour run may stay flat). The
+    # ROOF (0 %) is the LEAST of the remaining direction-worsts, lowered by a
+    # small buffer so the roof is actually reachable in the direction that
+    # set it (Knut: a percent or two of the floor-to-roof scale). The patch's
+    # own position then ranks linearly between floor and roof, clamped.
+    # Because each patch is normalised against itself, any per-patch offset
+    # the page-wide response model can't express cancels out.
+    npos = len(offsets)
+    ladders: dict[str, list[float | None]] = {
+        n: [None] * npos for n in per_user}
+    for i, per_i in per_by_pos.items():
+        for n, r in per_i.items():
+            if n in ladders:
+                ladders[n][i] = r
+
+    # The FLOOR is the best residual within a small LOCAL radius, not the
+    # whole ladder. The ladder reaches 120 % of a pitch, so its global best
+    # can sit INSIDE a neighbouring patch (a shifted box on the neighbour's
+    # flat colour reads as "uniform" as home) or wherever a blend happens to
+    # flatter the response model — both would put the floor below anything
+    # the correctly-placed box can achieve, and every patch with a bit of
+    # grain would rank poorly. Within ±10 % the box still samples its own
+    # patch, so the local best is the honest "this is what clean looks like
+    # for THIS patch" reference (and a printed spec, which stays in the box
+    # over so small a shift, cancels instead of condemning the patch).
+    LOCAL_FLOOR_FRAC = 0.10
+    # A direction has FOUND a worst case only when its worst residual stands
+    # clearly above the patch's floor — a border crossing, not grain drift
+    # (Knut, #119: directions where the reading never worsens beyond the
+    # noise floor are ignored, and the roof must come from the directions
+    # that did find one, never collapse to the floor). Calibrated on Knut's
+    # real 600 dpi LaserSoft scan: crossing a patch border lifts the
+    # range-normalised residual well past this; grain, specs and same-colour
+    # drift stay below it (his aligned grid reads worst ≈ 90 %, his 2 %
+    # pulled corner ≈ 5 % — the gate buys aligned margin without costing the
+    # pulled-corner detection).
+    EDGE_GATE = 0.08
+    ROOF_BUFFER = 0.02  # roof lowered by 2 % of (roof − floor), Knut
+
+    k_local = max(1, int(round(LOCAL_FLOOR_FRAC / step_frac)))
+    per_patch: dict[str, float] = {}
+    roof_dir: dict[str, int | None] = {}
+    ignored_dirs: dict[str, set[int]] = {}
+    for n, lad in ladders.items():
+        user = lad[0]
+        if user is None:
+            continue
+        local = [user] + [lad[1 + d * steps + k]
+                          for d in range(8) for k in range(k_local)
+                          if 1 + d * steps + k < npos
+                          and lad[1 + d * steps + k] is not None]
+        floor_n = min(local)
+        # The patch's own noise floor (Knut, #119): the MEDIAN residual
+        # change across the local ring, where the box still samples the very
+        # same colour — pure grain/spec wobble, not placement. Sitting above
+        # the local floor by no more than this is indistinguishable from
+        # perfect placement, so it must not be scored (the floor is a MIN
+        # over ~17 noisy readings and sits below any single reading by about
+        # this much even on a flat ladder). The median is what keeps real
+        # detection intact: a border ramp inflates only the few ring
+        # positions pointing at the border, which a median over all of them
+        # ignores, while a printed spec (Knut's Q16) wobbles most of the
+        # ring and is correctly written off as noise.
+        diffs = sorted(abs(v - user) for v in local[1:])
+        noise_n = diffs[len(diffs) // 2] if diffs else 0.0
+        # The user's position is read as the MEDIAN of itself and its eight
+        # single-step neighbours. A misplaced box stays elevated across that
+        # whole ±5 % ring (the border overlap barely changes over one step),
+        # so detection is untouched — but a box whose edge happens to sit
+        # exactly ON a printed spec is a sharp one-position peak (Knut's
+        # Q16: every neighbour reads better), and the median reads through
+        # it instead of condemning the patch.
+        ring1 = [lad[1 + d * steps] for d in range(8)
+                 if 1 + d * steps < npos and lad[1 + d * steps] is not None]
+        near = sorted([user] + ring1)
+        user_eff = near[len(near) // 2]
+        # A placement error must be walkable downhill: if the box really
+        # straddles a border, stepping 5 % towards home already reads
+        # better, and the local floor sits at roughly twice that one-step
+        # descent. A patch that reads FLAT in every ±5 % direction but dips
+        # somewhere at ±10 % is sitting on its own printed structure (the
+        # box holds a spec cluster it can only shed two steps out — Knut's
+        # Q16 at a 70 % sample area), so the dip must not be scored as
+        # misplacement.
+        descent = (max(0.0, user_eff - min(ring1)) if ring1
+                   else float("inf"))
+        dir_worsts: list[tuple[float, int]] = []
+        ignored: set[int] = set()
         for d in range(8):
             lo = 1 + d * steps
-            vals_d = [v for v, i in by_pos if lo <= i < lo + steps]
-            if vals_d:
-                dir_worst.append(max(vals_d))
-        if not dir_worst:
-            return 100.0, None
-        w0 = min(dir_worst)
-        best = min(v for v, _i in by_pos)
-        user = next(v for v, i in by_pos if i == 0)
-        if w0 - best < 1e-9:
-            return 100.0, w0
-        return max(0.0, min(100.0, 100.0 * (w0 - user) / (w0 - best))), w0
+            vals_d = [lad[i] for i in range(lo, min(lo + steps, npos))
+                      if lad[i] is not None]
+            if not vals_d or max(vals_d) - floor_n <= EDGE_GATE:
+                ignored.add(d)
+                continue
+            dir_worsts.append((max(vals_d), d))
+        ignored_dirs[n] = ignored
+        if not dir_worsts:
+            # No direction found a worst case: nothing this patch could be
+            # misplaced against is visible from here — it cannot be ranked
+            # and reads clean (Knut, #119).
+            per_patch[n] = 100.0
+            roof_dir[n] = None
+            continue
+        w0, d0 = min(dir_worsts)
+        roof_dir[n] = d0
+        roof = w0 - ROOF_BUFFER * (w0 - floor_n)
+        if roof - floor_n < 1e-12:
+            per_patch[n] = 100.0
+            continue
+        excess = max(0.0, min(user_eff - floor_n, 2.0 * descent) - noise_n)
+        per_patch[n] = max(0.0, min(100.0,
+                           100.0 * (1.0 - excess / (roof - floor_n))))
 
-    agree, s_floor = _rank(scores)
-
-    # The page's average agreement, on the SAME ladder as the worst verdict
-    # (Knut, #119). The verdict above is driven by the page's worst patches (its
-    # score is the 95th-percentile residual, worst-rules with dust immunity);
-    # "average" is the user grid's MEAN residual mapped through the IDENTICAL
-    # (floor, best) scale. One shared ladder is what makes the pair comparable —
-    # an earlier build normalised the mean on its OWN ladder, whose (floor, best)
-    # differ, so "worst" could read ABOVE "average", which is impossible for a
-    # min-vs-mean pair (Knut saw "worst 97.86 %, average 90.03 %"). Because the
-    # mean residual ≤ the 95th percentile, mapping both through the same
-    # decreasing scale gives average ≥ worst; a final max() guards the rare
-    # skewed page where the mean is pulled above the 95th percentile.
-    user_mean = sum(per_user.values()) / len(per_user)
-    if s_floor is None or (s_floor - s_best) < 1e-9:
-        agree_avg = agree
-    else:
-        raw_avg = 100.0 * (s_floor - user_mean) / (s_floor - s_best)
-        agree_avg = max(agree, max(0.0, min(100.0, raw_avg)))
-
-    # Per-patch report at the user's position: how far each patch reads from
-    # the page's own response, as a share of the worst patch (100 = clean).
-    # Used to NAME the offenders, not to rank placements (see above).
-    worst_res = max(per_user.values()) or 1.0
-    per_patch = {n: 100.0 * (1.0 - r / worst_res) for n, r in per_user.items()}
-    offenders = sorted(per_user.items(), key=lambda t: -t[1])
-    offenders = [(n, per_patch[n]) for n, _r in offenders]
+    if not per_patch:
+        return None
+    agree = min(per_patch.values())
+    agree_avg = sum(per_patch.values()) / len(per_patch)
+    offenders = sorted(per_patch.items(), key=lambda t: t[1])
     rep = PlacementReport(agree, per_patch, offenders, s_user=s_user,
-                          s_best=s_best, s_floor=s_floor,
+                          s_best=s_best, s_floor=None,
                           average_pct=agree_avg)
+    # Diagnostics for the per-direction verification tests (Knut, #119):
+    # which direction set each patch's roof, and which directions were
+    # ignored for finding no worst case.
+    rep.roof_dir_by_patch = roof_dir
+    rep.ignored_dirs_by_patch = ignored_dirs
     # Flank detection, Knut's derivative design (#108): a patch border is a
     # LINE of high spatial gradient. Each sample box (at the user's
-    # position) is split into a 9×9 sub-grid and each sub-cell records its
+    # position) is split into a fine sub-grid and each sub-cell records its
     # PEAK gradient magnitude — peak, not mean, so the line's strength is
     # never averaged away. A sub-cell counts when its peak stands above the
-    # page's own grain floor (the median sub-cell peak: print grain and
-    # scanner noise raise every cell equally, an edge only the cells it
-    # crosses). A box is ON an edge when three or more of its sub-cells
-    # are hot: a border line crossing a box necessarily runs through
-    # several sub-cells, while dust or a noise spike lights only one or
-    # two. This sees the border the moment the line enters the box — even
-    # a 1–2 % overlap — where any area-mean measure dilutes to nothing.
+    # page's own grain floor (print grain and scanner noise raise every
+    # cell equally, an edge only the cells it crosses). A box is ON an edge
+    # when ``flank_min_cells`` or more interconnected sub-cells are hot: a
+    # border line crossing a box necessarily runs through several touching
+    # sub-cells, while dust or a noise spike lights only one or two. This
+    # sees the border the moment the line enters the box — even a 1–2 %
+    # overlap — where any area-mean measure dilutes to nothing.
     # CENTRED derivative, two scales. Centred matters: a one-sided diff
     # assigns the edge's gradient to the right/bottom pixel of each pair,
     # shifting the whole "edge line" by the stride — boxes crossing an edge
@@ -502,13 +583,12 @@ def dense_placement_agreement(
     # Ring cells OUTSIDE it look past the patch area — at the chart's own
     # frame, labels and margins, which are expected structure, not a
     # misplacement (aligned LaserSoft/ISO grids false-flagged their whole
-    # boundary rows without this). Slightly expanded so the quad edge itself
-    # doesn't clip inner cells.
-    _qx = [c[0] * scale for c in corners]
-    _qy = [c[1] * scale for c in corners]
-    _qcx, _qcy = sum(_qx) / 4.0, sum(_qy) / 4.0
-    _quad = [(_qcx + (x - _qcx) * 1.02, _qcy + (y - _qcy) * 1.02)
-             for x, y in zip(_qx, _qy)]
+    # boundary rows without this). The quad is used EXACTLY — an earlier 2 %
+    # expansion sounded harmless but amounted to a quarter of a pitch at the
+    # quad edge, letting the boundary rows' ring see the frame line again at
+    # a large sample area (Knut, #119). Only ring cells are quad-tested, so
+    # nothing inside the box is ever clipped.
+    _quad = [(c[0] * scale, c[1] * scale) for c in corners]
 
     def _in_quad(px_, py_):
         sign = 0
@@ -523,31 +603,49 @@ def dense_placement_agreement(
                     return False
         return True
 
+    # Sub-grid size, decided once for the page: the inner grid tiles the
+    # sample box 18×18 (20×20 with the ring — Knut, #119) so the outer ring
+    # cells are only 1/18 of the box wide. The ring senses OUTSIDE the box,
+    # so its width is exactly how far ahead of the box edge the detector
+    # fires; the old 9×9 ring was twice as wide, warned a few percent of the
+    # box early, and on a zero-gap chart it reached the neighbour's border
+    # at a large sample area even when the grid was perfectly aligned. When
+    # the scan is too small for 18×18 (sub-pixel cells), fall back to 9×9 —
+    # coarser is better than blind.
+    _sample_px = [min((x2 - x1) / 18.0, (y2 - y1) / 18.0)
+                  for (x1, y1, x2, y2) in
+                  (flank_ixs[b.name][0] for b in named
+                   if flank_ixs[b.name][0] is not None)]
+    _med_cell = (sorted(_sample_px)[len(_sample_px) // 2]
+                 if _sample_px else 0.0)
+    n_in = 18 if _med_cell >= 1.2 else 9
+    G = n_in + 2
+
     def cell_peaks(ix):
-        """Peak gradient per cell of an 11×11 grid: the inner 9×9 tiles the
-        sample box with FULL coverage (float edges — the old integer cells
-        cropped up to 8 px at the right/bottom, so edges entering from those
-        sides went unseen until much deeper: Knut's beta.142 asymmetry), and
-        the outer ring of one cell width sits OUTSIDE the box, detecting a
-        patch border while the box is still APPROACHING it (Knut's 11×11
-        design). Returns 121 values, row-major."""
+        """Peak gradient per cell of a G×G grid: the inner n_in×n_in tiles
+        the sample box with FULL coverage (float edges — the old integer
+        cells cropped up to 8 px at the right/bottom, so edges entering from
+        those sides went unseen until much deeper: Knut's beta.142
+        asymmetry), and the outer ring of one cell width sits OUTSIDE the
+        box, detecting a patch border while the box is still APPROACHING it
+        (Knut's ring design). Returns G*G values, row-major."""
         xa, ya, xb, yb = ix
-        cw, ch = (xb - xa) / 9.0, (yb - ya) / 9.0
+        cw, ch = (xb - xa) / float(n_in), (yb - ya) / float(n_in)
         if cw < 1 or ch < 1:
             return None
         x0, y0 = xa - cw, ya - ch
-        xs = [int(round(x0 + i * cw)) for i in range(12)]
-        ys = [int(round(y0 + j * ch)) for j in range(12)]
+        xs = [int(round(x0 + i * cw)) for i in range(G + 1)]
+        ys = [int(round(y0 + j * ch)) for j in range(G + 1)]
         H, W = grad.shape
         vals = []
-        for j in range(11):
-            for i in range(11):
+        for j in range(G):
+            for i in range(G):
                 ax, bx = max(0, xs[i]), min(W, xs[i + 1])
                 ay, by = max(0, ys[j]), min(H, ys[j + 1])
                 if bx - ax < 1 or by - ay < 1:
                     vals.append(0.0)
                     continue
-                if (i == 0 or i == 10 or j == 0 or j == 10) and \
+                if (i == 0 or i == G - 1 or j == 0 or j == G - 1) and \
                         not _in_quad((ax + bx) / 2.0, (ay + by) / 2.0):
                     vals.append(0.0)
                     continue
@@ -566,12 +664,12 @@ def dense_placement_agreement(
         if c is None:
             continue
         user_cells[b.name] = [float(v) for v in c]
-        # Grain floor from the INNER 9×9 only: the outer ring's whole job is
-        # to sit near borders, so its peaks are edge signal, not grain —
+        # Grain floor from the INNER cells only: the outer ring's whole job
+        # is to sit near borders, so its peaks are edge signal, not grain —
         # letting them into the floor inflates the threshold until real
         # edges stop registering.
         all_peaks.extend(v for k, v in enumerate(user_cells[b.name])
-                         if 1 <= k // 11 <= 9 and 1 <= k % 11 <= 9)
+                         if 1 <= k // G <= n_in and 1 <= k % G <= n_in)
     fbp: dict[str, float] = {}
     if all_peaks:
         gfloor = float(np.percentile(all_peaks, 75))
@@ -587,32 +685,44 @@ def dense_placement_agreement(
         def hot_count(vals) -> int:
             return int(sum(1 for v in vals if v > thr))
 
+        need = max(2, int(flank_min_cells))
+
+        # A qualifying group must also LOOK like a border: it must contain a
+        # STRAIGHT contiguous run of hot cells, parallel to a box side, at
+        # least a third of the box long. The marquee grid is aligned to the
+        # patch grid, so a real border always crosses the box near-parallel
+        # to one of its edges — and a corner crossing (two borders at once)
+        # contains such a run along each. Grain fails it: a speck lights a
+        # compact clump with no length, and a diagonal streak never puts
+        # more than 2–3 hot cells in any single row or column (measured on
+        # Knut's real LaserSoft: his false positives Q16/D20 are a 3×3 clump
+        # and an 8×5 diagonal; every genuine pulled-corner hit carries a
+        # straight run of 8+).
+        need_len = max(need, n_in // 3)
+
         def _line_like(vals) -> bool:
-            """Knut's side-by-side rule: a border line crossing the box runs
-            through 3+ ADJACENT sub-cells; dust specks scatter — even several
-            of them don't connect. Largest 8-connected component of hot
-            cells must reach 3."""
-            hot9 = [i for i, v in enumerate(vals) if v > thr]
-            if len(hot9) < 3:
+            """Knut's side-by-side rule (#119): a border line crossing the
+            box runs through ``flank_min_cells``+ INTERCONNECTED sub-cells —
+            each hugging the next on one of its four sides — while dust
+            specks scatter and don't connect. The interconnected cells must
+            form a straight contiguous run (a border is a line; see above).
+            Any separate run that reaches the length flags the patch, so
+            grain elsewhere in the box can't mask a real edge."""
+            hot = [v > thr for v in vals]
+            if sum(hot) < need:
                 return False
-            cells = {(i // 11, i % 11) for i in hot9}
-            seen: set = set()
-            for start in cells:
-                if start in seen:
-                    continue
-                comp, stack = 0, [start]
-                seen.add(start)
-                while stack:
-                    r, c = stack.pop()
-                    comp += 1
-                    for dr in (-1, 0, 1):
-                        for dc in (-1, 0, 1):
-                            nb = (r + dr, c + dc)
-                            if nb in cells and nb not in seen:
-                                seen.add(nb)
-                                stack.append(nb)
-                if comp >= 3:
-                    return True
+            for j in range(G):                    # horizontal runs
+                run = 0
+                for i in range(G):
+                    run = run + 1 if hot[j * G + i] else 0
+                    if run >= need_len:
+                        return True
+            for i in range(G):                    # vertical runs
+                run = 0
+                for j in range(G):
+                    run = run + 1 if hot[j * G + i] else 0
+                    if run >= need_len:
+                        return True
             return False
 
         for n, vals in user_cells.items():
@@ -638,6 +748,6 @@ def dense_placement_agreement(
                 continue
             hot = sorted(((v - gfloor) / lum_range for v in vals),
                          reverse=True)
-            fbp[n] = max(0.0, hot[2])
+            fbp[n] = max(0.0, hot[min(need, len(hot)) - 1])
     rep.flank_by_patch = fbp
     return rep

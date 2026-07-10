@@ -403,11 +403,12 @@ def test_dense_ladder_offset_flags_and_is_monotone(tmp_path):
         assert rep is not None
         return rep
     a0, a25, a40 = agree(0.0), agree(0.25), agree(0.40)
-    # agreement falls monotonically with offset and a clearly-contaminated
-    # placement drops below the default floor (85 %); the calibration to
-    # Knut's 15 %/25 % spec lives on his real scans, where edge blur makes
-    # the curve steeper than this synthetic fixture.
-    assert a0.agreement_pct > a25.agreement_pct > a40.agreement_pct
+    # Per-patch semantics (#119): at 25 % offset the 50 % sample box only
+    # TOUCHES the border — each patch still reads clean, so the agreement
+    # may stay high (the flank check is what covers a touch); once the box
+    # CROSSES (40 %), the worst patch collapses well below the default
+    # floor (85 %). The calibration to Knut's spec lives on his real scans.
+    assert a0.agreement_pct >= a25.agreement_pct >= a40.agreement_pct
     assert a40.agreement_pct < 85.0
     assert a40.offenders                     # worst patches are named
 
@@ -422,6 +423,60 @@ def test_dense_ladder_uniformity_objective(tmp_path):
                                     objective="uniformity")
     assert ok is not None and off is not None
     assert ok.agreement_pct > 95.0 > off.agreement_pct
+
+
+def test_flat_direction_is_ignored_not_floored(tmp_path):
+    """Knut's #119 verification, deterministic: a patch whose surroundings in
+    one direction never change colour finds no worst case there — that
+    direction must be IGNORED and the roof taken from the directions that do
+    find one, never collapsing onto the floor (which would zero the patch)."""
+    import random
+    from PIL import Image, ImageDraw, ImageFilter
+    from workflow.placement_probe import dense_placement_agreement
+    rng = random.Random(7)
+    ncols, nrows, cell, margin = 8, 6, 40, 120
+    W, H = ncols * cell + 2 * margin, nrows * cell + 2 * margin
+    flat = 140                       # the rightmost column + right margin
+    img = Image.new("L", (W, H), 230)
+    d = ImageDraw.Draw(img)
+    d.rectangle([margin + (ncols - 1) * cell, 0, W, H], fill=flat)
+
+    class Box:
+        pass
+
+    boxes, exp = [], {}
+    for r in range(nrows):
+        for c in range(ncols):
+            v = flat if c == ncols - 1 else rng.randrange(10, 220)
+            d.rectangle([margin + c * cell, margin + r * cell,
+                         margin + (c + 1) * cell - 1,
+                         margin + (r + 1) * cell - 1], fill=v)
+            b = Box()
+            b.x1, b.y1 = c * 10.0, r * 10.0
+            b.x2, b.y2 = c * 10.0 + 10.0, r * 10.0 + 10.0
+            b.name = f"P{r}_{c}"
+            boxes.append(b)
+            exp[b.name] = v
+    img = img.filter(ImageFilter.GaussianBlur(1))
+    path = tmp_path / "flat.png"
+    img.save(path)
+    corners = [(margin, margin), (W - margin, margin),
+               (W - margin, H - margin), (margin, H - margin)]
+    rep = dense_placement_agreement(path, boxes, corners, exp,
+                                    objective="uniformity")
+    assert rep is not None
+    # dirs order: (1,0) +x, (-1,0) -x, (0,1) +y, (0,-1) -y, diagonals…
+    flat_boxes = [f"P{r}_{ncols - 1}" for r in range(1, nrows - 1)]
+    ignored_px = [n for n in flat_boxes
+                  if 0 in rep.ignored_dirs_by_patch.get(n, set())]
+    assert ignored_px, "no rightmost patch ignored its flat +x direction"
+    for n in flat_boxes:
+        d0 = rep.roof_dir_by_patch.get(n)
+        if d0 is not None:
+            assert d0 not in rep.ignored_dirs_by_patch.get(n, set())
+        # the flat direction must not have zeroed the patch
+        assert rep.per_patch[n] > 50.0, (
+            f"{n} scored {rep.per_patch[n]:.1f} % on an aligned grid")
 
 
 def test_flank_detection_fires_on_edges_only(tmp_path):

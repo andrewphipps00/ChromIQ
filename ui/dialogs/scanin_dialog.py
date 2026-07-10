@@ -2834,24 +2834,23 @@ class ScannerProfileDialog(_ToolDialogBase):
             return dense_placement_agreement(
                 params.scan_tif, boxes, corners, expected,
                 sample_frac=self._sample_area.value() / 100.0,
-                objective=objective, src_quad=fid_quad)
+                objective=objective, src_quad=fid_quad,
+                flank_min_cells=int(self._settings.get(
+                    "scanner_flank_min_cells", 3)))
 
         if printer:
             # No usable per-patch reference (aim values scatter against real
             # prints) — the edge lens alone decides.
             return _run("uniformity")
-        # Worst of both lenses rules (Knut): the response lens sees blends
-        # the edge lens can't (similar-spread neighbours), the edge lens
-        # sees borders the response lens can't (similar-colour neighbours —
-        # an IT8's vertical steps especially).
-        r_resp = _run("response")
-        r_edge = _run("uniformity")
-        if r_resp is None:
-            return r_edge
-        if r_edge is None:
-            return r_resp
-        return (r_resp if r_resp.agreement_pct <= r_edge.agreement_pct
-                else r_edge)
+        # Both lenses in ONE per-patch ladder (Knut, #119): the response
+        # term sees blends the edge term can't (similar-spread neighbours,
+        # and a box that lands wholly inside the WRONG patch reads perfectly
+        # uniform), the edge term sees borders the response term can't
+        # (similar-colour neighbours — an IT8's vertical steps especially).
+        # The response term self-gates on targets its model can't explain;
+        # the edge lens then rules alone.
+        rep = _run("combined")
+        return rep if rep is not None else _run("uniformity")
 
     def _show_alignment_result(self, pg: int, verdicts: list[str],
                                diag: Path, tmp: Path) -> None:

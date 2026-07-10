@@ -195,3 +195,75 @@ def test_pulled_corner_is_detected(target):
     pulled = [(x + (cx - x) * 0.04, y + (cy - y) * 0.04)] + list(corners[1:])
     n = _n_on_edge(tif, boxes, pulled, quad, exp)
     assert n >= MIN_BOXES, f"pulled corner flags only {n} boxes"
+
+
+def test_aligned_stays_silent_at_large_sample_areas(target):
+    """Knut's #119 verification: a perfectly placed grid — grain, specs and
+    the target's printed features included — must not trip the edge detector
+    at 70–80 % sample area either. (The edge-sensing box is pinned to the
+    size it is calibrated at; contamination of a LARGER colour box is the
+    placement agreement's job.)"""
+    tif, boxes, corners, quad, exp, _px = target
+    for frac in (0.7, 0.8):
+        rep = dense_placement_agreement(tif, boxes, corners, exp,
+                                        sample_frac=frac,
+                                        objective="response", src_quad=quad)
+        n = sum(1 for v in rep.flank_by_patch.values() if v > LIMIT)
+        assert n < MIN_BOXES, f"aligned scan flags {n} boxes at {frac:.0%}"
+
+
+def test_aligned_agreement_holds_at_every_sample_area(target):
+    """Knut's #119 report: on his aligned LaserSoft the worst-patch number
+    must stay above the default floor (85 %) at every Patch-sample-area
+    setting, and worst ≤ average must hold by construction."""
+    tif, boxes, corners, quad, exp, _px = target
+    for frac in (0.5, 0.6, 0.7, 0.8):
+        rep = dense_placement_agreement(tif, boxes, corners, exp,
+                                        sample_frac=frac,
+                                        objective="combined", src_quad=quad)
+        if rep is None:      # response lens self-gated on this target
+            rep = dense_placement_agreement(tif, boxes, corners, exp,
+                                            sample_frac=frac,
+                                            objective="uniformity",
+                                            src_quad=quad)
+        floor = 100.0 * float(DEFAULTS["scanner_check_agreement"])
+        assert rep.agreement_pct >= floor, (
+            f"aligned worst {rep.agreement_pct:.1f} % below floor at "
+            f"{frac:.0%} sample area")
+        assert rep.agreement_pct <= rep.average_pct + 1e-9
+
+
+def test_roof_is_found_in_every_direction(target):
+    """Knut's #119 verification: across the page, the direction that sets a
+    patch's 0 % roof must occur in ALL 8 directions somewhere — proving each
+    direction's worst-case detection works on the real scans."""
+    tif, boxes, corners, quad, exp, _px = target
+    rep = dense_placement_agreement(tif, boxes, corners, exp,
+                                    sample_frac=0.5,
+                                    objective="uniformity", src_quad=quad)
+    dirs = {d for d in rep.roof_dir_by_patch.values() if d is not None}
+    assert dirs == set(range(8)), f"roof directions seen: {sorted(dirs)}"
+
+
+def test_flat_directions_are_ignored_not_floored(target):
+    """Knut's #119 verification: a direction that finds no worst case is
+    IGNORED — the roof comes from the directions that did find one and never
+    collapses onto the floor. Observable: patches with ignored directions
+    exist on the real scans, every roof comes from a non-ignored direction,
+    and no patch scores 0 merely because a direction stayed flat."""
+    tif, boxes, corners, quad, exp, _px = target
+    rep = dense_placement_agreement(tif, boxes, corners, exp,
+                                    sample_frac=0.5,
+                                    objective="uniformity", src_quad=quad)
+    with_ignored = [n for n, ds in rep.ignored_dirs_by_patch.items() if ds]
+    assert with_ignored, "no patch had a flat direction — fixture too easy"
+    for n, d in rep.roof_dir_by_patch.items():
+        if d is not None:
+            assert d not in rep.ignored_dirs_by_patch.get(n, set()), (
+                f"{n}: roof taken from an ignored direction")
+    all_ignored = [n for n, ds in rep.ignored_dirs_by_patch.items()
+                   if len(ds) == 8]
+    for n in all_ignored:
+        assert rep.per_patch[n] == 100.0, (
+            f"{n}: no direction found a worst case, yet it scores "
+            f"{rep.per_patch[n]:.1f} % instead of reading clean")

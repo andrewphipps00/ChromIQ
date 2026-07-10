@@ -1,5 +1,57 @@
 # Changelog
 
+## v3.13.4-beta.3
+
+Knut's full #119 rework of the scanner alignment checks: honest per-patch
+statistics, instant pulled-corner detection, and a grain-proof edge detector.
+Everything below is calibrated and verified against his real 600 dpi
+LaserSoft / Wolf Faust scans, using the exact grid placements from his log.
+
+### Changed
+- **Placement agreement is now truly per patch (#119).** Every patch is
+  ranked on its own 24×5 % ladder: its best reading anywhere is that patch's
+  100 %, each of the 8 directions contributes its worst reading, directions
+  where the reading never worsens beyond the noise floor are ignored (the
+  roof then comes from the directions that did find a worst case — it never
+  collapses onto the floor), and the mildest direction-worst — lowered by a
+  small buffer — is its 0 %. **"Worst" is the single worst patch, "average"
+  is the arithmetic mean of all patches**, so worst ≤ average always holds —
+  the impossible "worst 98 %, average 100.00 %" pairs are gone.
+- **A single pulled corner is detected instantly.** Dragging one corner
+  inwards by just 2 % collapses the worst-patch number to ≈ 5 % and names
+  exactly the patches beside that corner (previously the grid had to cross
+  35–60 % of the sample box before anything fired). A correctly placed grid
+  reads ≈ 90 % or better at every sample area; ≈ 5 % of manual placement
+  scatter passes untouched.
+- **Edge detection is grain-proof (#119).** Each reading box now carries a
+  20×20 sensing grid (18×18 inside the box + a one-cell ring just outside,
+  half the old ring width — so it no longer warns a few percent early), and
+  a border is only believed when the hot cells form a **straight
+  interconnected run** roughly parallel to a box side — a border is a line;
+  specks light compact clumps and grain scatters, and neither forms a
+  straight row. Knut's false positives (Q16, B3, W18, K16, R36 — grain and
+  specs) are all silenced while every genuine detection (pulled corner, 20 %
+  shift) still fires.
+- **New Scanner Limits setting: "…needing this many sensing cells in a row
+  (2–9)"** (default 3) — how many interconnected sensing cells make an edge,
+  with beginner-first help text. Separate groups are each checked, so a
+  speck can't mask a real border elsewhere in the same box.
+- The edge check's sensing box is pinned to the 50 % sample area it is
+  calibrated at, whatever *Patch sample area* you pick (the colour
+  measurement always uses your chosen area). A border that contaminates a
+  larger colour box is caught by the per-patch placement agreement, which
+  always measures the full sample area — so every sample area up to the
+  80 % maximum behaves consistently, with no false edge warnings on a
+  perfectly aligned zero-gap target.
+
+### Verified (Knut's #119 test requests)
+- The 0 % roof is encountered in each of the 8 directions at some patches on
+  both real scans.
+- Directions that find no worst case are ignored; the roof never falls to
+  the floor (real-scan + deterministic synthetic tests).
+- A perfectly placed grid with grain and specs stays silent at 70–80 %
+  sample area on both real scans.
+
 ## v3.13.4-beta.2
 
 Follow-up beta for Knut: the edge warning on a well-aligned scan is fixed.

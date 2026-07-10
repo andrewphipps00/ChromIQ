@@ -220,6 +220,11 @@ DEFAULTS: dict[str, Any] = {
     "scanner_flank_limit":       0.20,
     # 0 = edge detection off (the other misalignment checks stay active).
     "scanner_flank_min_boxes":   3,
+    # How many interconnected sensing sub-cells inside ONE reading box must
+    # carry an edge — in a straight run, since a border is a line — before
+    # that box counts as sitting on an edge (Knut, #119). Guards against
+    # grain and specs, which light scattered or compact cells.
+    "scanner_flank_min_cells":   3,
     # Bumped by AppSettings.migrate() — see SETTINGS_SCHEMA.
     "settings_schema":           0,
     # Settings → Paths (Knut #108): where "Install profile" copies the .icc.

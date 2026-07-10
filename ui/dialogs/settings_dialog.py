@@ -917,8 +917,8 @@ class SettingsDialog(QDialog):
         # between groups so it's visible at a glance which limits work
         # together (Knut, #119):
         #   0,1  profile self-check      3  placement agreement
-        #   5,6  patch-edge detection
-        defaults = {0: "30", 1: "12", 3: "0.85", 5: "3", 6: "0.20"}
+        #   5,6,7  patch-edge detection
+        defaults = {0: "30", 1: "12", 3: "0.85", 5: "3", 6: "0.20", 7: "3"}
 
         def _row(r: int, label: str, spin, tip_title: str, tip_body: str) -> None:
             g.addWidget(QLabel(label, grp), r, 0)
@@ -965,24 +965,32 @@ class SettingsDialog(QDialog):
                 "nearby position would fit better, ChromIQ tells you, and "
                 "names the patches that look most wrong.\n\n"
                 "You'll see two percentages, like \"worst 56.88 %, average "
-                "96.70 %\". 100 % means the grid is exactly where it fits "
-                "best. The \"worst\" number is the one that decides — when it "
-                "falls below this setting, you get a warning. The \"average\" "
-                "number is only there to tell you what kind of problem you "
+                "96.70 %\". Every patch gets its own agreement number; "
+                "\"worst\" is the single worst patch on the page and is the "
+                "number that decides — when it falls below this setting, you "
+                "get a warning. \"Average\" is simply the average of all the "
+                "patches' numbers, so it tells you what kind of problem you "
                 "have: a low worst with a high average means a few patches "
-                "are off, while both low means the whole grid has slipped.\n\n"
+                "are off (a pulled corner, a local wrinkle), while both low "
+                "means the whole grid has slipped.\n\n"
                 "What to change: if you get warnings on scans you've checked "
                 "by eye and know are fine, lower this. Raise it to be warned "
-                "earlier. The default is calibrated on real scanned targets, "
-                "so a grid sitting a quarter of a patch off is flagged, while "
-                "anything under about 15 % of a patch passes.\n\n"
+                "earlier. The default is calibrated on real scanned targets: "
+                "a correctly placed grid reads about 90 % or better at any "
+                "sample area, a single corner dragged inwards by a fiftieth "
+                "of the grid already collapses the worst patch, and anything "
+                "under about 5 % of a patch of drift passes.\n\n"
                 "How it works, if you're curious: ChromIQ samples the scan at "
-                "your grid position and again at every rung of a ladder around "
-                "it — 24 steps of 5 % of a patch, in all 8 directions. Each "
-                "position is scored by comparing every patch with the colour "
-                "the chart says it should be. The ladder's best position is "
-                "100 %, the worst one in your grid's direction is 0 %, and "
-                "your position lands somewhere between.\n\n"
+                "your grid position and again at every rung of a ladder "
+                "around it — 24 steps of 5 % of a patch, in all 8 directions. "
+                "Each patch is then ranked on its own ladder: its best "
+                "reading anywhere is that patch's 100 %; each direction "
+                "contributes its worst reading, directions where the reading "
+                "never worsens are ignored, and the mildest of the remaining "
+                "direction-worsts is that patch's 0 %. Your grid position "
+                "lands somewhere between — separately for every patch, so "
+                "one misplaced patch shows even when the rest of the page "
+                "is perfect.\n\n"
                 "The same check runs for every page when you build — a "
                 "flagged page is listed in the warning popup before "
                 "anything is built."))
@@ -1050,26 +1058,68 @@ class SettingsDialog(QDialog):
                 "genuinely misplaced boxes go unnoticed. If you scan a very "
                 "noisy or textured paper, raise it a little.\n\n"
                 "How it works, if you're curious: every reading box carries "
-                "an 11×11 grid of small sensing cells. The inner 9×9 cover "
+                "a 20×20 grid of small sensing cells. The inner 18×18 cover "
                 "the box itself; the outer ring sits just outside it, so a "
-                "border is spotted while the box is still approaching it, "
-                "equally from every side. Each cell records the steepest "
-                "colour change it can see — in brightness and in two "
+                "border is spotted the moment the box touches it, equally "
+                "from every side. Each cell records the steepest colour "
+                "change it can see — in brightness and in two "
                 "colour-opponent channels, so a border between two patches of "
                 "the same brightness is still caught. A box counts as being "
-                "on an edge only when three or more NEIGHBOURING cells light "
-                "up (a border is a line, so it crosses adjacent cells, while "
-                "dust specks scatter and never connect) AND the box reads "
+                "on an edge only when enough cells light up in a straight "
+                "row (see the setting below — a border is a line, while "
+                "dust specks clump and grain scatters) AND the box reads "
                 "clean a little to one side — that last rule is what stops a "
                 "target's own printed bars and wedges from counting. The "
-                "box's edge strength is then its third-strongest cell, "
-                "matching the three-cell rule.\n\n"
+                "box's edge strength is then the weakest cell of the "
+                "required run.\n\n"
                 "Where the default comes from: on real 600 dpi IT8 scans the "
                 "page grain sits around 0.04 and reaches 0.05 on the noisiest "
                 "patches. Half of all real patch borders are above 0.08, and "
                 "the borders a misplaced box actually lands on read 0.20 and "
                 "up. Together with a count of 3 above, 0.20 leaves a correctly "
                 "placed grid completely silent."))
+        self._scan_flank_cells_combo = NoScrollComboBox(grp)
+        for _n in range(2, 10):
+            self._scan_flank_cells_combo.addItem(str(_n), _n)
+        _cur_c = int(s.get("scanner_flank_min_cells", 3))
+        self._scan_flank_cells_combo.setCurrentIndex(
+            max(0, self._scan_flank_cells_combo.findData(_cur_c)))
+        self._scan_flank_cells_combo.setMinimumWidth(120)
+        _row(7, tr("…needing this many sensing cells in a row (2–9):"),
+             self._scan_flank_cells_combo,
+             tr("How many sensing cells make an edge"),
+             tr("In short: this protects you against grain and dust specks "
+                "in the scan being mistaken for patch edges. Each reading "
+                "box is checked with a fine grid of small sensing cells; a "
+                "patch border is only believed when at least this many "
+                "cells light up TOGETHER, side by side in a straight row — "
+                "because a border is a line, and a line crosses one cell "
+                "after the next. Grain and dust can't do that: a speck "
+                "lights a small clump, scattered noise lights lonely cells, "
+                "and neither forms a straight row.\n\n"
+                "This counts the small cells INSIDE one patch of the "
+                "reading grid — not whole patches. (The setting above, "
+                "\"Warn when this many patches sit on an edge\", counts "
+                "whole patches.)\n\n"
+                "What to change: if a grainy or textured scan keeps "
+                "flagging patches you know are clean, raise this to 4 or 5 "
+                "— a real border crosses the whole box, so it easily lights "
+                "more cells than any speck. Lower it to 2 only if you want "
+                "the earliest possible warning and your scans are very "
+                "clean.\n\n"
+                "More than one group can be checked at once: if a speck "
+                "lights a few cells in one corner while a real border "
+                "crosses elsewhere in the same box, the border still "
+                "counts — the speck can't mask it.\n\n"
+                "How it works, if you're curious: every reading box carries "
+                "a 20×20 grid of sensing cells — 18×18 covering the box "
+                "itself, plus a one-cell ring just outside it, so a border "
+                "is spotted the moment the box touches it, equally from "
+                "every side. Each cell records the steepest colour change "
+                "it sees. The hot cells must contain a straight run of at "
+                "least this length, roughly parallel to a box side — the "
+                "reading grid is aligned with the chart, so a genuine "
+                "patch border always runs parallel to the box edges."))
         self._scan_avg_spin = NoScrollDoubleSpinBox(grp)
         self._scan_avg_spin.setRange(2.0, 60.0)
         self._scan_avg_spin.setDecimals(1)
@@ -1357,6 +1407,8 @@ class SettingsDialog(QDialog):
         self._scan_flank_spin.setValue(float(s.get("scanner_flank_limit", 0.20)))
         self._scan_flank_min_combo.setCurrentIndex(max(0, self._scan_flank_min_combo
             .findData(int(s.get("scanner_flank_min_boxes", 3)))))
+        self._scan_flank_cells_combo.setCurrentIndex(max(0, self._scan_flank_cells_combo
+            .findData(int(s.get("scanner_flank_min_cells", 3)))))
         self._chromiq_refine_check.setChecked(bool(s.get("chromiq_refinement", False)))
         self._averaging_check.setChecked(bool(s.get("averaging_enabled", False)))
         self._native_print_check.setChecked(bool(s.get("use_native_print_dialog", False)))
@@ -1998,6 +2050,7 @@ class SettingsDialog(QDialog):
         s.set("scanner_check_agreement",   float(self._scan_check_spin.value()))
         s.set("scanner_flank_limit",       float(self._scan_flank_spin.value()))
         s.set("scanner_flank_min_boxes",   int(self._scan_flank_min_combo.currentData()))
+        s.set("scanner_flank_min_cells",   int(self._scan_flank_cells_combo.currentData()))
         s.set("profile_install_dir",       self._profile_dir_edit.text().strip())
         from core.platform_paths import set_icc_install_override
         set_icc_install_override(self._profile_dir_edit.text())
