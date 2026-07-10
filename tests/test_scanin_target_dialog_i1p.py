@@ -90,6 +90,31 @@ def test_i1profiler_mode_builds_target(qapp, tmp_path):
     assert (tmp_path / "m_01.cht").is_file() and (tmp_path / "m_02.cht").is_file()
 
 
+def test_chromiq_mode_still_builds(qapp, tmp_path):
+    """The pre-existing ChromIQ path must survive the _execute refactor: a
+    measured engine chart (channels.json next to the .ti3) → .cht + .cie."""
+    import json
+    from workflow.grid_layout_from_render import derive_grid_layout
+    from scripts.make_i1profiler_probe import write_ti1  # noqa: F401
+
+    # Reuse the render deriver to fabricate a valid "derived" channels.json,
+    # which has_scanner_geometry accepts exactly like an engine layout.
+    from scripts.make_i1profiler_probe import encode
+    import numpy as np
+    rgb = np.array([[c / 255 * 100 for c in encode(i)] for i in range(600)])
+    layout = derive_grid_layout([RESULTS / "test1-autolayout.tif"], rgb)
+    (tmp_path / "chart.channels.json").write_text(json.dumps({"layout": layout}))
+    _numeric_ti3(tmp_path / "chart.ti3", 600)
+
+    dlg = _dialog(qapp)                    # default mode = chromiq
+    assert dlg._mode == "chromiq"
+    dlg._ti3_path = tmp_path / "chart.ti3"
+    assert dlg._can_run()
+    dlg._execute()
+    assert "[ERROR]" not in dlg._log.toPlainText()
+    assert (tmp_path / "chart.cht").is_file() and (tmp_path / "chart.cie").is_file()
+
+
 def test_i1profiler_mode_reports_mismatch(qapp, tmp_path):
     dlg = _dialog(qapp)
     dlg._rb_i1p.setChecked(True)
