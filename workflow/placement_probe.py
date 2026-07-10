@@ -401,22 +401,23 @@ def dense_placement_agreement(
 
     agree, s_floor = _rank(scores)
 
-    # The page's average agreement, on the SAME ladder scale (Knut, #119). The
-    # verdict above is driven by the page's worst patches (the pooled score is
-    # their 95th-percentile residual, worst-rules with dust immunity); this
-    # second number re-runs the identical normalisation on the MEAN residual,
-    # so "worst 56.88 %, average 96.70 %" tells the user whether a few patches
-    # are off or the whole grid is.
-    #
-    # It is NOT the mean of per_patch below: a single patch's residual says how
-    # well the page-wide response model fits that COLOUR, not how well its box
-    # is placed, so per-patch percentages cannot be ranked against each other
-    # (measured on Knut's scans: the worst patch of a perfectly aligned Wolf
-    # Faust ranks no better than that of a 20 %-shifted one). Only the pooled
-    # statistic separates placements.
-    means = [(sum(p.values()) / len(p), i)
-             for i, p in per_by_pos.items() if p]
-    agree_avg = _rank(means)[0] if len(means) >= 9 else agree
+    # The page's average agreement, on the SAME ladder as the worst verdict
+    # (Knut, #119). The verdict above is driven by the page's worst patches (its
+    # score is the 95th-percentile residual, worst-rules with dust immunity);
+    # "average" is the user grid's MEAN residual mapped through the IDENTICAL
+    # (floor, best) scale. One shared ladder is what makes the pair comparable —
+    # an earlier build normalised the mean on its OWN ladder, whose (floor, best)
+    # differ, so "worst" could read ABOVE "average", which is impossible for a
+    # min-vs-mean pair (Knut saw "worst 97.86 %, average 90.03 %"). Because the
+    # mean residual ≤ the 95th percentile, mapping both through the same
+    # decreasing scale gives average ≥ worst; a final max() guards the rare
+    # skewed page where the mean is pulled above the 95th percentile.
+    user_mean = sum(per_user.values()) / len(per_user)
+    if s_floor is None or (s_floor - s_best) < 1e-9:
+        agree_avg = agree
+    else:
+        raw_avg = 100.0 * (s_floor - user_mean) / (s_floor - s_best)
+        agree_avg = max(agree, max(0.0, min(100.0, raw_avg)))
 
     # Per-patch report at the user's position: how far each patch reads from
     # the page's own response, as a share of the worst patch (100 = clean).

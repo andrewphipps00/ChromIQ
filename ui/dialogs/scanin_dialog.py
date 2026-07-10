@@ -664,11 +664,16 @@ class ScannerProfileDialog(_ToolDialogBase):
         per-page count."""
         if t.is_multipage:
             counts = t.patch_counts
+            total = sum(counts)
+            # Show the whole-chart total too (Knut, #119): a per-page-only count
+            # hid how big the set really is next to single-page targets.
             if len(set(counts)) == 1:
-                return tr("{name}  ·  {pages} pages × {n} patches").format(
-                    name=t.name, pages=t.n_pages, n=counts[0])
-            return tr("{name}  ·  {pages} pages ({counts} patches)").format(
-                name=t.name, pages=t.n_pages,
+                return tr("{name}  ·  {pages} pages × {n} patches "
+                          "= {total} patches").format(
+                    name=t.name, pages=t.n_pages, n=counts[0], total=total)
+            return tr("{name}  ·  {pages} pages ({counts} patches) "
+                      "= {total} patches").format(
+                name=t.name, pages=t.n_pages, total=total,
                 counts=" + ".join(str(c) for c in counts))
         n = t.patch_counts[0] if t.patch_counts else 0
         if n <= 0:
