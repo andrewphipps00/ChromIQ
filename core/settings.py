@@ -196,7 +196,7 @@ DEFAULTS: dict[str, Any] = {
     # 8-direction probe star on Knut's normalised scale (best probe = 1,
     # worst = 0). Calibrated on his real Wolf Faust scan so a 25 % grid
     # offset flags and ≤15 % passes at 50 % sample area (#108).
-    "scanner_check_agreement":   0.85,
+    "scanner_check_agreement":   0.87,
     # Flank override (Knut's derivative design): patch borders are LINES of
     # high spatial gradient (centred, two scales — symmetric in all 8
     # directions); a box is ON an edge when 3+ CONNECTED sub-cells of its
@@ -224,7 +224,7 @@ DEFAULTS: dict[str, Any] = {
     # carry an edge — in a straight run, since a border is a line — before
     # that box counts as sitting on an edge (Knut, #119). Guards against
     # grain and specs, which light scattered or compact cells.
-    "scanner_flank_min_cells":   3,
+    "scanner_flank_min_cells":   6,
     # Bumped by AppSettings.migrate() — see SETTINGS_SCHEMA.
     "settings_schema":           0,
     # Settings → Paths (Knut #108): where "Install profile" copies the .icc.
@@ -410,7 +410,7 @@ def thresholds_for_combo(
 # Bump when a shipped default changes in a way that must reach users who have
 # the OLD default persisted. Settings → Save writes every key, so a stored
 # value otherwise pins a user to the old behaviour for good.
-SETTINGS_SCHEMA = 1
+SETTINGS_SCHEMA = 2
 
 # key → the old default it must no longer be stuck on. Only a stored value
 # EQUAL to the old default is dropped (so it falls through to the new one); a
@@ -421,6 +421,13 @@ _SUPERSEDED_DEFAULTS: dict[str, float] = {
     # boxes on a Wolf Faust. Anyone who had ever pressed Save in Settings had
     # 0.30 persisted and would never have received the fix.
     "scanner_flank_limit": 0.30,
+    # schema 2 (#119, Knut's beta.3 test): 3 sensing cells in a row still let
+    # a long narrow grey speck (his D20) flag an aligned grid; 5 was his
+    # measured clean value, 6 the default with buffer.
+    "scanner_flank_min_cells": 3,
+    # schema 2: with the per-patch agreement a correct grid reads ≥ 90 % and
+    # crossings collapse fast, so the floor moves up to 0.87 (Knut's number).
+    "scanner_check_agreement": 0.85,
 }
 
 

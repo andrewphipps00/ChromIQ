@@ -31,20 +31,10 @@ from pathlib import Path
 
 __all__ = ["PlacementReport", "dense_placement_agreement"]
 
-# Largest share of the patch PITCH (the centre-to-centre spacing of the
-# chart's patches — on a zero-gap chart also the patch width) that the EDGE
-# check will sense, whatever colour sample area the user picks. A zero-gap
-# chart's patches abut, so a bigger sensing box unavoidably nears the
-# always-present neighbour border and fires on a PERFECTLY aligned grid
-# (Knut, #119 — measured on his real LaserSoft: the border's blur tail is
-# caught from ≈ 64 % with the coarse ring, and local flatbed distortion at
-# the sheet's corners tips boundary boxes over from ≈ 55 % even with the
-# fine 20×20 ring). The cap pins the edge check to the size it is calibrated
-# at, so every sample area behaves identically; a border that contaminates a
-# LARGER colour box is caught by the per-patch placement agreement instead,
-# which always measures the full sample area. Only the edge check is capped
-# — the colour mean always spans the user's chosen area.
-FLANK_SAMPLE_CAP = 0.50
+# Largest sample-area fraction the EDGE check will sense (see the comment at
+# its use). The colour mean always spans the user's chosen area.
+FLANK_SAMPLE_MAX = 0.50
+
 
 
 class PlacementReport:
@@ -117,7 +107,7 @@ def dense_placement_agreement(
         max_side: int = 2200,
         objective: str = "combined",
         src_quad: list[tuple[float, float]] | None = None,
-        flank_min_cells: int = 3) -> PlacementReport | None:
+        flank_min_cells: int = 6) -> PlacementReport | None:
     """Evaluate the placement *corners* of the patch grid over *image_path*
     against every position of Knut's step ladder. Returns None when the image
     can't be read or too few patches pair with the reference."""
@@ -259,10 +249,18 @@ def dense_placement_agreement(
         spreads[b.name] = devs
         box_ixs[b.name] = ixs
 
-    # Edge-check sensing boxes, capped at FLANK_SAMPLE_CAP of the pitch
-    # independently of the colour sample area (see the constant). Below the
-    # cap the flank sees the very same boxes as the ladder.
-    flank_frac = min(sample_frac, FLANK_SAMPLE_CAP)
+    # Edge-check sensing boxes scale with the user's sample area UP TO
+    # FLANK_SAMPLE_MAX and are pinned there. Every supported chart's boxes
+    # are contiguous (the neighbour's ink starts exactly at the box edge),
+    # so a larger sensing box plus its outer ring enters the borders'
+    # blur-and-distortion zone and reads "on an edge" on a PERFECTLY
+    # aligned grid — measured on Knut's real 600 dpi LaserSoft: 5 flagged
+    # patches at 55 %, 4 at 60 %, 56 at 70 %, 208 at 80 %, all on his own
+    # aligned placement, while 50 % leaves a single one. No cell rule can
+    # silence that (his D20/Q16 streaks span MORE cells as the box grows).
+    # The per-patch agreement, which always measures the full sample area,
+    # covers contamination of larger colour boxes.
+    flank_frac = min(sample_frac, FLANK_SAMPLE_MAX)
     if flank_frac >= sample_frac - 1e-9:
         flank_ixs = box_ixs
     else:
@@ -685,6 +683,19 @@ def dense_placement_agreement(
         def hot_count(vals) -> int:
             return int(sum(1 for v in vals if v > thr))
 
+        # "Clean" for the clean-nearby test means AS CLEAN AS THIS PAGE GETS,
+        # not literally noise-free: on a noisy scan the sensor speckle alone
+        # lights a few scattered cells in every box, so a fixed "at most one
+        # hot cell" bar was unreachable and NO patch could ever flag — on the
+        # bundled demo scans (1.5 % sensor noise, matching Knut's real Epson)
+        # every box "on an edge" was silently discarded and the warning only
+        # appeared once boxes crossed far enough for some quirk to slip
+        # through (Knut, #119: detection 12–15 % late on the demo targets).
+        # The bar is the page's median hot-cell count, so quiet real scans
+        # keep the strict ≤1 and noisy pages get their own baseline.
+        _counts = sorted(hot_count(v) for v in user_cells.values())
+        clean_bar = max(1, _counts[len(_counts) // 2] if _counts else 1)
+
         need = max(2, int(flank_min_cells))
 
         # A qualifying group must also LOOK like a border: it must contain a
@@ -740,7 +751,7 @@ def dense_placement_agreement(
                 if ix is None:
                     continue
                 c = cell_peaks(ix)
-                if c is not None and hot_count(c) <= 1:
+                if c is not None and hot_count(c) <= clean_bar:
                     clean_nearby = True
                     break
             if not clean_nearby:
@@ -748,6 +759,6 @@ def dense_placement_agreement(
                 continue
             hot = sorted(((v - gfloor) / lum_range for v in vals),
                          reverse=True)
-            fbp[n] = max(0.0, hot[min(need, len(hot)) - 1])
+            fbp[n] = max(0.0, hot[min(3, len(hot)) - 1])
     rep.flank_by_patch = fbp
     return rep

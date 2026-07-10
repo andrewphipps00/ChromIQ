@@ -1205,7 +1205,7 @@ class ScannerProfileDialog(_ToolDialogBase):
         # still sits inside a well-aligned patch; at 100% it would always
         # touch the borders (Knut, #108).
         self._sample_area.setRange(20, 80)
-        self._sample_area.setValue(50)
+        self._sample_area.setValue(60)
         self._sample_area.setSuffix(" %")
         self._sample_area.setMinimumWidth(110)
         self._sample_area.valueChanged.connect(
@@ -2500,7 +2500,7 @@ class ScannerProfileDialog(_ToolDialogBase):
                 _read, exp = self._read_expected_dicts(p.out_ti3)
             report = self._dense_report(p, p.is_printer, exp)
             floor = 100.0 * float(self._settings.get(
-                "scanner_check_agreement", 0.85))
+                "scanner_check_agreement", 0.87))
             where = self._page_label(job.get("page", 1) - 1)
             on_edge = self._flank_offenders(report) if report else []
             if on_edge:
@@ -2732,7 +2732,7 @@ class ScannerProfileDialog(_ToolDialogBase):
                         w=where, worst=", ".join(on_edge[:6]),
                         a=self._agreement_txt(report)))
             floor = 100.0 * float(self._settings.get(
-                "scanner_check_agreement", 0.85))
+                "scanner_check_agreement", 0.87))
             if not on_edge and agree < floor:
                 worst = ", ".join(n for n, _p in report.offenders[:5])
                 out.append(tr(
@@ -2808,12 +2808,21 @@ class ScannerProfileDialog(_ToolDialogBase):
         class _Box:
             __slots__ = ("x1", "y1", "x2", "y2", "name")
 
-            def __init__(self, b) -> None:
-                self.x1, self.y1 = b.x1, b.y1
-                self.x2, self.y2 = b.x2, b.y2
+            def __init__(self, b, grow: float) -> None:
+                cx, cy = (b.x1 + b.x2) / 2.0, (b.y1 + b.y2) / 2.0
+                hw = (b.x2 - b.x1) / 2.0 * grow
+                hh = (b.y2 - b.y1) / 2.0 * grow
+                self.x1, self.y1 = cx - hw, cy - hh
+                self.x2, self.y2 = cx + hw, cy + hh
                 self.name = _plain_id(b.name)
 
-        boxes = [_Box(b) for b in geom.patches]
+        # The prepared cht's boxes are already shrunk to the sample area —
+        # per axis, keeping each patch's aspect (cht_with_sample_area). The
+        # probe wants the FULL patch boxes (it applies the sample fraction
+        # itself), so undo the √f-per-side shrink around each box's centre.
+        frac = self._sample_area.value() / 100.0
+        grow = 1.0 / (frac ** 0.5) if frac < 0.999 else 1.0
+        boxes = [_Box(b, grow) for b in geom.patches]
         expected = {_plain_id(k): v for k, v in exp.items()}
         if not printer:
             # Scanner/standard mode: the reference carries full XYZ — hand
@@ -2836,7 +2845,7 @@ class ScannerProfileDialog(_ToolDialogBase):
                 sample_frac=self._sample_area.value() / 100.0,
                 objective=objective, src_quad=fid_quad,
                 flank_min_cells=int(self._settings.get(
-                    "scanner_flank_min_cells", 3)))
+                    "scanner_flank_min_cells", 6)))
 
         if printer:
             # No usable per-patch reference (aim values scatter against real

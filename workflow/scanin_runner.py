@@ -63,16 +63,39 @@ def sample_area_box_shrink(cht_text: str, frac: float) -> float | None:
     return round(b * (1.0 - frac ** 0.5) / 2.0, 3)
 
 
+_XY_LINE = re.compile(
+    r"^(\s*[XY]\s+\S+\s+\S+\s+\S+\s+\S+\s+)"
+    r"([-+0-9.eE]+)\s+([-+0-9.eE]+)\s+([-+0-9.eE]+)\s+([-+0-9.eE]+)"
+    r"((?:\s+[-+0-9.eE]+){2}\s*)$", re.MULTILINE)
+
+
 def cht_with_sample_area(cht_text: str, frac: float) -> str:
-    """Return *cht_text* with its ``BOX_SHRINK`` set for sample-area *frac*.
-    Unchanged if the fraction implies no usable shrink or the file has no boxes."""
-    shrink = sample_area_box_shrink(cht_text, frac)
-    if shrink is None:
+    """Return *cht_text* with every patch box shrunk to sample-area *frac* —
+    per axis, so the sampled region always keeps the patch's own height-to-
+    width relationship (Knut, #119: on tall narrow patches like a Wolf
+    Faust's greyscale strip, the single global ``BOX_SHRINK`` scanin offers
+    insets all four sides by the same AMOUNT and distorts the read zone).
+    Each ``X``/``Y`` block's ``w h ox oy`` become ``w·√f  h·√f`` centred in
+    the original box (√f per side = *f* of the area); the increments — the
+    patch pitch — are untouched, and ``BOX_SHRINK`` is pinned to 0 so scanin
+    reads exactly these boxes. Fiducials (``F``) and diagnostic marks (``D``)
+    are never moved. Unchanged for full-area (≥ 0.999) or box-less text."""
+    frac = max(0.05, min(1.0, float(frac)))
+    if frac >= 0.999 or not _XY_LINE.search(cht_text):
         return cht_text
-    if _SHRINK_LINE.search(cht_text):
-        return _SHRINK_LINE.sub(lambda m: f"{m.group(1)}{shrink:.3f}", cht_text, count=1)
-    # No BOX_SHRINK line — insert one after the last box line.
-    return cht_text.rstrip() + f"\n\nBOX_SHRINK {shrink:.3f}\n"
+    lin = frac ** 0.5
+
+    def _shrink(m: re.Match) -> str:
+        w, h = float(m.group(2)), float(m.group(3))
+        ox, oy = float(m.group(4)), float(m.group(5))
+        return (f"{m.group(1)}{w * lin:g} {h * lin:g} "
+                f"{ox + w * (1.0 - lin) / 2.0:g} "
+                f"{oy + h * (1.0 - lin) / 2.0:g}{m.group(6)}")
+
+    out = _XY_LINE.sub(_shrink, cht_text)
+    if _SHRINK_LINE.search(out):
+        return _SHRINK_LINE.sub(lambda m: f"{m.group(1)}0.0", out, count=1)
+    return out.rstrip() + "\n\nBOX_SHRINK 0.0\n"
 
 
 def cht_with_patchbox_fiducials(cht_text: str) -> str:

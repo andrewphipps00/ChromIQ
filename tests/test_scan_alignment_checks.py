@@ -499,11 +499,11 @@ def test_flank_sample_area_cap_holds_on_aligned_contiguous_grid(tmp_path):
     """#119: on a zero-gap chart a large sample area used to make the edge
     check fire on a PERFECTLY aligned grid — the box grazed the always-present
     neighbour border (Knut: a correctly placed LaserSoft warned at 64 % sample
-    area, where 80 % worked before). The flank sensing box is capped at
-    ``FLANK_SAMPLE_CAP``, so raising the sample area past it must not raise the
+    area, where 80 % worked before). The flank sensing box is pinned at
+    ``FLANK_SAMPLE_MAX``, so raising the sample area past it must not raise the
     edge count on an aligned grid: every sample area stays clean."""
     from workflow.placement_probe import (dense_placement_agreement,
-                                           FLANK_SAMPLE_CAP)
+                                           FLANK_SAMPLE_MAX)
     path, boxes, corners, exp = _dense_fixture(tmp_path, 0.0)
 
     def hits(frac):
@@ -511,7 +511,7 @@ def test_flank_sample_area_cap_holds_on_aligned_contiguous_grid(tmp_path):
                                         sample_frac=frac)
         return sum(1 for v in rep.flank_by_patch.values() if v > 0.20)
 
-    at_cap = hits(FLANK_SAMPLE_CAP)
+    at_cap = hits(FLANK_SAMPLE_MAX)
     # well past the cap: the sensing box is frozen, so the count cannot climb
     for frac in (0.70, 0.80, 0.90):
         assert hits(frac) <= at_cap, (
@@ -640,3 +640,32 @@ def test_migrate_frees_users_pinned_to_the_old_flank_limit(tmp_path):
     s = _fresh(None)                       # never saved
     assert s.migrate() == []
     assert float(s.get("scanner_flank_limit")) == 0.20
+
+
+def test_migrate_schema2_moves_beta3_defaults(tmp_path):
+    """#119, Knut's beta.3 test: min-cells 3 lets a grey streak flag an
+    aligned grid (6 is the new default) and the agreement floor moves to
+    0.87 — stored echoes of the old defaults must fall through, deliberate
+    choices must survive."""
+    from PyQt6.QtCore import QSettings
+    from core.settings import AppSettings
+
+    def _fresh(name, **stored):
+        s = AppSettings()
+        s._qs = QSettings(str(tmp_path / f"{name}.ini"),
+                          QSettings.Format.IniFormat)
+        s._qs.clear()
+        for k, v in stored.items():
+            s._qs.setValue(k, v)
+        return s
+
+    s = _fresh("echo", scanner_flank_min_cells=3, scanner_check_agreement=0.85)
+    assert sorted(s.migrate()) == ["scanner_check_agreement",
+                                   "scanner_flank_min_cells"]
+    assert int(s.get("scanner_flank_min_cells")) == 6
+    assert float(s.get("scanner_check_agreement")) == 0.87
+
+    s = _fresh("chosen", scanner_flank_min_cells=5, scanner_check_agreement=0.9)
+    assert s.migrate() == []
+    assert int(s.get("scanner_flank_min_cells")) == 5
+    assert float(s.get("scanner_check_agreement")) == 0.9

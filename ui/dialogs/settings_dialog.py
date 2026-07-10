@@ -918,7 +918,7 @@ class SettingsDialog(QDialog):
         # together (Knut, #119):
         #   0,1  profile self-check      3  placement agreement
         #   5,6,7  patch-edge detection
-        defaults = {0: "30", 1: "12", 3: "0.85", 5: "3", 6: "0.20", 7: "3"}
+        defaults = {0: "30", 1: "12", 3: "0.87", 5: "3", 6: "0.20", 7: "6"}
 
         def _row(r: int, label: str, spin, tip_title: str, tip_body: str) -> None:
             g.addWidget(QLabel(label, grp), r, 0)
@@ -955,7 +955,7 @@ class SettingsDialog(QDialog):
         self._scan_check_spin.setRange(0.5, 0.99)
         self._scan_check_spin.setDecimals(2)
         self._scan_check_spin.setSingleStep(0.01)
-        self._scan_check_spin.setValue(float(s.get("scanner_check_agreement", 0.85)))
+        self._scan_check_spin.setValue(float(s.get("scanner_check_agreement", 0.87)))
         self._scan_check_spin.setMinimumWidth(120)
         _row(3, tr("Check alignment: flag placements below (0.5–0.99):"),
              self._scan_check_spin,
@@ -1070,8 +1070,8 @@ class SettingsDialog(QDialog):
                 "dust specks clump and grain scatters) AND the box reads "
                 "clean a little to one side — that last rule is what stops a "
                 "target's own printed bars and wedges from counting. The "
-                "box's edge strength is then the weakest cell of the "
-                "required run.\n\n"
+                "box's edge strength is then its third-strongest cell — the "
+                "scale this limit is calibrated on.\n\n"
                 "Where the default comes from: on real 600 dpi IT8 scans the "
                 "page grain sits around 0.04 and reaches 0.05 on the noisiest "
                 "patches. Half of all real patch borders are above 0.08, and "
@@ -1081,7 +1081,7 @@ class SettingsDialog(QDialog):
         self._scan_flank_cells_combo = NoScrollComboBox(grp)
         for _n in range(2, 10):
             self._scan_flank_cells_combo.addItem(str(_n), _n)
-        _cur_c = int(s.get("scanner_flank_min_cells", 3))
+        _cur_c = int(s.get("scanner_flank_min_cells", 6))
         self._scan_flank_cells_combo.setCurrentIndex(
             max(0, self._scan_flank_cells_combo.findData(_cur_c)))
         self._scan_flank_cells_combo.setMinimumWidth(120)
@@ -1102,11 +1102,16 @@ class SettingsDialog(QDialog):
                 "\"Warn when this many patches sit on an edge\", counts "
                 "whole patches.)\n\n"
                 "What to change: if a grainy or textured scan keeps "
-                "flagging patches you know are clean, raise this to 4 or 5 "
-                "— a real border crosses the whole box, so it easily lights "
-                "more cells than any speck. Lower it to 2 only if you want "
-                "the earliest possible warning and your scans are very "
-                "clean.\n\n"
+                "flagging patches you know are clean, raise this — a real "
+                "border crosses the whole box, so it easily lights more "
+                "cells than any speck. Lower it if you want the earliest "
+                "possible warning and your scans are very clean.\n\n"
+                "Why the default is 6: on a real 600 dpi scan, a long "
+                "narrow speck of grey inside one patch still lit a straight "
+                "run of four cells, so 3 or 4 flagged a perfectly aligned "
+                "grid and 5 was the first clean value; 6 adds a little "
+                "buffer, while a genuine border crosses all 18 cells of the "
+                "box and fires regardless.\n\n"
                 "More than one group can be checked at once: if a speck "
                 "lights a few cells in one corner while a real border "
                 "crosses elsewhere in the same box, the border still "
@@ -1403,12 +1408,12 @@ class SettingsDialog(QDialog):
         # Scanner Limits — must follow Restore Factory Defaults too (Knut #108)
         self._scan_peak_spin.setValue(float(s.get("scanner_selfcheck_peak", 30.0)))
         self._scan_avg_spin.setValue(float(s.get("scanner_selfcheck_avg", 12.0)))
-        self._scan_check_spin.setValue(float(s.get("scanner_check_agreement", 0.85)))
+        self._scan_check_spin.setValue(float(s.get("scanner_check_agreement", 0.87)))
         self._scan_flank_spin.setValue(float(s.get("scanner_flank_limit", 0.20)))
         self._scan_flank_min_combo.setCurrentIndex(max(0, self._scan_flank_min_combo
             .findData(int(s.get("scanner_flank_min_boxes", 3)))))
         self._scan_flank_cells_combo.setCurrentIndex(max(0, self._scan_flank_cells_combo
-            .findData(int(s.get("scanner_flank_min_cells", 3)))))
+            .findData(int(s.get("scanner_flank_min_cells", 6)))))
         self._chromiq_refine_check.setChecked(bool(s.get("chromiq_refinement", False)))
         self._averaging_check.setChecked(bool(s.get("averaging_enabled", False)))
         self._native_print_check.setChecked(bool(s.get("use_native_print_dialog", False)))

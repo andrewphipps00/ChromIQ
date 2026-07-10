@@ -1,5 +1,44 @@
 # Changelog
 
+## v3.13.4-beta.4
+
+Knut's beta-3 follow-ups (#119): new defaults from his measurements, an
+aspect-locked sample area for non-square patches, and a real bug found behind
+his "detection is late on the demo targets" observation.
+
+### Changed
+- **New defaults, from Knut's beta-3 measurements** (existing users are
+  migrated automatically unless they chose their own values): sensing cells
+  in a row **3 → 6** (a long narrow grey speck still lit a straight run of
+  four cells; 5 was his first clean value, 6 adds buffer), placement-
+  agreement floor **0.85 → 0.87**, and *Patch sample area* now defaults to
+  **60 %**. Help texts updated.
+- **The sample area keeps each patch's own shape (#119).** On non-square
+  patches (a Wolf Faust's tall-narrow greyscale strip, IT8.7/2 charts) the
+  region scanin reads is now shrunk per axis — always the patch's own
+  height-to-width relationship — instead of by scanin's single `BOX_SHRINK`
+  amount, which insets all four sides equally and distorted elongated
+  patches. Generic for any target, derived from the `.cht` patch data; the
+  on-screen grid already drew it correctly.
+
+### Fixed
+- **Edge detection was 12–15 % late on the bundled demo targets (#119).**
+  Found via Knut's SpyderChecker report: the "reads clean a little to one
+  side" rule demanded an almost noise-free reading, which a demo scan's
+  1.5 % sensor noise (deliberately matching a real Epson) never delivers —
+  so every box "on an edge" was silently discarded until deep crossings.
+  "Clean" is now measured against the page's own noise baseline; detection
+  on the demo targets fires the moment the border reaches the sensing box,
+  and quiet real scans keep the strict rule.
+- The edge check's sensing box scales with the *Patch sample area* up to
+  50 % and is deliberately pinned there (`FLANK_SAMPLE_MAX`) — measured on
+  Knut's real aligned LaserSoft, any larger sensing box reads the
+  neighbouring borders' blur ("on an edge": 5 patches at 55 %, 56 at 70 %,
+  208 at 80 % — on a perfectly placed grid). Contamination of a larger
+  colour box is the placement agreement's job; it always measures the full
+  sample area, and on the demo targets it now visibly collapses (worst
+  25–60 %) when a large sample area really crosses borders.
+
 ## v3.13.4-beta.3
 
 Knut's full #119 rework of the scanner alignment checks: honest per-patch

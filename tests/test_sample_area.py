@@ -44,16 +44,27 @@ def test_shrink_from_area_fraction():
     assert sample_area_box_shrink(_CHT, 0.4) > sample_area_box_shrink(_CHT, 0.8)
 
 
-def test_cht_rewrites_box_shrink():
+def test_cht_shrinks_boxes_per_axis_keeping_aspect():
+    """#119 (Knut): the read zone must keep each patch's own height-to-width
+    relationship, so the boxes themselves are shrunk √f per axis (centres
+    kept) and BOX_SHRINK — which insets all sides by the same AMOUNT and
+    distorts non-square patches — is pinned to 0."""
     out = cht_with_sample_area(_CHT, 0.6)
-    want = round(40 * (1 - math.sqrt(0.6)) / 2, 3)
-    assert f"BOX_SHRINK {want:.3f}" in out
-    assert "BOX_SHRINK 6.000" not in out
-    # Boxes and reference are untouched — only the read zone changes.
+    lin = math.sqrt(0.6)
+    w = 40 * lin
+    ox = 20 + 40 * (1 - lin) / 2
+    assert f"X A01 A01 _ _ {w:g} {w:g} {ox:g}" in out
+    assert "BOX_SHRINK 0.0" in out and "BOX_SHRINK 6.000" not in out
+    # Fiducials and the reference are untouched.
+    assert "F _ _ 0 0 200 0 200 200 0 200" in out
     assert out.count("\n  X ") == 4 and "EXPECTED XYZ 4" in out
-    # A file with no BOX_SHRINK line gets one inserted.
-    bare = "\n\nBOXES 1\n  X A A _ _ 40 40 10 10 0 0\n"
-    assert "BOX_SHRINK" in cht_with_sample_area(bare, 0.5)
+    # A non-square box keeps its aspect: 20×40 at 60 % area → (20·√f)×(40·√f).
+    tall = "\n\nBOXES 1\n  X GS0 GS0 _ _ 20 40 10 10 0 0\n"
+    out2 = cht_with_sample_area(tall, 0.6)
+    assert f"{20 * lin:g} {40 * lin:g}" in out2
+    assert "BOX_SHRINK 0.0" in out2      # inserted when absent
+    # Full area → unchanged.
+    assert cht_with_sample_area(_CHT, 1.0) == _CHT
 
 
 def test_marquee_sample_fraction_clamps(qtbot=None):
