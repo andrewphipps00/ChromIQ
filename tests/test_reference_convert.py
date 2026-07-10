@@ -88,3 +88,23 @@ def test_converter_failure_raises(tmp_path):
     def boom(cmd, **k): return subprocess.CompletedProcess(cmd, 1, "", "bad file")
     with pytest.raises(ReferenceConvertError):
         convert_reference(ref, fk.bin, tmp_path / "out", runner=boom)
+
+
+def test_i1profiler_measurement_ti3_passthrough(tmp_path):
+    from workflow.reference_convert import convert_i1profiler_measurement
+    t3 = tmp_path / "m.ti3"; t3.write_text("CTI3\n")
+    fk = _FakeArgyll(tmp_path)
+    # A .ti3 is already usable — returned unchanged, no tool run.
+    assert convert_i1profiler_measurement(t3, fk.bin, tmp_path / "out",
+                                          runner=fk.run) == t3
+    assert not fk.calls
+
+
+def test_i1profiler_measurement_txt_converted(tmp_path):
+    from workflow.reference_convert import convert_i1profiler_measurement
+    txt = tmp_path / "meas.txt"; txt.write_text("SAMPLE_ID ...\n")
+    fk = _FakeArgyll(tmp_path)
+    out = convert_i1profiler_measurement(txt, fk.bin, tmp_path / "out",
+                                         runner=fk.run)
+    assert out.name == "meas.ti3" and out.is_file()
+    assert [Path(c[0]).name for c in fk.calls] == ["txt2ti3"]

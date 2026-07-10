@@ -61,6 +61,37 @@ def needs_conversion(path: str | Path) -> bool:
     return classify_reference(path) is not ReferenceKind.DIRECT
 
 
+def is_ti3(path: str | Path) -> bool:
+    return Path(path).suffix.lower() == ".ti3"
+
+
+def convert_i1profiler_measurement(path: str | Path, argyll_bin: str | Path,
+                                   out_dir: str | Path,
+                                   runner: Callable[..., subprocess.CompletedProcess]
+                                   = subprocess.run) -> Path:
+    """Turn an i1Profiler **measurement** export into a ``.ti3`` ``scanin_target``
+    can use, running ``txt2ti3`` for the user (the same tool as Tools → Convert
+    i1Profiler → TI3). A file that is already a ``.ti3`` is returned unchanged.
+
+    ``txt2ti3`` copies the export's ``SampleID`` into ``SAMPLE_LOC`` — the patch
+    numbers ``1…N`` — which is exactly what the render-derived geometry is keyed
+    on. Writes ``<out_dir>/<stem>.ti3``. Raises :class:`ReferenceConvertError`.
+    """
+    p = Path(path)
+    if is_ti3(p):
+        return p
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    base = out_dir / p.stem
+    _run(Path(argyll_bin), "txt2ti3", [str(p), str(base)], runner)
+    out = base.with_suffix(".ti3")
+    if not out.is_file():
+        raise ReferenceConvertError(
+            "txt2ti3 ran but produced no .ti3 — is this an i1Profiler "
+            "measurement export?")
+    return out
+
+
 def _run(argyll_bin: Path, tool: str, args: list[str],
          runner: Callable[..., subprocess.CompletedProcess]) -> None:
     exe = argyll_bin / tool
