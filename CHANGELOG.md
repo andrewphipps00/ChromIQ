@@ -1,5 +1,42 @@
 # Changelog
 
+## v3.13.4-beta.1
+
+A beta for Knut: a new way to build scanner/camera targets from charts laid out
+in i1Profiler (#120), two #119 fixes, and a patch-size fix for i1Profiler
+workflow exports.
+
+### New
+- **Scanner/camera targets from an i1Profiler chart (#120).** "Create scanner or
+  camera target" gained an *In i1Profiler* mode: pick the patch set you exported,
+  the chart TIFF(s) i1Profiler saved, and your measurement, and ChromIQ reads the
+  layout straight off the saved chart (it verifies every patch's colour and
+  refuses rather than guess) and writes the same `.cht` + `.cie`. The measurement
+  can be i1Profiler's own `.txt` export — ChromIQ converts it for you. This
+  reverse-engineers i1Profiler's exact grid: it ignores per-patch position tags
+  and always lays the chart out column-major, splitting multi-page charts into
+  separate files with a balanced row split.
+
+### Fixed
+- **Placement agreement never reads "worst" above "average" again (#119).** The
+  two numbers are now on one shared ladder, so the worst patch can never score
+  better than the page average.
+- **Multi-page target names show the whole-chart total (#119)**, e.g.
+  "3 pages × 288 patches = 864 patches".
+- **i1Profiler `.pwxf` export no longer collapses to 6 mm patches.** It was
+  writing a slider percent of 0 (the device minimum); it now emits the real
+  8 × 7 mm.
+
+### Still being investigated (need input from Knut)
+- **The edge warning still fires on a well-aligned LaserSoft/ISO 12641-2 scan,
+  and the grid can sit a hair off the patches (#119).** ChromIQ's `.cht` for this
+  target is a mathematically exact uniform grid, and the profile builds cleanly,
+  so the residual is sub-pixel — but the edge detector over-fires on it. To fix
+  this safely (without weakening the pulled-corner detection added this round),
+  the exact reading grid you used is needed: your marquee corner positions,
+  whether "Use fiducial marks" was on, and the reference `.cie` (R250715.cie).
+  See the note on issue #119.
+
 ## v3.13.3
 
 Knut's scanner-profiling round: the full 1/2/3-page scanner preset set, and a
