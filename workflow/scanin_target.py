@@ -260,6 +260,83 @@ def _build_from_printtarg(layout: dict, data: Ti3Data,
                               n_patches=len(set(geom_locs)), n_pages=len(cht_pages))
 
 
+def _ordered_rgb100(patch_set_path: str | Path):
+    """The exported patch list as ``(N, 3)`` device RGB 0..100 **in list order**
+    (= i1Profiler's column-major fill order), from any of the formats ChromIQ
+    hands to i1Profiler: a ``.ti1``, a CGATS ``.txt`` or a CxF ``.pxf``. Raises
+    :class:`ScaninTargetError` on an unreadable or non-RGB set."""
+    import numpy as np
+
+    p = Path(patch_set_path)
+    try:
+        if p.suffix.lower() == ".ti1":
+            from workflow.i1profiler_export import parse_ti1
+            target = parse_ti1(p)
+            if target.kind != "RGB":
+                raise ScaninTargetError(
+                    "Only RGB charts can be built into a scanner target; this "
+                    f"patch set is {target.kind}.")
+            rgb = [[vals["R"], vals["G"], vals["B"]] for _sid, vals in target.rows]
+        else:
+            from workflow.i1profiler_import import parse_cgats, parse_pxf
+            patches = (parse_pxf(p) if p.suffix.lower() == ".pxf"
+                       else parse_cgats(p))
+            rgb = [[pt.r, pt.g, pt.b] for pt in patches]
+    except ScaninTargetError:
+        raise
+    except (OSError, ValueError) as exc:
+        raise ScaninTargetError(
+            f"Couldn't read the patch set “{p.name}”: {exc}") from exc
+    if not rgb:
+        raise ScaninTargetError(f"The patch set “{p.name}” has no patches.")
+    return np.asarray(rgb, dtype=float)
+
+
+def build_scanin_target_from_render(patch_set_path: str | Path, tiff_paths: list,
+                                    ti3_path: str | Path, out_base: str | Path,
+                                    ) -> ScaninTargetResult:
+    """Build a scanner target for a chart **i1Profiler laid out** (#120).
+
+    ChromIQ has no ``channels.json`` for such a chart — i1Profiler ignores the
+    positions a ``.pwxf`` carries and re-lays the grid itself. So the geometry is
+    recovered from the chart i1Profiler saved as a TIFF
+    (:func:`workflow.grid_layout_from_render.derive_grid_layout`), using the
+    exported patch set for the fill order and colour verification, then the
+    ``.cht``/``.cie`` are built from that geometry + the measurement exactly like
+    an engine chart.
+
+    * *patch_set_path* — the patch set handed to i1Profiler (``.ti1`` / ``.txt``
+      / ``.pxf``); its order is i1Profiler's column-major fill order.
+    * *tiff_paths* — the chart page(s) i1Profiler saved, in print order.
+    * *ti3_path* — the measurement of the printed sheet. Its ``SAMPLE_LOC`` must
+      be the patch numbers (``1…N``) — which is what ``txt2ti3`` writes from an
+      i1Profiler measurement (Tools → Convert i1Profiler → TI3).
+    * *out_base* — output stem (no extension). A ``<out_base>.channels.json`` is
+      written alongside so the chart is re-usable without re-deriving.
+
+    Returns a :class:`ScaninTargetResult`. Raises :class:`ScaninTargetError`
+    (incl. :class:`~workflow.grid_layout_from_render.GridGeometryError`) if the
+    geometry can't be recovered or the measurement doesn't line up.
+    """
+    from workflow.grid_layout_from_render import (
+        GridGeometryError, derive_grid_layout,
+    )
+
+    if not tiff_paths:
+        raise ScaninTargetError("No chart TIFF was given to read the layout from.")
+    rgb100 = _ordered_rgb100(patch_set_path)
+    locs = [str(i + 1) for i in range(len(rgb100))]
+    try:
+        layout = derive_grid_layout(list(tiff_paths), rgb100, locs=locs)
+    except GridGeometryError as exc:
+        raise ScaninTargetError(str(exc)) from exc
+
+    out_base = Path(out_base)
+    channels = out_base.with_name(out_base.name + ".channels.json")
+    channels.write_text(json.dumps({"layout": layout}, indent=2), encoding="utf-8")
+    return build_scanin_target_from_paths(channels, ti3_path, out_base)
+
+
 def build_scanin_target(run) -> ScaninTargetResult:
     """Build the scanner target for a :class:`~core.file_manager.Run` — reads its
     chart geometry (``chart_channels_json``) + measurement (``measurement_ti3``)

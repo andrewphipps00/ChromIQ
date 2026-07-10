@@ -122,3 +122,40 @@ def test_feeds_scanin_target_end_to_end(tmp_path):
     page1_boxes = [ln for ln in res.cht_paths[0].read_text().splitlines()
                    if ln.strip().startswith("X ")]
     assert len(page1_boxes) == 750
+
+
+def _numeric_ti3(path: Path, n: int) -> None:
+    """A measurement whose SAMPLE_LOC is the patch number 1…N — what txt2ti3
+    writes from an i1Profiler measurement."""
+    rows = []
+    for i in range(n):
+        r, g, b = encode(i)
+        rows.append(f"{i+1} {i+1} {r/2.55:.3f} {g/2.55:.3f} {b/2.55:.3f} 50 50 50")
+    path.write_text(
+        'CTI3\n\nKEYWORD "SAMPLE_LOC"\n\nNUMBER_OF_FIELDS 8\nBEGIN_DATA_FORMAT\n'
+        "SAMPLE_ID SAMPLE_LOC RGB_R RGB_G RGB_B XYZ_X XYZ_Y XYZ_Z\n"
+        "END_DATA_FORMAT\n\n" + f"NUMBER_OF_SETS {n}\nBEGIN_DATA\n"
+        + "\n".join(rows) + "\nEND_DATA\n")
+
+
+def test_orchestrator_from_ti1_and_render(tmp_path):
+    """The full #120 path: patch set (.ti1) + saved TIFF(s) + numeric-loc .ti3
+    → channels.json + per-page .cht + .cie."""
+    from scripts.make_i1profiler_probe import write_ti1
+    from workflow.scanin_target import (
+        ScaninTargetError, build_scanin_target_from_render,
+    )
+
+    ti1 = tmp_path / "probe.ti1"
+    write_ti1(ti1, 1500)
+    _numeric_ti3(tmp_path / "m.ti3", 1500)
+    res = build_scanin_target_from_render(
+        ti1, MULTI, tmp_path / "m.ti3", tmp_path / "chart")
+    assert res.n_patches == 1500 and res.n_pages == 2
+    assert (tmp_path / "chart.channels.json").is_file()
+    assert [p.name for p in res.cht_paths] == ["chart_01.cht", "chart_02.cht"]
+
+    # Wrong page set for this patch count is refused (as a ScaninTargetError).
+    with pytest.raises(ScaninTargetError):
+        build_scanin_target_from_render(
+            ti1, [MULTI[0]], tmp_path / "m.ti3", tmp_path / "bad")
