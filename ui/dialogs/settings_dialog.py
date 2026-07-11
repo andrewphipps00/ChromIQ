@@ -13,7 +13,6 @@ from PyQt6.QtWidgets import (
     QCheckBox,
     QDialog,
     QDialogButtonBox,
-    QFileDialog,
     QGridLayout,
     QGroupBox,
     QHBoxLayout,
@@ -2000,10 +1999,10 @@ class SettingsDialog(QDialog):
 
     def _export_layout_presets(self) -> None:
         import json
-        path, _ = QFileDialog.getSaveFileName(
-            self, tr("Export layout presets"),
-            str(Path.home() / "chromiq-layout-presets.json"),
-            tr("JSON files (*.json)"))
+        from ui.widgets import save_file_dialog
+        path = save_file_dialog(
+            self, tr("Export layout presets"), tr("JSON files (*.json)"),
+            start_path=str(Path.home() / "chromiq-layout-presets.json"))
         if not path:
             return
         Path(path).write_text(
@@ -2012,9 +2011,11 @@ class SettingsDialog(QDialog):
 
     def _import_layout_presets(self) -> None:
         import json
-        path, _ = QFileDialog.getOpenFileName(
-            self, tr("Import layout presets"), str(Path.home()),
-            tr("JSON files (*.json)"))
+        from ui.widgets import open_file_dialog
+        path = open_file_dialog(
+            self, tr("Import layout presets"),
+            name_filter=tr("JSON files (*.json)"),
+            start_dir=str(Path.home()))
         if not path:
             return
         try:

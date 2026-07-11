@@ -2622,12 +2622,13 @@ class _NewChartDialog(QDialog):
         shrunk to a small thumbnail first — plenty for finding representative
         colours and keeps k-means fast.
         """
-        from PyQt6.QtWidgets import QFileDialog
         start = (self._settings.get("custom_output_path", "")
                  or str(Path.home()))
-        path, _ = QFileDialog.getOpenFileName(
-            self, tr("Load image"), start,
-            "Images (*.png *.jpg *.jpeg *.tif *.tiff *.bmp *.webp)")
+        from ui.widgets import open_file_dialog
+        path = open_file_dialog(
+            self, tr("Load image"),
+            name_filter="Images (*.png *.jpg *.jpeg *.tif *.tiff *.bmp *.webp)",
+            start_dir=start, preview=True)
         if not path:
             return
         try:

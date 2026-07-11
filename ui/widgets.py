@@ -828,12 +828,36 @@ def open_file_dialog(
                 dlg.setProxyModel(_ExtensionFilterProxy(exts, dlg))
     if not native:
         dlg.setSidebarUrls(_sidebar_urls(extra_path, extra_paths))
+        _open_up_sidebar(dlg)
         if preview:
             _attach_image_preview(dlg)
     if dlg.exec() == QFileDialog.DialogCode.Accepted:
         files = dlg.selectedFiles()
         return files[0] if files else ""
     return ""
+
+
+def _open_up_sidebar(dlg: "QFileDialog") -> None:
+    """Give the non-native file dialog's sidebar room to breathe: Qt's
+    default splitter leaves the shortcuts column so narrow that the location
+    names are cut off and every dialog needs a manual resize first (Basti).
+    Widens the sidebar to a readable width and gives the whole dialog a
+    comfortable default size, while the user can still drag both."""
+    from PyQt6.QtCore import QTimer
+    from PyQt6.QtWidgets import QSplitter
+    if dlg.width() < 900:
+        dlg.resize(980, max(dlg.height(), 620))
+
+    def _apply() -> None:
+        sp = dlg.findChild(QSplitter)
+        if sp is not None and sp.count() >= 2:
+            side = 230
+            sp.setSizes([side, max(dlg.width() - side, 400)])
+
+    # The splitter only takes real sizes once the dialog has laid itself
+    # out — exec() runs the event loop, so a zero-timer lands right after
+    # the dialog appears.
+    QTimer.singleShot(0, _apply)
 
 
 def _attach_image_preview(dlg: "QFileDialog") -> None:
@@ -912,6 +936,7 @@ def open_files_dialog(
                 dlg.setProxyModel(_ExtensionFilterProxy(exts, dlg))
     if not native:
         dlg.setSidebarUrls(_sidebar_urls(extra_path, extra_paths))
+        _open_up_sidebar(dlg)
         if preview:
             _attach_image_preview(dlg)
     if dlg.exec() == QFileDialog.DialogCode.Accepted:
@@ -954,6 +979,7 @@ def save_file_dialog(
         dlg.selectFile(default_name)
     if not native:
         dlg.setSidebarUrls(_sidebar_urls(extra_path, extra_paths))
+        _open_up_sidebar(dlg)
     if dlg.exec() == QFileDialog.DialogCode.Accepted:
         files = dlg.selectedFiles()
         return files[0] if files else ""
@@ -982,6 +1008,7 @@ def open_dir_dialog(
         if _sys.platform == "darwin":
             urls.append(QUrl.fromLocalFile("/Applications"))
         dlg.setSidebarUrls(urls)
+        _open_up_sidebar(dlg)
     if dlg.exec() == QFileDialog.DialogCode.Accepted:
         dirs = dlg.selectedFiles()
         return dirs[0] if dirs else ""

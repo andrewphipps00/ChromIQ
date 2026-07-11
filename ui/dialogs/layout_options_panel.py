@@ -1670,7 +1670,7 @@ class LayoutOptionsPanel(QWidget):
         self.clip_preview.setFixedHeight(round(scaled.height() / dpr) + 2)
 
     def _export_clip_template(self) -> None:
-        from PyQt6.QtWidgets import QFileDialog, QMessageBox
+        from PyQt6.QtWidgets import QMessageBox
         from workflow.layout_engine import geometry, raster
         gh = self._clip_geom_and_height()
         area = geometry.clip_area_mm(gh[0], gh[1]) if gh else None
@@ -1678,9 +1678,11 @@ class LayoutOptionsPanel(QWidget):
             return
         _x, _y, w_mm, h_mm = area
         dpi = int(self.dpi.value())
-        base, _ = QFileDialog.getSaveFileName(
-            self, tr("Export clip template"), "clip-template",
-            tr("Template base name"))
+        from pathlib import Path as _P
+        from ui.widgets import save_file_dialog
+        base = save_file_dialog(
+            self, tr("Export clip template"), tr("Template base name"),
+            start_path=str(_P.home() / "clip-template"))
         if not base:
             return
         paths = raster.export_clip_template(

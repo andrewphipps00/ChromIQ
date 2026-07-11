@@ -14,7 +14,6 @@ from PyQt6.QtWidgets import (
     QComboBox,
     QDialog,
     QDialogButtonBox,
-    QFileDialog,
     QFrame,
     QGridLayout,
     QGroupBox,
@@ -1338,9 +1337,10 @@ class TabProfile(QWidget):
             self._ac_in_edit.setText(p)
 
     def _ac_browse_out(self) -> None:
-        path, _ = QFileDialog.getSaveFileName(
-            self, tr("Save output ICC profile"), self._ac_in_edit.text() or "",
-            tr("ICC profiles (*.icc *.icm)"),
+        from ui.widgets import save_file_dialog
+        path = save_file_dialog(
+            self, tr("Save output ICC profile"), tr("ICC profiles (*.icc *.icm)"),
+            start_path=self._ac_in_edit.text() or "",
         )
         if path:
             self._ac_out_edit.setText(path)

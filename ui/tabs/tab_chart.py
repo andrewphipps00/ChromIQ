@@ -3419,6 +3419,28 @@ class TabChart(QWidget):
             tr("Loaded profile “{name}”.").format(name=self._last_target_name))
         if tiffs:
             self._preview.load_tiff(tiffs)
+            # Feed the Chart-layout-information panel and the margin
+            # inspector, so the "on screen" column shows the LOADED chart's
+            # real numbers (mavtop: it sat empty after reloading a project).
+            self._set_margin_chart(list(tiffs), ti2)
+            # And bring the option panels back to the settings this chart
+            # was actually made with, so screen and chart tell one story.
+            if self._restore_chart_settings(ti2):
+                self._log.appendPlainText(tr(
+                    "Restored the chart's own layout settings — patch size, "
+                    "spacers, margins, seed, notes and patch count now show "
+                    "the values this chart was made with."))
+            else:
+                self._log.appendPlainText(tr(
+                    "This chart carries no saved layout recipe (made with "
+                    "printtarg or an older ChromIQ), so only its instrument, "
+                    "paper and patch count could be restored — the preview "
+                    "still shows the chart exactly as it is."))
+            # Recompute the layout-info ESTIMATE column from the restored
+            # settings — set_recipe applies silently (no changed signal), so
+            # without this the estimate kept showing the pre-load values
+            # while the options already showed the chart's own (Basti).
+            self._refresh_manual_command_preview()
             ti1 = run.dir / f"{run.stem}.ti1"
             self._current_ti1_path = ti1 if ti1.is_file() else None
             # Let Print / Measure pick the chart up, as if it had just been built.
@@ -5897,6 +5919,66 @@ class TabChart(QWidget):
         self._reset_override_checks()
         self._update_preset_locks()
 
+    def _restore_chart_settings(self, ti2_path: Path) -> bool:
+        """Fill the Create-Chart options with the settings the loaded chart
+        was actually made with, so what's on screen matches the chart —
+        instead of whatever the panels happened to hold (mavtop, forum: a
+        reloaded chart showed default patch counts, empty notes, seed 0…).
+
+        Engine charts carry their complete layout recipe in the chart's own
+        ``channels.json`` (patch size, spacers, margins, seed, notes,
+        alignment — everything), so those restore fully: the engine toggle
+        comes on, the layout panel takes the recipe, the pages/notes fields
+        follow, and the patch count is pinned to the chart's real total.
+        printtarg charts store no recipe — only instrument/paper (seeded by
+        the callers) and the patch count can be recovered. Returns True when
+        a full recipe was restored."""
+        import json as _json
+        import re as _re
+        # Patch count from the .ti2 itself — works for every chart kind.
+        try:
+            txt = Path(ti2_path).read_text(errors="replace")
+            m = _re.search(r"NUMBER_OF_SETS\s+(\d+)", txt)
+            if m:
+                self._set_manual_value("targen", "-f", int(m.group(1)))
+                if self._manual_auto_patches_check is not None:
+                    # Pin the count: with Auto on it would be recomputed from
+                    # the layout and drift away from the loaded chart's total.
+                    self._manual_auto_patches_check.setChecked(False)
+        except Exception:  # noqa: BLE001 — count seeding is best-effort
+            log.warning("could not seed patch count from %s", ti2_path,
+                        exc_info=True)
+        sidecar = Path(ti2_path).with_suffix(".channels.json")
+        if not sidecar.is_file():
+            return False
+        try:
+            doc = _json.loads(sidecar.read_text())
+            layout = doc.get("layout") or {}
+            rec_dict = layout.get("recipe") or {}
+            if not rec_dict:
+                return False
+            from workflow.layout_engine.presets import LayoutRecipe
+            recipe = LayoutRecipe.from_dict(rec_dict)
+            # Engine on first (builds/updates the panel), then the recipe.
+            if (self._manual_engine_check is not None
+                    and not self._manual_engine_check.isChecked()):
+                self._manual_engine_check.setChecked(True)
+            if self._manual_layout_panel is not None:
+                self._manual_layout_panel.set_recipe(recipe)
+            n_pages = 1 + max((int(p.get("page", 0))
+                               for p in layout.get("patches") or []),
+                              default=0)
+            if self._manual_pages_spin is not None:
+                self._manual_pages_spin.setValue(n_pages)
+            if (self._manual_chart_notes_edit is not None
+                    and getattr(recipe, "chart_text", "")):
+                self._manual_chart_notes_edit.setText(recipe.chart_text)
+            return True
+        except Exception:  # noqa: BLE001 — never block a load on a bad sidecar
+            log.warning("could not restore chart settings from %s", sidecar,
+                        exc_info=True)
+            return False
+
     def reflect_loaded_chart(self, ti2_path: Path, tiffs: list[Path]) -> None:
         """Mirror a chart loaded in the Print/Measure tab, read-only.
 
@@ -5936,6 +6018,11 @@ class TabChart(QWidget):
             self._set_manual_value("printtarg", "-p", spec.paper_flag)
         except Exception as exc:  # noqa: BLE001 — seeding is best-effort
             log.warning("Could not seed instrument/paper from reflected chart: %s", exc)
+        # Bring the option panels to the chart's own creation settings BEFORE
+        # locking, so the greyed panels show the truth about this chart —
+        # and an unlock-and-edit really does start "from these settings", as
+        # the loaded-chart dialog promises (mavtop, forum).
+        self._restore_chart_settings(ti2_path)
         # A reflected chart is shown for reference only and never overwrites the
         # user's Printer-profile name (#70); seed it only if the field is empty.
         self._ensure_profile_name(ti2_path.stem)
@@ -5945,12 +6032,20 @@ class TabChart(QWidget):
             f"Reflecting loaded chart “{ti2_path.name}” "
             f"({len(tiffs)} page(s)). Loaded for reference only — not generated."
         )
+        if Path(ti2_path).with_suffix(".channels.json").is_file():
+            self._log.appendPlainText(tr(
+                "The locked panels show the settings this chart was made "
+                "with — unlock to build a new chart starting from them."))
         if tiffs:
             self._preview.load_tiff(list(tiffs))
             self._set_margin_chart(list(tiffs), ti2_path)
         else:
             self._preview.clear()
             self._set_margin_chart([], None)
+        # Estimate column follows the restored settings (set_recipe applies
+        # silently, and the margin chart — the estimate's patch-count anchor
+        # — only landed just above).
+        self._refresh_manual_command_preview()
         self._maybe_warn_reflected_backfill(ti2_path)
 
     def _maybe_warn_reflected_backfill(self, ti2_path: Path) -> None:
@@ -5981,7 +6076,10 @@ class TabChart(QWidget):
                "If you'd like to build a NEW chart starting from these "
                "settings, just tick an unlock box in Create Chart, make your "
                "changes, and click Generate Chart — the loaded chart stays "
-               "untouched.").format(name=ti2_path.name),
+               "untouched. For charts made with the ChromIQ layout engine, "
+               "the panels really do show the chart's own creation settings "
+               "— patch size, spacers, margins, seed, notes and patch count "
+               "are all restored from the chart itself.").format(name=ti2_path.name),
             dlg)
         body.setWordWrap(True)
         lay.addWidget(body)

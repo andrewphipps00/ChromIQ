@@ -1,5 +1,39 @@
 # Changelog
 
+## v3.13.4-beta.8
+
+Loading a chart now restores the settings it was made with (a
+printerknowledge.com request), and the ChromIQ file dialogs got a usability
+pass.
+
+### New
+- **Reloading a chart brings its creation settings back.** Whether you open
+  a saved profile in Create Chart or load a `.ti2` from Print/Measure, the
+  options now show the values the chart was actually made with instead of
+  stale defaults: for charts made with the ChromIQ layout engine that is
+  everything — patch size, spacers, margins, seed, notes, pages and the
+  patch count (pinned to the chart's real total) — read from the chart's own
+  `channels.json`; charts made with printtarg (or an older ChromIQ) restore
+  instrument, paper and patch count, and a friendly note says which of the
+  two happened. The reflected-chart dialog's promise that unlocking starts
+  "from these settings" is now literally true.
+- The **Chart-layout-information panel fills its "on screen" column** when a
+  saved profile is opened in Create Chart (it stayed all dashes before), and
+  the **"estimate" column recomputes from the restored settings** right
+  away, so both columns and the option panels tell one story.
+
+### Fixed
+- **The ChromIQ file dialogs open with a readable sidebar.** The shortcuts
+  column was so narrow the location names were cut off and every dialog
+  needed a manual resize first; it now opens at a comfortable width (and
+  stays user-resizable), and dialogs open at a sensible size.
+- **Six dialogs that still used the operating system's file picker now use
+  the ChromIQ one** (saving spot readings, saving an ICC in Build Profile,
+  layout-preset export/import, clip-template export, and the layout editor's
+  image loader — which gained the thumbnail preview), so the
+  native-dialogs setting is respected everywhere and every picker carries
+  the sidebar shortcuts.
+
 ## v3.13.4-beta.7
 
 Knut's beta-6 round (#119): the stuck-at-100 % agreement bug, the CMP Studio

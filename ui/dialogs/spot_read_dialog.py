@@ -22,7 +22,6 @@ from PyQt6.QtWidgets import (
     QCheckBox,
     QDialog,
     QDialogButtonBox,
-    QFileDialog,
     QFrame,
     QHBoxLayout,
     QHeaderView,
@@ -327,17 +326,13 @@ class SpotReadDialog(QDialog):
     def _on_save(self) -> None:
         if not self._readings:
             return
-        dlg = QFileDialog(self, tr("Save spot readings"), str(Path.home() / "spot-readings"))
-        dlg.setOptions(QFileDialog.Option.DontUseNativeDialog)
-        dlg.setAcceptMode(QFileDialog.AcceptMode.AcceptSave)
-        dlg.setNameFilter(tr("Spot readings (*.csv)"))
-        dlg.selectFile("spot-readings.csv")
-        if dlg.exec() != QFileDialog.DialogCode.Accepted:
-            return
-        chosen = dlg.selectedFiles()
+        from ui.widgets import save_file_dialog
+        chosen = save_file_dialog(
+            self, tr("Save spot readings"), tr("Spot readings (*.csv)"),
+            start_path=str(Path.home() / "spot-readings" / "spot-readings.csv"))
         if not chosen:
             return
-        base = Path(chosen[0]).with_suffix("")
+        base = Path(chosen).with_suffix("")
         try:
             csv_path = write_csv(base.with_suffix(".csv"), self._readings)
             ti3_path = write_ti3(base.with_suffix(".ti3"), self._readings)
