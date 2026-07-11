@@ -31,19 +31,21 @@ from pathlib import Path
 
 __all__ = ["PlacementReport", "dense_placement_agreement"]
 
-# Share of each FULL patch the edge check's sensing grid covers (Knut's #119
-# activation-box design, refined): the G×G sub-cell grid always spans this
-# much of the patch; which of its cells actually detect is decided by the
-# ACTIVATION box — the real (equal-margin) sample box plus half a sub-cell
-# on every side — so exactly ONE thin ring of cells outside the sample
-# frame senses ahead of it, at every Patch-sample-area setting. The grid is
-# fine (30×30) so that ring is narrow: at the 80 % maximum the sample box
-# spans ≈ 89 % per side and the grid's own outermost ring (at 95 %) is the
-# one that wakes; at ~70 % it goes back to sleep, and so on inwards — no
-# reach cap needed (Knut's correction: the earlier "blur wall" reading of
-# the uncapped numbers was actually the probe detecting REAL local
-# placement error at the test fixture's chart bottom).
-FLANK_GRID_COVER = 0.95
+# Linear share of each patch the edge check's sensing grid covers (Knut's
+# #119 activation-box design, refined twice): the G×G sub-cell grid spans an
+# EQUAL-MARGIN box of 85 % of the patch's width and height — built with the
+# same rule as the Patch-sample-area box (``sample_margin`` at 0.85², so the
+# two boxes are parallel, nested, and share their height-to-width
+# relationship for every patch shape). Which of its cells actually detect is
+# decided by the ACTIVATION box — the real (equal-margin) sample box plus
+# half a sub-cell on every side — so ONE thin ring of cells outside the
+# sample frame senses ahead of it, at every Patch-sample-area setting where
+# the sample box still fits inside the grid; from ~72 % sample area upward
+# the grid's own 85 % boundary is the sensing limit. That boundary is
+# Knut's beta.9 verdict: 95 % coverage made 70–80 % sample areas too
+# sensitive to a scan's ordinary local placement error — 85 % keeps the
+# sensing rim 7.5 % of a patch clear of the borders it watches.
+FLANK_GRID_COVER = 0.85
 
 
 
@@ -117,7 +119,7 @@ def dense_placement_agreement(
         max_side: int = 2200,
         objective: str = "combined",
         src_quad: list[tuple[float, float]] | None = None,
-        flank_min_cells: int = 6) -> PlacementReport | None:
+        flank_min_cells: int = 8) -> PlacementReport | None:
     """Evaluate the placement *corners* of the patch grid over *image_path*
     against every position of Knut's step ladder. Returns None when the image
     can't be read or too few patches pair with the reference."""
@@ -269,13 +271,20 @@ def dense_placement_agreement(
         box_ixs[b.name] = ixs
 
     # Edge-check sensing boxes (Knut's #119 activation-box design): the
-    # sensing grid always covers FLANK_GRID_COVER of the FULL patch —
-    # activation, not geometry, follows the Patch-sample-area setting.
+    # sensing grid covers an EQUAL-MARGIN box of FLANK_GRID_COVER per side —
+    # the same construction as the sample box, so the grid keeps the sample
+    # area's height-to-width relationship on every patch shape (Knut's
+    # beta.9 refinement). Activation, not geometry, follows the
+    # Patch-sample-area setting.
+    from workflow.scanin_runner import sample_margin
     flank_ixs = {}
+    grid_mg: dict[str, float] = {}
     for b in named:
         cx, cy = (b.x1 + b.x2) / 2.0, (b.y1 + b.y2) / 2.0
-        hx = (b.x2 - b.x1) * FLANK_GRID_COVER / 2.0
-        hy = (b.y2 - b.y1) * FLANK_GRID_COVER / 2.0
+        bw, bh = b.x2 - b.x1, b.y2 - b.y1
+        gm = sample_margin(bw, bh, FLANK_GRID_COVER * FLANK_GRID_COVER)
+        grid_mg[b.name] = gm
+        hx, hy = bw / 2.0 - gm, bh / 2.0 - gm
         ixs = []
         for ox, oy in offsets:
             xa, ya = warp(cx + ox - hx, cy + oy - hy)
@@ -609,9 +618,9 @@ def dense_placement_agreement(
         return True
 
     # Sub-grid size, decided once for the page (Knut's #119 activation-box
-    # design): a G×G grid tiles FLANK_GRID_COVER of the full patch. G = 20;
-    # when the scan is too small for that (sub-pixel cells), fall back to
-    # 10 — coarser is better than blind.
+    # design): a G×G grid tiles the equal-margin FLANK_GRID_COVER box.
+    # G = 30; when the scan is too small for that (sub-pixel cells), fall
+    # back to 15 — coarser is better than blind.
     _sample_px = [min((x2 - x1) / 30.0, (y2 - y1) / 30.0)
                   for (x1, y1, x2, y2) in
                   (flank_ixs[b.name][0] for b in named
@@ -657,11 +666,13 @@ def dense_placement_agreement(
     # real (equal-margin) read zone plus half a sub-cell on every side,
     # centred on the patch, and a sub-cell is active when that box touches
     # it. So detection follows the sample area's rim: a small sample box
-    # only wakes the middle of the grid, an 80 % one reaches the outermost
-    # cells, and at every setting the warning fires when a border comes
-    # close to what is actually being READ — instead of at one fixed
-    # sensing size for all settings. Per patch, because each patch shape
-    # gets its own margin.
+    # only wakes the middle of the grid, a large one reaches the outermost
+    # cells (from ~72 % sample area the rim passes the grid's own 85 %
+    # boundary and the whole grid is awake — the boundary is then the
+    # sensing limit, Knut's beta.9 refinement), and at every setting the
+    # warning fires when a border comes close to what is actually being
+    # READ — instead of at one fixed sensing size for all settings. Per
+    # patch, because each patch shape gets its own margin.
     # The page's own border blur, measured from the scan: walk the line
     # between horizontally adjacent patch centres and record how many
     # sampled pixels the luminance step needs from 10 % to 90 % of its
@@ -723,7 +734,6 @@ def dense_placement_agreement(
 
     _blur_px = _page_blur_px()
 
-    from workflow.scanin_runner import sample_margin
     active_by_patch: dict[str, list[bool]] = {}
     span_by_patch: dict[str, int] = {}
     for b in named:
@@ -732,14 +742,15 @@ def dense_placement_agreement(
         _ix0 = flank_ixs[b.name][0]
         axes = []
         for ax_i, full in enumerate((w, h)):
-            cell = FLANK_GRID_COVER * full / G
-            g0 = -FLANK_GRID_COVER * full / 2.0
+            ext = full - 2.0 * grid_mg[b.name]   # grid extent on this axis
+            cell = ext / G
+            g0 = -ext / 2.0
             a_half = (full / 2.0 - mg) + cell / 2.0
             if _ix0 is not None:
                 px_span = (_ix0[2] - _ix0[0] if ax_i == 0
                            else _ix0[3] - _ix0[1])
                 if px_span > 0:
-                    upp = (FLANK_GRID_COVER * full) / px_span
+                    upp = ext / px_span
                     # One-sided danger radius: half the measured 10–90 %
                     # transition (the width straddles the border) plus the
                     # gradient operator's own 4 px span plus rounding — the

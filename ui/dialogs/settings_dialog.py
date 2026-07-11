@@ -1056,18 +1056,23 @@ class SettingsDialog(QDialog):
                 "grain itself and will get false warnings. Above about 0.30, "
                 "genuinely misplaced boxes go unnoticed. If you scan a very "
                 "noisy or textured paper, raise it a little.\n\n"
-                "How it works, if you're curious: every reading box carries "
-                "a 20×20 grid of small sensing cells. The inner 18×18 cover "
-                "the box itself; the outer ring sits just outside it, so a "
-                "border is spotted the moment the box touches it, equally "
-                "from every side. Each cell records the steepest colour "
-                "change it can see — in brightness and in two "
-                "colour-opponent channels, so a border between two patches of "
-                "the same brightness is still caught. A box counts as being "
-                "on an edge only when enough cells light up in a straight "
-                "row (see the setting below — a border is a line, while "
-                "dust specks clump and grain scatters) AND the box reads "
-                "clean a little to one side — that last rule is what stops a "
+                "How it works, if you're curious: every patch carries a fine "
+                "grid of 30×30 small sensing cells (15×15 on low-resolution "
+                "scans), spread over 85 % of the patch's width and height — "
+                "shaped with the same equal-margin rule as the reading box, "
+                "so the two always stay parallel. Only the cells around the "
+                "reading box are awake: the box itself plus one thin ring of "
+                "cells just outside it, so a border is spotted the moment it "
+                "comes close to what is actually being READ — equally from "
+                "every side, and following your Patch sample area setting in "
+                "and out. Each awake cell records the steepest colour change "
+                "it can see — in brightness and in two colour-opponent "
+                "channels, so a border between two patches of the same "
+                "brightness is still caught. A box counts as being on an "
+                "edge only when enough cells light up in a straight row "
+                "(see the setting below — a border is a line, while dust "
+                "specks clump and grain scatters) AND the box reads clean a "
+                "little to one side — that last rule is what stops a "
                 "target's own printed bars and wedges from counting. The "
                 "box's edge strength is then its third-strongest cell — the "
                 "scale this limit is calibrated on.\n\n"
@@ -1075,23 +1080,23 @@ class SettingsDialog(QDialog):
                 "page grain sits around 0.04 and reaches 0.05 on the noisiest "
                 "patches. Half of all real patch borders are above 0.08, and "
                 "the borders a misplaced box actually lands on read 0.20 and "
-                "up. Together with a count of 3 above, 0.20 leaves a correctly "
+                "up. Together with a count of 2 above, 0.20 leaves a correctly "
                 "placed grid completely silent."))
         self._scan_flank_cells_combo = NoScrollComboBox(grp)
-        for _n in range(2, 10):
+        for _n in range(2, 21):
             self._scan_flank_cells_combo.addItem(str(_n), _n)
-        _cur_c = int(s.get("scanner_flank_min_cells", 6))
+        _cur_c = int(s.get("scanner_flank_min_cells", 8))
         self._scan_flank_cells_combo.setCurrentIndex(
             max(0, self._scan_flank_cells_combo.findData(_cur_c)))
         self._scan_flank_cells_combo.setMinimumWidth(120)
-        _row(7, tr("…needing this many sensing cells in a row (2–9):"),
+        _row(7, tr("…needing this many sensing cells in a row (2–20):"),
              self._scan_flank_cells_combo,
              tr("How many sensing cells make an edge"),
              tr("In short: this protects you against grain and dust specks "
-                "in the scan being mistaken for patch edges. Each reading "
-                "box is checked with a fine grid of small sensing cells; a "
-                "patch border is only believed when at least this many "
-                "cells light up TOGETHER, side by side in a straight row — "
+                "in the scan being mistaken for patch edges. Each patch is "
+                "checked with a fine grid of small sensing cells; a patch "
+                "border is only believed when at least this many cells "
+                "light up TOGETHER, side by side in a straight row — "
                 "because a border is a line, and a line crosses one cell "
                 "after the next. Grain and dust can't do that: a speck "
                 "lights a small clump, scattered noise lights lonely cells, "
@@ -1100,27 +1105,41 @@ class SettingsDialog(QDialog):
                 "reading grid — not whole patches. (The setting above, "
                 "\"Warn when this many patches sit on an edge\", counts "
                 "whole patches.)\n\n"
+                "The scale: the number you set here means \"out of 20 cells "
+                "across one reading box\". The real sensing grid is finer — "
+                "30×30 cells per patch — so ChromIQ converts your number to "
+                "the same physical line length on the finer grid (the "
+                "default 8 becomes a run of 12 of the smaller cells). You "
+                "never need to think about that conversion: 10 always means "
+                "\"half the box\", 20 always means \"the full box\", on "
+                "every scan.\n\n"
                 "What to change: if a grainy or textured scan keeps "
                 "flagging patches you know are clean, raise this — a real "
                 "border crosses the whole box, so it easily lights more "
-                "cells than any speck. Lower it if you want the earliest "
-                "possible warning and your scans are very clean.\n\n"
-                "Why the default is 6: on a real 600 dpi scan, a long "
-                "narrow speck of grey inside one patch still lit a straight "
-                "run of four cells, so 3 or 4 flagged a perfectly aligned "
-                "grid and 5 was the first clean value; 6 adds a little "
-                "buffer, while a genuine border crosses all 18 cells of the "
-                "box and fires regardless.\n\n"
+                "cells than any speck, and there is room up to 20. Lower it "
+                "if you want the earliest possible warning and your scans "
+                "are very clean.\n\n"
+                "Why the default is 8: on real 600 dpi scans, a long narrow "
+                "speck of grey inside one patch still lit a straight run of "
+                "4 cells, so 5 was the first clean value and 6 stayed clean "
+                "through all of the beta testing; 8 simply adds a little "
+                "more buffer on top, while a genuine border crosses the "
+                "whole box and fires regardless.\n\n"
                 "More than one group can be checked at once: if a speck "
                 "lights a few cells in one corner while a real border "
                 "crosses elsewhere in the same box, the border still "
                 "counts — the speck can't mask it.\n\n"
-                "How it works, if you're curious: every reading box carries "
-                "a 20×20 grid of sensing cells — 18×18 covering the box "
-                "itself, plus a one-cell ring just outside it, so a border "
-                "is spotted the moment the box touches it, equally from "
-                "every side. Each cell records the steepest colour change "
-                "it sees. The hot cells must contain a straight run of at "
+                "How it works, if you're curious: every patch carries a "
+                "30×30 grid of sensing cells (15×15 on low-resolution "
+                "scans), spread over 85 % of the patch's width and height "
+                "and shaped with the same equal-margin rule as the reading "
+                "box, so the two always stay parallel. Only the cells "
+                "around the reading box are awake — the box itself plus one "
+                "thin ring just outside it, following your Patch sample "
+                "area setting in and out — so a border is spotted the "
+                "moment it comes close to what is actually being read. "
+                "Each awake cell records the steepest colour change it "
+                "sees. The hot cells must contain a straight run of at "
                 "least this length, roughly parallel to a box side — the "
                 "reading grid is aligned with the chart, so a genuine "
                 "patch border always runs parallel to the box edges."))
@@ -1412,7 +1431,7 @@ class SettingsDialog(QDialog):
         self._scan_flank_min_combo.setCurrentIndex(max(0, self._scan_flank_min_combo
             .findData(int(s.get("scanner_flank_min_boxes", 2)))))
         self._scan_flank_cells_combo.setCurrentIndex(max(0, self._scan_flank_cells_combo
-            .findData(int(s.get("scanner_flank_min_cells", 6)))))
+            .findData(int(s.get("scanner_flank_min_cells", 8)))))
         self._chromiq_refine_check.setChecked(bool(s.get("chromiq_refinement", False)))
         self._averaging_check.setChecked(bool(s.get("averaging_enabled", False)))
         self._native_print_check.setChecked(bool(s.get("use_native_print_dialog", False)))

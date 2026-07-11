@@ -223,8 +223,12 @@ DEFAULTS: dict[str, Any] = {
     # How many interconnected sensing sub-cells inside ONE reading box must
     # carry an edge — in a straight run, since a border is a line — before
     # that box counts as sitting on an edge (Knut, #119). Guards against
-    # grain and specs, which light scattered or compact cells.
-    "scanner_flank_min_cells":   6,
+    # grain and specs, which light scattered or compact cells. Expressed in
+    # reference-grid units (20 cells across a box) and scaled to the actual
+    # sensing grid, so it means the same physical line length at every grid
+    # size. 8 is Knut's beta.9 pick — 6 was already clean on his scans, 8
+    # adds buffer — with the range opened up to 20.
+    "scanner_flank_min_cells":   8,
     # Bumped by AppSettings.migrate() — see SETTINGS_SCHEMA.
     "settings_schema":           0,
     # Settings → Paths (Knut #108): where "Install profile" copies the .icc.
@@ -410,28 +414,29 @@ def thresholds_for_combo(
 # Bump when a shipped default changes in a way that must reach users who have
 # the OLD default persisted. Settings → Save writes every key, so a stored
 # value otherwise pins a user to the old behaviour for good.
-SETTINGS_SCHEMA = 3
+SETTINGS_SCHEMA = 4
 
-# key → the old default it must no longer be stuck on. Only a stored value
-# EQUAL to the old default is dropped (so it falls through to the new one); a
-# value the user deliberately chose is never touched.
-_SUPERSEDED_DEFAULTS: dict[str, float] = {
+# key → the old default(s) it must no longer be stuck on. Only a stored value
+# EQUAL to one of the old defaults is dropped (so it falls through to the new
+# one); a value the user deliberately chose is never touched.
+_SUPERSEDED_DEFAULTS: dict[str, tuple[float, ...]] = {
     # #119: the old pair (0.30 + a hard-coded 7 boxes) could not detect a grid
     # with one corner pulled in — at 0.30 a pulled corner leaves 0 flagged
     # boxes on a Wolf Faust. Anyone who had ever pressed Save in Settings had
     # 0.30 persisted and would never have received the fix.
-    "scanner_flank_limit": 0.30,
+    "scanner_flank_limit": (0.30,),
     # schema 2 (#119, Knut's beta.3 test): 3 sensing cells in a row still let
     # a long narrow grey speck (his D20) flag an aligned grid; 5 was his
-    # measured clean value, 6 the default with buffer.
-    "scanner_flank_min_cells": 3,
+    # measured clean value, 6 the default with buffer. schema 4: Knut moved
+    # the default to 8 for extra buffer alongside the 85 % sensing grid.
+    "scanner_flank_min_cells": (3, 6),
     # schema 2: with the per-patch agreement a correct grid reads ≥ 90 % and
     # crossings collapse fast, so the floor moves up to 0.87 (Knut's number).
-    "scanner_check_agreement": 0.85,
+    "scanner_check_agreement": (0.85,),
     # schema 3 (#119, Knut's beta.4 test): with the straight-run cell rule an
     # aligned scan leaves at most 1 edge-flagged patch, so 2 warns earlier
     # without false alarms (his preference after testing).
-    "scanner_flank_min_boxes": 3,
+    "scanner_flank_min_boxes": (3,),
 }
 
 
@@ -446,12 +451,12 @@ class AppSettings:
         if int(self._qs.value("settings_schema", 0) or 0) >= SETTINGS_SCHEMA:
             return []
         dropped = []
-        for key, old in _SUPERSEDED_DEFAULTS.items():
+        for key, olds in _SUPERSEDED_DEFAULTS.items():
             raw = self._qs.value(key, None)
             if raw is None:
                 continue
             try:
-                if abs(float(raw) - old) < 1e-9:
+                if any(abs(float(raw) - old) < 1e-9 for old in olds):
                     self._qs.remove(key)
                     dropped.append(key)
             except (TypeError, ValueError):

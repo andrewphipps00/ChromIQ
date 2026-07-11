@@ -1207,9 +1207,9 @@ class ScannerProfileDialog(_ToolDialogBase):
         row_sa.addWidget(self._sa_label)
         self._sample_area = NoScrollSpinBox(self)
         # Max 80%: at 100% the reading box would always include the patch
-        # borders' blur; the edge check senses at its own calibrated size
-        # regardless (FLANK_SAMPLE_MAX — see placement_probe), and the
-        # colour mean uses exactly this area (Knut, #108/#119).
+        # borders' blur; the edge check's activation window follows this
+        # setting's rim in and out (Knut's #119 activation-box design — see
+        # placement_probe), and the colour mean uses exactly this area.
         self._sample_area.setRange(20, 80)
         self._sample_area.setValue(60)
         self._sample_area.setSuffix(" %")
@@ -1242,8 +1242,9 @@ class ScannerProfileDialog(_ToolDialogBase):
             "reading would no longer be the pure colour.\n\n"
             "The misalignment checks look after themselves whatever you pick "
             "here: the placement agreement always judges the very area you "
-            "chose, and the edge detector senses at the size it was calibrated "
-            "at, so neither needs adjusting when you change this.")), 0, Qt.AlignmentFlag.AlignVCenter)
+            "chose, and the edge detector watches a thin ring just outside "
+            "that same area — it moves in and out with this setting, so "
+            "neither needs adjusting when you change it.")), 0, Qt.AlignmentFlag.AlignVCenter)
         form.addLayout(row_sa)
 
         self._build_shot_bar(form)
@@ -2873,7 +2874,7 @@ class ScannerProfileDialog(_ToolDialogBase):
                 sample_frac=self._sample_area.value() / 100.0,
                 objective=objective, src_quad=fid_quad,
                 flank_min_cells=int(self._settings.get(
-                    "scanner_flank_min_cells", 6)))
+                    "scanner_flank_min_cells", 8)))
 
         if printer:
             # No usable per-patch reference (aim values scatter against real

@@ -1,5 +1,44 @@
 # Changelog
 
+## v3.13.4-beta.10
+
+Knut's grid-coverage verification round (#119): the sensing grid moves to
+85 % of each patch — measured, not assumed — and the help texts catch up
+with the implemented model.
+
+### Changed
+- **The edge check's sensing grid now covers 85 % of each patch's width and
+  height** (Knut's spec, confirmed by measurement — he asked for the 90/92/95
+  comparison that beta.7 skipped). The grid box is built with the same
+  equal-margin rule as the *Patch sample area* box, so the two always stay
+  parallel and share their height-to-width relationship on every patch
+  shape. The comparison over both real 600 dpi IT8 scans and all five demo
+  renders shows why 85 is right: it is the only coverage at which every
+  truly-aligned target stays at zero flagged patches at every sample area
+  from 20–80 % (at 90 % even a pixel-perfect CMP Studio render flags 3,
+  at 92 % the LaserSoft DC Pro demo flags 8, at 95 % the real Wolf Faust
+  flags 4), while detection stays sharp — a quarter-patch shift still
+  fires with 11–308 flagged boxes depending on the chart. On the real
+  scans the change is a pure win: the Wolf Faust is now silent at every
+  sample area, and the LaserSoft's truthful reporting of scanin's local
+  placement error settles at 31 boxes instead of 55.
+- **"…needing this many sensing cells in a row" now defaults to 8 and runs
+  up to 20** (Knut's numbers: 6 never false-triggered in his testing, 8
+  adds buffer; the raised ceiling leaves room on rough scans). The value
+  still means "out of 20 cells across one reading box" and is converted to
+  the same physical line length on the finer 30×30 grid automatically. A
+  one-time settings migration moves everyone still on a stored default
+  (3 or 6) to 8; a deliberately chosen value is never touched.
+
+### Fixed
+- The help texts for the two edge-detection settings and the *Patch sample
+  area* control described the old 20×20 fixed-sensing model. They now
+  explain the implemented design — the 30×30 sensing grid over the 85 %
+  equal-margin box, the activation ring that follows the sample area in
+  and out, the 20-cell reference scale of the row-length setting and where
+  the new default 8 comes from (Knut's request, with the German
+  translations updated to match).
+
 ## v3.13.4-beta.9
 
 Knut's activation-box design lands in full (#119) — his correction to the

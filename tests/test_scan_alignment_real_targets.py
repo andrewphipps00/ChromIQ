@@ -164,12 +164,13 @@ def test_aligned_real_scan_stays_silent(target):
     sheet — the LaserSoft's bottom rows genuinely overlap their neighbours
     by ~5–10 % (verified on the scan pixels, #119), so the rim-following
     edge detector CORRECTLY reports them once the sample area lets the rim
-    approach those borders. Strict silence therefore only holds at areas
-    where even the local error can't reach: the Wolf Faust to 60 %, the
-    LaserSoft at 20 %. (Truly-aligned placements — the demo renders — are
-    silent at EVERY area; that contract lives in the synthetic suite.)"""
+    approach those borders. Strict silence therefore holds wherever even
+    the local error can't reach: with Knut's 85 % equal-margin sensing
+    grid that is the Wolf Faust at EVERY area and the LaserSoft at 20 %.
+    (Truly-aligned placements — the demo renders — are silent at every
+    area; that contract lives in the synthetic suite.)"""
     tif, boxes, corners, quad, exp, _px = target
-    fracs = (0.2, 0.4, 0.6) if "WF" in str(tif) or "Faust" in str(tif)         else (0.2,)
+    fracs = (0.2, 0.4, 0.6, 0.8) if "WF" in str(tif) or "Faust" in str(tif)         else (0.2,)
     for frac in fracs:
         rep = dense_placement_agreement(tif, boxes, corners, exp,
                                         sample_frac=frac,

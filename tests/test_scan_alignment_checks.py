@@ -500,13 +500,13 @@ def test_flank_detection_fires_on_edges_only(tmp_path):
 
 
 def test_flank_activation_reach_caps_on_aligned_contiguous_grid(tmp_path):
-    """#119 (Knut's activation-box design, with its safety cap): the edge
-    check's active sensing follows the sample box's rim, but never reaches
-    past FLANK_REACH_MAX of the patch — on a zero-gap chart the borders'
-    blur tails would otherwise read "edge" on a PERFECTLY aligned grid at a
-    large sample area. So raising the sample area must never raise the edge
-    count on an aligned grid, and the aligned grid stays below the warning
-    threshold throughout."""
+    """#119 (Knut's activation-box design): the edge check's active sensing
+    follows the sample box's rim, but never past the sensing grid's own
+    85 % equal-margin boundary, and never into the page's measured border
+    blur — on a zero-gap chart the borders' blur tails would otherwise read
+    "edge" on a PERFECTLY aligned grid at a large sample area. So raising
+    the sample area must never raise the edge count on an aligned grid, and
+    the aligned grid stays below the warning threshold throughout."""
     from workflow.placement_probe import dense_placement_agreement
 
     path, boxes, corners, exp = _dense_fixture(tmp_path, 0.0)
@@ -662,7 +662,7 @@ def test_migrate_schema2_moves_beta3_defaults(tmp_path):
     s = _fresh("echo", scanner_flank_min_cells=3, scanner_check_agreement=0.85)
     assert sorted(s.migrate()) == ["scanner_check_agreement",
                                    "scanner_flank_min_cells"]
-    assert int(s.get("scanner_flank_min_cells")) == 6
+    assert int(s.get("scanner_flank_min_cells")) == 8
     assert float(s.get("scanner_check_agreement")) == 0.87
 
     s = _fresh("chosen", scanner_flank_min_cells=5, scanner_check_agreement=0.9)
@@ -677,3 +677,13 @@ def test_migrate_schema2_moves_beta3_defaults(tmp_path):
     s = _fresh("boxes_chosen", scanner_flank_min_boxes=5)
     assert s.migrate() == []
     assert int(s.get("scanner_flank_min_boxes")) == 5
+
+    # schema 4 (Knut's beta.9 round): min-cells default 6 → 8 — BOTH old
+    # defaults (3 from the original ship, 6 from schema 2) must fall
+    # through, because a user may have last pressed Save under either.
+    s = _fresh("cells_echo6", scanner_flank_min_cells=6)
+    assert s.migrate() == ["scanner_flank_min_cells"]
+    assert int(s.get("scanner_flank_min_cells")) == 8
+    s = _fresh("cells_chosen", scanner_flank_min_cells=12)
+    assert s.migrate() == []
+    assert int(s.get("scanner_flank_min_cells")) == 12
