@@ -1274,19 +1274,29 @@ class WelcomeDialog(QDialog):
         outer.addWidget(self._wip_note)
 
         # Footer — shared across both pages. Back button only shows on detail.
+        # Three equal-width thirds so the support link sits on the DIALOG's
+        # centre line, not merely midway through the leftover space (the
+        # startup checkbox is wider than Close, which pushed a stretch-based
+        # centring visibly off — Basti).
         footer = QHBoxLayout()
         footer.setContentsMargins(0, 0, 0, 0)
-        self._show_cb = QCheckBox(tr("Show this on startup"), self)
+        _left = QWidget(self)
+        _left_l = QHBoxLayout(_left)
+        _left_l.setContentsMargins(0, 0, 0, 0)
+        self._show_cb = QCheckBox(tr("Show this on startup"), _left)
         self._show_cb.setChecked(bool(self._settings.get("show_welcome_dialog", True)))
         self._show_cb.toggled.connect(
             lambda v: self._settings.set("show_welcome_dialog", bool(v))
         )
-        footer.addWidget(self._show_cb)
+        _left_l.addWidget(self._show_cb)
+        _left_l.addStretch(1)
         # Quiet support link — the classic tucked-away spot: only people who
-        # open the help find it, so it never feels pushy (Basti). Centred in
-        # the footer, between the startup checkbox and the window buttons.
-        # Opens the Ko-fi page in the browser.
-        self._support_btn = QPushButton(tr("♥ Support ChromIQ"), self)
+        # open the help find it, so it never feels pushy (Basti). Opens the
+        # Ko-fi page in the browser.
+        _mid = QWidget(self)
+        _mid_l = QHBoxLayout(_mid)
+        _mid_l.setContentsMargins(0, 0, 0, 0)
+        self._support_btn = QPushButton(tr("♥ Support ChromIQ"), _mid)
         self._support_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._support_btn.setFlat(True)
         self._support_btn.setToolTip(tr(
@@ -1294,16 +1304,22 @@ class WelcomeDialog(QDialog):
             "ink, a coffee on Ko-fi is a kind way to say thanks — completely "
             "optional, and the app stays fully featured either way."))
         self._support_btn.clicked.connect(self._open_support_page)
-        footer.addStretch(1)
-        footer.addWidget(self._support_btn)
-        footer.addStretch(1)
-        self._back_btn = QPushButton(tr("← Back"), self)
+        _mid_l.addStretch(1)
+        _mid_l.addWidget(self._support_btn)
+        _mid_l.addStretch(1)
+        _right = QWidget(self)
+        _right_l = QHBoxLayout(_right)
+        _right_l.setContentsMargins(0, 0, 0, 0)
+        _right_l.addStretch(1)
+        self._back_btn = QPushButton(tr("← Back"), _right)
         self._back_btn.clicked.connect(lambda: self._stack.setCurrentIndex(0))
         self._back_btn.setVisible(False)
-        footer.addWidget(self._back_btn)
-        self._close_btn = QPushButton(tr("Close"), self)
+        _right_l.addWidget(self._back_btn)
+        self._close_btn = QPushButton(tr("Close"), _right)
         self._close_btn.clicked.connect(self.accept)
-        footer.addWidget(self._close_btn)
+        _right_l.addWidget(self._close_btn)
+        for _w in (_left, _mid, _right):
+            footer.addWidget(_w, 1)      # equal thirds → true centre line
         outer.addLayout(footer)
 
     def _on_page_changed(self, index: int) -> None:
