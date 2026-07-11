@@ -468,6 +468,7 @@ jobs:
               printf '```\nxattr -dr com.apple.quarantine /Applications/ChromIQ.app\n```\n\n'
               printf 'Then double-click as normal.\n\n'
               printf 'Requires macOS 13+ (Ventura) and ArgyllCMS 3.5.0 at `/Applications/Argyll/bin`.'
+              printf '\n\n---\n☕ ChromIQ is free and always will be. If it saves you time or ink, [a coffee on Ko-fi](https://ko-fi.com/itsab1989) is a kind way to say thanks — completely optional, and the app stays fully featured either way.\n'
             } > /tmp/release_notes.txt
             # The arm64 and universal2 matrix legs run in parallel and both
             # pass the `gh release view` check above when neither has created
