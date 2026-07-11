@@ -125,7 +125,8 @@ jobs:
               printf 'Extract with `tar xzf ChromIQ-Linux-*.tar.gz`, then run `./ChromIQ/ChromIQ`. '
               printf 'Requires ArgyllCMS — install via your package manager (`sudo apt install argyll`) '
               printf 'or from argyllcms.com/downloadlinux.html.'
-              printf '\n\n---\n☕ ChromIQ is free and always will be. If it saves you time or ink, [a coffee on Ko-fi](https://ko-fi.com/itsab1989) is a kind way to say thanks — completely optional, and the app stays fully featured either way.\n'
+              printf '\n\n---\n☕ ChromIQ is free and always will be — if it saves you time or ink, a coffee is a kind way to say thanks. Completely optional, and the app stays fully featured either way.\n\n'
+              printf '[![Support ChromIQ on Ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/itsab1989)\n'
             } > /tmp/release_notes.txt
             gh release create "$TAG" \
               --title "ChromIQ $TAG" \
