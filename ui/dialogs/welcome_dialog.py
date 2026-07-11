@@ -1283,8 +1283,9 @@ class WelcomeDialog(QDialog):
         )
         footer.addWidget(self._show_cb)
         # Quiet support link — the classic tucked-away spot: only people who
-        # open the help find it, so it never feels pushy (Basti). Opens the
-        # Ko-fi page in the browser.
+        # open the help find it, so it never feels pushy (Basti). Centred in
+        # the footer, between the startup checkbox and the window buttons.
+        # Opens the Ko-fi page in the browser.
         self._support_btn = QPushButton(tr("♥ Support ChromIQ"), self)
         self._support_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._support_btn.setFlat(True)
@@ -1293,7 +1294,7 @@ class WelcomeDialog(QDialog):
             "ink, a coffee on Ko-fi is a kind way to say thanks — completely "
             "optional, and the app stays fully featured either way."))
         self._support_btn.clicked.connect(self._open_support_page)
-        footer.addSpacing(16)
+        footer.addStretch(1)
         footer.addWidget(self._support_btn)
         footer.addStretch(1)
         self._back_btn = QPushButton(tr("← Back"), self)
