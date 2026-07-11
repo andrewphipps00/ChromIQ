@@ -85,6 +85,20 @@ def test_cht_boxes_get_equal_margins_per_block(frac):
     assert "BOX_SHRINK 0.0" in out and "BOX_SHRINK 6.000" not in out
 
 
+def test_knuts_cmp4_measurement_is_exact():
+    """Knut measured a 230×230 px patch's 60 % sample box at 180×180 px
+    (61.25 % area) on the CMP-4 demo (#119). The mathematical box is
+    178.15 px per side = 31 737 px² = 59.99…% — exactly the set fraction;
+    the extra ~2 px in a screenshot is the 1.4 px outline, which QPainter
+    strokes centred on the boundary. This pins the arithmetic at his exact
+    numbers."""
+    from workflow.scanin_runner import sample_margin
+    m = sample_margin(230.0, 230.0, 0.6)
+    side = 230.0 - 2 * m
+    assert abs(side - 178.1572) < 1e-3
+    assert abs(side * side / (230.0 * 230.0) - 0.6) < 1e-12
+
+
 def test_full_area_still_pins_baked_box_shrink():
     """#119 (Knut's ChromIQ_scanner_target_480): every ChromIQ chart .cht
     carries a baked-in default BOX_SHRINK (a read margin for third-party use

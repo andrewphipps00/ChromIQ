@@ -206,7 +206,11 @@ def test_check_page_alignment_flags_and_logs(tmp_path, _app):
     from ui.dialogs.scanin_dialog import ScannerProfileDialog
     from workflow.scanin_runner import ScaninParams
     scan, boxes, corners, exp = _dense_fixture(tmp_path, 0.40)
-    (tmp_path / "x.cht").write_text(_dense_cht_text(boxes))
+    # Production always hands the probe a sample-area-shrunk cht (the
+    # prepare pipeline); the dialog's box grow-back assumes it. Mirror that.
+    from workflow.scanin_runner import cht_with_sample_area
+    (tmp_path / "x.cht").write_text(
+        cht_with_sample_area(_dense_cht_text(boxes), 0.6))
     f = ["SAMPLE_ID", "RGB_R", "RGB_G", "RGB_B", "XYZ_X", "XYZ_Y", "XYZ_Z"]
     rows = [[n, v, v, v, v, v, v] for n, v in exp.items()]
     _write_cgats(scan.parent / f"{scan.stem}-scanner.ti3", f, rows)
@@ -544,10 +548,10 @@ def test_pulled_corner_is_detected(tmp_path):
     # The point of the whole feature: the ladder cannot see this — the page is
     # correctly placed everywhere except one corner, so its agreement stays at
     # the ceiling and the placement floor never fires. Only the edge detector
-    # catches it, and only because the count is 3: the 7-box rule shipped
-    # before #119 left this page silent.
+    # catches it. (The 7-box rule shipped before #119 left this page silent;
+    # the rim-following sensor now flags the pulled corner even more
+    # decisively, so only the essential contract is asserted.)
     assert rep.agreement_pct > 99.0
-    assert len([v for v in rep.flank_by_patch.values() if v > 0.30]) < 7
 
 
 def test_flank_min_boxes_setting_gates_the_warning():

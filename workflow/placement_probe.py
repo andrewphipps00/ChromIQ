@@ -32,17 +32,18 @@ from pathlib import Path
 __all__ = ["PlacementReport", "dense_placement_agreement"]
 
 # Share of each FULL patch the edge check's sensing grid covers (Knut's #119
-# activation-box design). The G×G sub-cell grid always spans this much of the
-# patch; which of its cells actually detect is decided by the ACTIVATION box —
-# the real (equal-margin) sample box plus half a sub-cell on every side — so
-# detection follows the sample area's rim at every Patch-sample-area setting,
-# and the outermost cells only wake up at ~80 %. 0.95 calibrated on Knut's
-# real scans (0.90/0.92/0.95 tried): the grid's outer edge stays clear of a
-# contiguous chart's border blur while an aligned 80 % grid passes.
+# activation-box design, refined): the G×G sub-cell grid always spans this
+# much of the patch; which of its cells actually detect is decided by the
+# ACTIVATION box — the real (equal-margin) sample box plus half a sub-cell
+# on every side — so exactly ONE thin ring of cells outside the sample
+# frame senses ahead of it, at every Patch-sample-area setting. The grid is
+# fine (30×30) so that ring is narrow: at the 80 % maximum the sample box
+# spans ≈ 89 % per side and the grid's own outermost ring (at 95 %) is the
+# one that wakes; at ~70 % it goes back to sleep, and so on inwards — no
+# reach cap needed (Knut's correction: the earlier "blur wall" reading of
+# the uncapped numbers was actually the probe detecting REAL local
+# placement error at the test fixture's chart bottom).
 FLANK_GRID_COVER = 0.95
-# Largest share of the patch (per side) the activation box may reach — the
-# calibrated safe zone on a contiguous chart (see its use below).
-FLANK_REACH_MAX = 0.52
 
 
 
@@ -611,13 +612,13 @@ def dense_placement_agreement(
     # design): a G×G grid tiles FLANK_GRID_COVER of the full patch. G = 20;
     # when the scan is too small for that (sub-pixel cells), fall back to
     # 10 — coarser is better than blind.
-    _sample_px = [min((x2 - x1) / 20.0, (y2 - y1) / 20.0)
+    _sample_px = [min((x2 - x1) / 30.0, (y2 - y1) / 30.0)
                   for (x1, y1, x2, y2) in
                   (flank_ixs[b.name][0] for b in named
                    if flank_ixs[b.name][0] is not None)]
     _med_cell = (sorted(_sample_px)[len(_sample_px) // 2]
                  if _sample_px else 0.0)
-    G = 20 if _med_cell >= 1.2 else 10
+    G = 30 if _med_cell >= 1.2 else 15
 
     def cell_peaks(ix):
         """Peak gradient per cell of the G×G grid tiling *ix* with FULL
@@ -661,28 +662,90 @@ def dense_placement_agreement(
     # close to what is actually being READ — instead of at one fixed
     # sensing size for all settings. Per patch, because each patch shape
     # gets its own margin.
+    # The page's own border blur, measured from the scan: walk the line
+    # between horizontally adjacent patch centres and record how many
+    # sampled pixels the luminance step needs from 10 % to 90 % of its
+    # amplitude — the distance a border genuinely "reaches" via its
+    # gradient tail. The activation window may follow the sample box's rim
+    # outward (Knut's one-ring design) only until its sensing edge would
+    # enter that measured zone: there, EVERY cell reads "edge" on a
+    # perfectly aligned grid — demonstrated on the pixel-perfect demo
+    # renders, where the uncapped window flags 23–553 aligned patches at
+    # 70–80 % sample areas depending on the chart's pitch. Nothing is
+    # hard-coded: a sharp, coarse-pitch chart keeps rim-following almost to
+    # the 80 % maximum; a soft scan of a dense chart holds earlier, exactly
+    # where its own optics demand.
+    def _page_blur_px() -> float:
+        by_row: dict[float, list] = {}
+        for b in named:
+            by_row.setdefault(round((b.y1 + b.y2) / 2.0, 1), []).append(b)
+        widths: list[int] = []
+        H, W = lum.shape
+        for row in by_row.values():
+            row = sorted(row, key=lambda b: b.x1)
+            for a, c in zip(row, row[1:]):
+                x0, y0 = warp((a.x1 + a.x2) / 2.0, (a.y1 + a.y2) / 2.0)
+                x1, y1 = warp((c.x1 + c.x2) / 2.0, (c.y1 + c.y2) / 2.0)
+                n = int(max(abs(x1 - x0), abs(y1 - y0)))
+                if n < 6:
+                    continue
+                prof = []
+                for k in range(n + 1):
+                    x_ = int(round(x0 + (x1 - x0) * k / n))
+                    y_ = int(round(y0 + (y1 - y0) * k / n))
+                    if 0 <= x_ < W and 0 <= y_ < H:
+                        prof.append(float(lum[y_, x_]))
+                if len(prof) < 6:
+                    continue
+                lo, hi = prof[0], prof[-1]
+                if abs(hi - lo) < 0.15 * lum_range:
+                    continue
+                q1 = lo + 0.10 * (hi - lo)
+                q9 = lo + 0.90 * (hi - lo)
+                rising = hi > lo
+                i1 = i9 = None
+                for i, v in enumerate(prof):
+                    if i1 is None and ((v >= q1) if rising else (v <= q1)):
+                        i1 = i
+                    if (v >= q9) if rising else (v <= q9):
+                        i9 = i
+                        break
+                if i1 is not None and i9 is not None and i9 >= i1:
+                    widths.append(i9 - i1 + 1)
+                if len(widths) >= 150:
+                    break
+            if len(widths) >= 150:
+                break
+        if not widths:
+            return 3.0
+        widths.sort()
+        return float(widths[len(widths) // 2])
+
+    _blur_px = _page_blur_px()
+
     from workflow.scanin_runner import sample_margin
     active_by_patch: dict[str, list[bool]] = {}
     span_by_patch: dict[str, int] = {}
     for b in named:
         w, h = b.x2 - b.x1, b.y2 - b.y1
         mg = sample_margin(w, h, sample_frac)
+        _ix0 = flank_ixs[b.name][0]
         axes = []
-        for full in (w, h):
+        for ax_i, full in enumerate((w, h)):
             cell = FLANK_GRID_COVER * full / G
             g0 = -FLANK_GRID_COVER * full / 2.0
-            # The activation reach is CAPPED at the calibrated safe zone:
-            # on a contiguous chart the borders' blur-and-distortion tails
-            # reach a good way into each patch (measured on Knut's real
-            # 600 dpi LaserSoft: cells beyond ≈ 55 % of the patch per side
-            # read "edge" on a perfectly aligned grid — 13 flagged patches
-            # at a 40 % sample area, 160+ at 60 %, with uncapped
-            # activation). Below the cap the activation follows the sample
-            # box's rim exactly as designed; a large sample area senses at
-            # the cap, and the placement agreement — which always measures
-            # the full area — covers what lies beyond.
-            a_half = min((full / 2.0 - mg) + cell / 2.0,
-                         FLANK_REACH_MAX * full / 2.0)
+            a_half = (full / 2.0 - mg) + cell / 2.0
+            if _ix0 is not None:
+                px_span = (_ix0[2] - _ix0[0] if ax_i == 0
+                           else _ix0[3] - _ix0[1])
+                if px_span > 0:
+                    upp = (FLANK_GRID_COVER * full) / px_span
+                    # One-sided danger radius: half the measured 10–90 %
+                    # transition (the width straddles the border) plus the
+                    # gradient operator's own 4 px span plus rounding — the
+                    # distance at which a border still lights a cell.
+                    clearance = (_blur_px / 2.0 + 5.0) * upp
+                    a_half = min(a_half, full / 2.0 - clearance)
             axes.append([(g0 + i * cell) < a_half
                          and (g0 + (i + 1) * cell) > -a_half
                          for i in range(G)])
@@ -704,9 +767,14 @@ def dense_placement_agreement(
         if c is None:
             continue
         user_cells[b.name] = [float(v) for v in c]
-        mask = active_by_patch[b.name]
+        # Grain floor from a FIXED inner region (two rings in from the grid
+        # edge), NOT from the active cells: at a small sample area the
+        # active window covers only the squeaky-clean patch centres, the
+        # floor collapsed, and ordinary grain streaks lit up as "edges"
+        # (Knut's refined-model round). A stable region keeps the threshold
+        # meaning the same thing at every Patch-sample-area setting.
         all_peaks.extend(v for k, v in enumerate(user_cells[b.name])
-                         if mask[k])
+                         if 2 <= k // G <= G - 3 and 2 <= k % G <= G - 3)
     fbp: dict[str, float] = {}
     if all_peaks:
         gfloor = float(np.percentile(all_peaks, 75))
@@ -769,8 +837,13 @@ def dense_placement_agreement(
             mask = active_by_patch[n]
             # The required run never exceeds what the active window can
             # hold (a 20 % sample area only wakes ~half the grid), with a
-            # floor of 3 — Knut's original line-vs-dust minimum.
-            need_len = max(3, min(need, span_by_patch[n]))
+            # floor of 3 — Knut's original line-vs-dust minimum. The count
+            # is scaled to the grid (the default 6 was calibrated on 20
+            # cells across a box; at G=30 the same PHYSICAL line length is
+            # 6·30/20 = 9 cells), so a finer grid doesn't quietly lower the
+            # bar and let shorter grain streaks through.
+            need_len = max(3, min(round(need * G / 20.0),
+                                  span_by_patch[n]))
             if not _line_like(vals, mask, need_len):
                 # dust and noise spikes light scattered cells; only a
                 # connected run of hot cells is an edge (Knut).

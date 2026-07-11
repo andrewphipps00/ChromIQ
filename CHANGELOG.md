@@ -1,5 +1,51 @@
 # Changelog
 
+## v3.13.4-beta.9
+
+Knut's activation-box design lands in full (#119) — his correction to the
+beta-7 reading was right, and the fixed cap is gone.
+
+### Changed
+- **Edge detection implements Knut's refined sensing model, uncapped.** The
+  sensing grid is now 30×30 sub-cells over 95 % of each full patch, and only
+  the cells the activation box touches (the real sample box plus half a
+  sub-cell on every side) detect — so exactly one thin ring senses ahead of
+  the sample area's rim, at every *Patch sample area* setting, and at the
+  80 % maximum the grid's own outermost ring is the one awake. Knut's
+  challenge to the beta-7 "blur wall" reading was correct: the numbers
+  behind the old 52 %-per-side cap were the probe detecting REAL local
+  placement error in the test fixture (verified on the scan pixels — the
+  LaserSoft's bottom rows genuinely overlap their neighbours by 5–10 %
+  under scanin's own solved placement), not an optical limit at those
+  areas. The fixed cap is removed.
+- **The sensing window yields only to the page's own measured blur.** The
+  probe measures each scan's border transition width (10–90 %, sampled
+  across ~150 patch borders) and stops the activation from growing only
+  where its sensing edge would enter that zone — because there, everything
+  reads "edge" even on a perfectly aligned grid (demonstrated on the
+  pixel-perfect demo renders: 23–553 aligned patches flagged at 70–80 %
+  without the hold; with it, ZERO on every demo target at every sample
+  area from 20–80 %, while a quarter-patch shift still fires with dozens
+  to hundreds of hits). Nothing is hard-coded: a sharp, coarse-pitch chart
+  keeps rim-following almost to the maximum; a soft scan of a dense chart
+  holds earlier, exactly where its own optics demand.
+- The straight-run rule's cell count now scales with the grid (default 6 on
+  the old 20-cell grid = 9 on the 30-cell grid), so the finer grid doesn't
+  quietly lower the physical bar that keeps grain streaks out; and the
+  grain floor comes from a fixed inner region instead of the active cells,
+  so the threshold means the same thing at every sample-area setting (at
+  small areas the active window covered only squeaky-clean patch centres
+  and ordinary grain lit up as "edges").
+
+### Verified (Knut's requests)
+- The full aligned matrix (20–80 % sample areas) and the trigger-distance
+  table were regenerated for both real scans and the demo targets — see
+  issue #119. The sample-area arithmetic he spot-checked on the CMP-4 demo
+  (230 px patch at 60 %) is pinned by a test at his exact numbers: the
+  drawn box is 178.16 px per side = 59.99…% of the patch area; the extra
+  ~2 px in a screenshot measurement is the 1.4 px outline, which is stroked
+  centred on the mathematical boundary.
+
 ## v3.13.4-beta.8
 
 Loading a chart now restores the settings it was made with (a
