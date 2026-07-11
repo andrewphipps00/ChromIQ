@@ -219,7 +219,7 @@ DEFAULTS: dict[str, Any] = {
     # only a handful of patches near that corner ever straddle a border.
     "scanner_flank_limit":       0.20,
     # 0 = edge detection off (the other misalignment checks stay active).
-    "scanner_flank_min_boxes":   3,
+    "scanner_flank_min_boxes":   2,
     # How many interconnected sensing sub-cells inside ONE reading box must
     # carry an edge — in a straight run, since a border is a line — before
     # that box counts as sitting on an edge (Knut, #119). Guards against
@@ -410,7 +410,7 @@ def thresholds_for_combo(
 # Bump when a shipped default changes in a way that must reach users who have
 # the OLD default persisted. Settings → Save writes every key, so a stored
 # value otherwise pins a user to the old behaviour for good.
-SETTINGS_SCHEMA = 2
+SETTINGS_SCHEMA = 3
 
 # key → the old default it must no longer be stuck on. Only a stored value
 # EQUAL to the old default is dropped (so it falls through to the new one); a
@@ -428,6 +428,10 @@ _SUPERSEDED_DEFAULTS: dict[str, float] = {
     # schema 2: with the per-patch agreement a correct grid reads ≥ 90 % and
     # crossings collapse fast, so the floor moves up to 0.87 (Knut's number).
     "scanner_check_agreement": 0.85,
+    # schema 3 (#119, Knut's beta.4 test): with the straight-run cell rule an
+    # aligned scan leaves at most 1 edge-flagged patch, so 2 warns earlier
+    # without false alarms (his preference after testing).
+    "scanner_flank_min_boxes": 3,
 }
 
 

@@ -168,13 +168,19 @@ def test_aligned_real_scan_stays_silent(target):
     assert n < MIN_BOXES, f"aligned scan flags {n} boxes (limit {LIMIT})"
 
 
-def test_small_shift_stays_silent(target):
+def test_small_shift_flags_at_most_isolated_patches(target):
     """A tenth of a patch cannot put a box rim (25 % of the pitch away) on a
-    border, so it must not warn."""
+    border, so at most the target's few borderline structured patches (grain
+    streaks, printed bars right at the limit) may count — never the broad
+    detection a real crossing produces. With Knut's default of 2 the page MAY
+    warn here (the grid genuinely is a tenth of a patch off, and the
+    placement agreement flags it too); what must not happen is a mass of
+    boxes reading "on an edge"."""
     tif, boxes, corners, quad, exp, px = target
     shifted = [(x + 0.10 * px, y) for x, y in corners]
     n = _n_on_edge(tif, boxes, shifted, quad, exp)
-    assert n < MIN_BOXES, f"10 % shift flags {n} boxes"
+    n0 = _n_on_edge(tif, boxes, corners, quad, exp)
+    assert n <= n0 + 2, f"10 % shift flags {n} boxes (aligned: {n0})"
 
 
 def test_fifth_of_a_patch_shift_is_detected(target):

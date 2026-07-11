@@ -63,8 +63,17 @@ def test_cht_shrinks_boxes_per_axis_keeping_aspect():
     out2 = cht_with_sample_area(tall, 0.6)
     assert f"{20 * lin:g} {40 * lin:g}" in out2
     assert "BOX_SHRINK 0.0" in out2      # inserted when absent
-    # Full area → unchanged.
-    assert cht_with_sample_area(_CHT, 1.0) == _CHT
+
+
+def test_full_area_still_pins_baked_box_shrink():
+    """#119 (Knut's ChromIQ_scanner_target_480): every ChromIQ chart .cht
+    carries a baked-in default BOX_SHRINK (a read margin for third-party use
+    of the sidecar). At a 100 % sample area the boxes stay untouched but the
+    baked shrink must STILL be pinned to 0 — otherwise "100 %" silently read
+    ≈ 50 % of each patch."""
+    out = cht_with_sample_area(_CHT, 1.0)
+    assert "  X A01 A01 _ _ 40 40 20 20 0 0" in out    # boxes untouched
+    assert "BOX_SHRINK 0.0" in out and "BOX_SHRINK 6.000" not in out
 
 
 def test_marquee_sample_fraction_clamps(qtbot=None):

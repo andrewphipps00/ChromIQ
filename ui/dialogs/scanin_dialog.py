@@ -490,7 +490,7 @@ class ScannerProfileDialog(_ToolDialogBase):
         "• A standard target you own. A bought reflective target such as an IT8 "
         "(for example Wolf Faust), an X-Rite ColorChecker or a LaserSoft target. "
         "Pick its type from the list and load the reference data file that came "
-        "with it (.cie / .txt).\n\n"
+        "with it (.cie / .txt — or a .ti3 you measured from it yourself).\n\n"
         "Then capture the target on the device you want to profile — scan it, or "
         "for a camera photograph it — as a plain RGB TIFF, with the device's own "
         "colour correction turned OFF. When scanning, use 600 dpi or more — "
@@ -933,7 +933,7 @@ class ScannerProfileDialog(_ToolDialogBase):
         v.addWidget(self._cht_row_w)
 
         v.addLayout(self._labelled(
-            tr("Target reference data (.cie / .txt / .cxf):"), tr("Reference data"),
+            tr("Target reference data (.cie / .txt / .ti3 / .cxf):"), tr("Reference data"),
             tr("The colour data file that came with your physical target — it "
             "lists the true colour of every patch. It's specific to your "
             "target's exact batch, so it can't be bundled; point ChromIQ at your "
@@ -943,7 +943,10 @@ class ScannerProfileDialog(_ToolDialogBase):
             "target came in and converts it for you if needed:\n\n"
             "• Ready to use (used as-is): a .cie, .txt or .ti3 that already lists "
             "XYZ or Lab colour — for example Wolf Faust IT8, HutchColor HCT or "
-            "LaserSoft DCPro.\n"
+            "LaserSoft DCPro. A .ti3 is what you get when you measure the "
+            "target yourself with a spectrophotometer — the most accurate "
+            "reference possible for your exact copy, better than the maker's "
+            "batch average.\n"
             "• An X-Rite .cxf (for example LaserSoft's ISO 12641-2 targets): "
             "ChromIQ converts it automatically.\n"
             "• A raw or spectral .txt (for example the Christophe Métairie CMP "
@@ -1186,7 +1189,10 @@ class ScannerProfileDialog(_ToolDialogBase):
         form.addWidget(self._hint_label(tr(
             "Drag the four corners onto the target's patch area until the green "
             "grid sits on the real patches. ChromIQ then reads each patch and "
-            "builds the profile.")))
+            "builds the profile. On a ChromIQ chart the thin spacer strips "
+            "printed above the first and below the last row stay OUTSIDE the "
+            "grid — the dotted line shows where the printed block ends, so "
+            "the corners belong on the patches just inside it.")))
         form.addWidget(self._hint_label(tr(
             "Drag inside the grid to move it · drag a corner to reshape it · drag "
             "the background to pan · scroll (or ⌘/Ctrl + scroll) to zoom, also "
@@ -1200,10 +1206,10 @@ class ScannerProfileDialog(_ToolDialogBase):
         row_sa = QHBoxLayout()
         row_sa.addWidget(self._sa_label)
         self._sample_area = NoScrollSpinBox(self)
-        # Max 80%: the edge detector's outer sensing ring (one cell of the
-        # 11×11 grid) extends one ninth of the box beyond it — at 80% area it
-        # still sits inside a well-aligned patch; at 100% it would always
-        # touch the borders (Knut, #108).
+        # Max 80%: at 100% the reading box would always include the patch
+        # borders' blur; the edge check senses at its own calibrated size
+        # regardless (FLANK_SAMPLE_MAX — see placement_probe), and the
+        # colour mean uses exactly this area (Knut, #108/#119).
         self._sample_area.setRange(20, 80)
         self._sample_area.setValue(60)
         self._sample_area.setSuffix(" %")
@@ -1220,13 +1226,17 @@ class ScannerProfileDialog(_ToolDialogBase):
             "because the edges are where ink can bleed, a thin border may show, or "
             "the grid may sit a hair off. Reading only the clean centre keeps the "
             "measured colour honest.\n\n"
-            "50% is a safe default. Lower it (a smaller square) if your patches are "
+            "60% is a safe default. Lower it (a smaller square) if your patches are "
             "small or the grid isn't perfectly aligned, so you stay well clear of "
             "the edges. Raise it (a bigger square) only for large, cleanly-printed "
             "patches with the grid sitting exactly right, to average over more of "
-            "each colour for a touch less noise. 80% is the maximum — the "
-            "misalignment check senses one ring beyond the square, and that ring "
-            "must stay inside the patch when the grid is aligned.")), 0, Qt.AlignmentFlag.AlignVCenter)
+            "each colour for a touch less noise. 80% is the maximum — beyond that "
+            "the square would always take in the patches' soft borders, and the "
+            "reading would no longer be the pure colour.\n\n"
+            "The misalignment checks look after themselves whatever you pick "
+            "here: the placement agreement always judges the very area you "
+            "chose, and the edge detector senses at the size it was calibrated "
+            "at, so neither needs adjusting when you change this.")), 0, Qt.AlignmentFlag.AlignVCenter)
         form.addLayout(row_sa)
 
         self._build_shot_bar(form)
@@ -2190,6 +2200,22 @@ class ScannerProfileDialog(_ToolDialogBase):
         the marquee and scanin. Falls back to the original layout if the boxes
         aren't a uniform grid or the scan is too small to round."""
         cht = orig_cht
+        # Sweep the prepared files an EARLIER release left next to a ChromIQ
+        # chart before writing this run's set: their naming scheme changed
+        # between betas, so a stale one (old sample area, even an old y-up F
+        # line) can sit beside the current files and mislead anyone
+        # inspecting the folder — Knut's #119 chart carried a months-old
+        # "-sample.cht" whose read zone matched nothing the current release
+        # does. (Standard targets never get prepared files written next to
+        # the bundled .cht, so there is nothing to sweep there.)
+        if not self._standard_mode():
+            for stale in (f"{orig_cht.stem}-sample.cht",
+                          f"{orig_cht.stem}-patchbox.cht",
+                          f"{orig_cht.stem}-patchbox-sample.cht"):
+                try:
+                    (orig_cht.parent / stale).unlink(missing_ok=True)
+                except OSError:
+                    pass
         try:
             text = orig_cht.read_text(errors="ignore")
         except OSError:
@@ -2259,11 +2285,12 @@ class ScannerProfileDialog(_ToolDialogBase):
         return dst
 
     def _apply_sample_area(self, cht: Path, frac: float, base: Path) -> Path:
-        """Write a sibling ``.cht`` whose ``BOX_SHRINK`` samples *frac* of each
-        patch (Knut's patch-sample-area control), and hand scanin that copy. The
-        bundled/original file is never modified. Full-area needs no change."""
-        if frac >= 0.999:
-            return cht
+        """Write a sibling ``.cht`` whose boxes sample *frac* of each patch
+        (Knut's patch-sample-area control, per axis so the read zone keeps the
+        patch's own shape), and hand scanin that copy. The bundled/original
+        file is never modified. Runs at full area too: ChromIQ charts carry a
+        baked-in default ``BOX_SHRINK`` that must be pinned to 0, or "100 %"
+        silently reads ≈ 50 % of each patch (Knut, #119)."""
         from workflow.scanin_runner import cht_with_sample_area
         try:
             new_text = cht_with_sample_area(cht.read_text(errors="ignore"), frac)
@@ -2772,10 +2799,10 @@ class ScannerProfileDialog(_ToolDialogBase):
         and the box reads clean at some nearby position.
 
         ``scanner_flank_min_boxes`` such boxes flag the page whatever the
-        ladder says; 0 turns edge detection off. A few boxes can be a
-        target's own printed features near box rims (Knut's aligned
-        LaserSoft leaves two), which is why the default is 3 and not 1."""
-        need = int(self._settings.get("scanner_flank_min_boxes", 3))
+        ladder says; 0 turns edge detection off. The straight-run cell rule
+        keeps grain and a target's own printed features out of the count
+        (Knut's aligned LaserSoft leaves at most one), so the default is 2."""
+        need = int(self._settings.get("scanner_flank_min_boxes", 2))
         if need <= 0:
             return []
         lim = float(self._settings.get("scanner_flank_limit", 0.20))

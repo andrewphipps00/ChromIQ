@@ -42,6 +42,26 @@ def test_grid_empty_is_safe():
     assert GridSpec.from_patches([]).rects == []
 
 
+def test_ink_rect_extends_one_spacer_beyond_the_patches():
+    """#119 (Knut): an engine chart prints spacer strips above the first and
+    below the last patch row, so the visible ink block is bigger than the
+    patch grid the corners belong on. The ink guide is derived from the patch
+    gaps themselves — any spacer size works, and a gap-less chart gets none."""
+    # 2×3 grid, 100×100 patches, 10 px row spacers, columns touching.
+    patches = [{"x": c * 100, "y": r * 110, "w": 100, "h": 100}
+               for r in range(3) for c in range(2)]
+    g = GridSpec.from_patches(patches)
+    assert g.ink_rect is not None
+    u0, v0, u1, v1 = g.ink_rect
+    assert u0 == 0.0 and u1 == 1.0            # columns touch → no x extension
+    assert abs(v0 + 10 / 320) < 1e-9          # one spacer above…
+    assert abs(v1 - (1 + 10 / 320)) < 1e-9    # …and below
+    # no gaps at all → no guide
+    tight = [{"x": c * 100, "y": r * 100, "w": 100, "h": 100}
+             for r in range(3) for c in range(2)]
+    assert GridSpec.from_patches(tight).ink_rect is None
+
+
 def test_grid_is_derived_from_cht_boxes_for_every_bundled_target(qapp):
     """Knut's demand (#108): the selection grid must be built dynamically from
     the .cht box data — every bundled standard target's on-screen rects must

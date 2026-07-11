@@ -226,6 +226,14 @@ class GridSpec:
     #   space as ``rects`` (so it maps through the same quad homography); extends
     #   outside [0,1] since fiducials sit around the patches. One geometry drives
     #   the grid, the on-screen fiducial frame, and the scanin -F derivation.
+    ink_rect: tuple[float, float, float, float] | None = None
+    # ^ engine charts (#119, Knut): the printed ink block extends one spacer
+    #   strip beyond the patch grid on sides that have spacers, so a user
+    #   naturally frames the WRONG boundary. This is that ink boundary
+    #   (u0, v0, u1, v1) in the same normalised space, derived from the patch
+    #   gaps themselves — any spacer size, or absent (None) when there are no
+    #   gaps. Drawn as a dashed guide so "corners on the patches, spacers
+    #   outside" is visible instead of guessed.
 
     @staticmethod
     def _grid_structure(patches, sw, sh):
@@ -274,8 +282,26 @@ class GridSpec:
         rects = [((p["x"] - x0) / sw, (p["y"] - y0) / sh, p["w"] / sw, p["h"] / sh)
                  for p in patches]
         nc, nr, cells = cls._grid_structure(patches, sw, sh)
+        # The printed ink block extends one spacer strip beyond the patch
+        # grid wherever the chart HAS spacers (#119, Knut) — and the spacer
+        # is exactly the gap the patches keep between themselves, so it can
+        # be read off the patch data for any spacer size, or skipped when
+        # the chart has none.
+        def _gap(lo_key: str, size_key: str) -> float:
+            edges = sorted({round(p[lo_key], 2) for p in patches})
+            gaps = []
+            for a, b in zip(edges, edges[1:]):
+                span = min(p[size_key] for p in patches
+                           if round(p[lo_key], 2) == a)
+                g = b - a - span
+                if g > 0.5:                      # a real printed spacer
+                    gaps.append(g)
+            return sorted(gaps)[len(gaps) // 2] if gaps else 0.0
+        gx, gy = _gap("x", "w"), _gap("y", "h")
+        ink = ((-gx / sw, -gy / sh, 1.0 + gx / sw, 1.0 + gy / sh)
+               if (gx or gy) else None)
         return cls(rects, aspect=sw / sh, ncols=nc, nrows=nr, cells=cells,
-                   exact_rects=True)
+                   exact_rects=True, ink_rect=ink)
 
     @classmethod
     def from_cht(cls, text: str) -> "GridSpec":
@@ -571,6 +597,21 @@ class ScanGridMarquee(QWidget):
             p.drawPolygon(*[self._to_widget(*apply_h(h, x, y)) for x, y in
                             ((iu, iv), (iu + iw, iv), (iu + iw, iv + ih), (iu, iv + ih))])
         p.setBrush(Qt.BrushStyle.NoBrush)
+
+        # Ink-block guide (engine charts, #119): a dashed line one spacer
+        # strip outside the patch grid, marking where the PRINTED block ends.
+        # The corners belong on the patches — the spacer strips above/below
+        # the outer rows stay outside the grid — and without this line users
+        # framed the visible ink boundary instead (Knut).
+        ir = self._grid.ink_rect
+        if ir is not None:
+            u0, v0, u1, v1 = ir
+            ipen = QPen(QColor(86, 214, 165, 150))
+            ipen.setWidthF(1.2)
+            ipen.setStyle(Qt.PenStyle.DotLine)
+            p.setPen(ipen)
+            p.drawPolygon(*[self._to_widget(*apply_h(h, x, y)) for x, y in
+                            ((u0, v0), (u1, v0), (u1, v1), (u0, v1))])
 
         # Fiducial frame — the band the scanin -F extrapolates to when "Use
         # fiducial marks" is on. Drawn OUTSIDE the patch grid (its rect extends

@@ -79,23 +79,31 @@ def cht_with_sample_area(cht_text: str, frac: float) -> str:
     the original box (√f per side = *f* of the area); the increments — the
     patch pitch — are untouched, and ``BOX_SHRINK`` is pinned to 0 so scanin
     reads exactly these boxes. Fiducials (``F``) and diagnostic marks (``D``)
-    are never moved. Unchanged for full-area (≥ 0.999) or box-less text."""
+    are never moved. Box-less text is returned unchanged.
+
+    Full area (≥ 0.999) keeps the boxes but still pins ``BOX_SHRINK`` to 0:
+    ChromIQ's own chart ``.cht``\\ s carry a baked-in default shrink (a sane
+    read margin for third-party use of the sidecar), and letting it survive
+    made "100 %" silently read ≈ 50 % of each patch on ChromIQ charts
+    (Knut, #119)."""
     frac = max(0.05, min(1.0, float(frac)))
-    if frac >= 0.999 or not _XY_LINE.search(cht_text):
+    if not _XY_LINE.search(cht_text):
         return cht_text
-    lin = frac ** 0.5
+    if frac < 0.999:
+        lin = frac ** 0.5
 
-    def _shrink(m: re.Match) -> str:
-        w, h = float(m.group(2)), float(m.group(3))
-        ox, oy = float(m.group(4)), float(m.group(5))
-        return (f"{m.group(1)}{w * lin:g} {h * lin:g} "
-                f"{ox + w * (1.0 - lin) / 2.0:g} "
-                f"{oy + h * (1.0 - lin) / 2.0:g}{m.group(6)}")
+        def _shrink(m: re.Match) -> str:
+            w, h = float(m.group(2)), float(m.group(3))
+            ox, oy = float(m.group(4)), float(m.group(5))
+            return (f"{m.group(1)}{w * lin:g} {h * lin:g} "
+                    f"{ox + w * (1.0 - lin) / 2.0:g} "
+                    f"{oy + h * (1.0 - lin) / 2.0:g}{m.group(6)}")
 
-    out = _XY_LINE.sub(_shrink, cht_text)
-    if _SHRINK_LINE.search(out):
-        return _SHRINK_LINE.sub(lambda m: f"{m.group(1)}0.0", out, count=1)
-    return out.rstrip() + "\n\nBOX_SHRINK 0.0\n"
+        cht_text = _XY_LINE.sub(_shrink, cht_text)
+    if _SHRINK_LINE.search(cht_text):
+        return _SHRINK_LINE.sub(lambda m: f"{m.group(1)}0.0", cht_text,
+                                count=1)
+    return cht_text.rstrip() + "\n\nBOX_SHRINK 0.0\n"
 
 
 def cht_with_patchbox_fiducials(cht_text: str) -> str:

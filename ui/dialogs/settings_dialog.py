@@ -918,7 +918,7 @@ class SettingsDialog(QDialog):
         # together (Knut, #119):
         #   0,1  profile self-check      3  placement agreement
         #   5,6,7  patch-edge detection
-        defaults = {0: "30", 1: "12", 3: "0.87", 5: "3", 6: "0.20", 7: "6"}
+        defaults = {0: "30", 1: "12", 3: "0.87", 5: "2", 6: "0.20", 7: "6"}
 
         def _row(r: int, label: str, spin, tip_title: str, tip_body: str) -> None:
             g.addWidget(QLabel(label, grp), r, 0)
@@ -999,7 +999,7 @@ class SettingsDialog(QDialog):
         self._scan_flank_min_combo.addItem(tr("Off — don't detect patch edges"), 0)
         for _n in range(1, 10):
             self._scan_flank_min_combo.addItem(str(_n), _n)
-        _cur = int(s.get("scanner_flank_min_boxes", 3))
+        _cur = int(s.get("scanner_flank_min_boxes", 2))
         self._scan_flank_min_combo.setCurrentIndex(
             max(0, self._scan_flank_min_combo.findData(_cur)))
         self._scan_flank_min_combo.setMinimumWidth(120)
@@ -1019,17 +1019,17 @@ class SettingsDialog(QDialog):
                 "single patch lands on a border. Raise it if a target's own "
                 "printed design keeps triggering warnings on grids you know "
                 "are correct.\n\n"
-                "Why the default is 3: a target's own printed features — the "
-                "bars and wedges on a LaserSoft, the step borders on an IT8 — "
-                "are real edges, and even on a perfectly placed grid one or "
-                "two of them fall close enough to a box rim to be counted. On "
-                "real 600 dpi scans of a LaserSoft DC Pro and a Wolf Faust "
-                "IT8, a correct grid leaves at most 2 such patches. Dragging "
-                "one corner of the grid inwards, until a few patches in that "
-                "corner straddle their borders, leaves 4 or more; sliding the "
-                "whole grid a fifth of a patch sideways leaves over a "
-                "hundred. So 3 catches a pulled corner without ever crying "
-                "wolf, while 1 or 2 would warn on a correct grid."))
+                "Why the default is 2: an edge has to look like a straight "
+                "border line before a patch is counted at all (see the "
+                "settings below), so grain, specks and a target's own "
+                "printed features no longer inflate the count — on real "
+                "600 dpi scans of a LaserSoft and a Wolf Faust IT8, a "
+                "correct grid leaves at most 1 counted patch. Dragging one "
+                "corner of the grid inwards, until a few patches in that "
+                "corner straddle their borders, leaves 3 or more; sliding "
+                "the whole grid a fifth of a patch sideways leaves over a "
+                "hundred. So 2 warns at the earliest reliable moment "
+                "without crying wolf on a correct grid."))
         self._scan_flank_spin = NoScrollDoubleSpinBox(grp)
         self._scan_flank_spin.setRange(0.02, 0.50)
         self._scan_flank_spin.setDecimals(2)
@@ -1411,7 +1411,7 @@ class SettingsDialog(QDialog):
         self._scan_check_spin.setValue(float(s.get("scanner_check_agreement", 0.87)))
         self._scan_flank_spin.setValue(float(s.get("scanner_flank_limit", 0.20)))
         self._scan_flank_min_combo.setCurrentIndex(max(0, self._scan_flank_min_combo
-            .findData(int(s.get("scanner_flank_min_boxes", 3)))))
+            .findData(int(s.get("scanner_flank_min_boxes", 2)))))
         self._scan_flank_cells_combo.setCurrentIndex(max(0, self._scan_flank_cells_combo
             .findData(int(s.get("scanner_flank_min_cells", 6)))))
         self._chromiq_refine_check.setChecked(bool(s.get("chromiq_refinement", False)))

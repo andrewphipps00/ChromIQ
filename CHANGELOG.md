@@ -1,5 +1,40 @@
 # Changelog
 
+## v3.13.4-beta.5
+
+Knut's beta-4 follow-ups (#119): ChromIQ-chart alignment polish and the last
+default he asked for.
+
+### Changed
+- **"Warn when this many patches sit on an edge" defaults to 2** (Knut's
+  preference after testing; migrated automatically unless deliberately
+  chosen). With the straight-run cell rule an aligned scan leaves at most one
+  counted patch, so 2 warns at the earliest reliable moment. Help text
+  updated.
+- **The spacer strips on ChromIQ charts are now visible in the alignment
+  view.** Engine charts print thin spacer strips above the first and below
+  the last patch row, so the printed block is slightly taller than the patch
+  grid the corners belong on — a dotted guide now marks where the printed
+  block ends, derived from the chart's own patch data (any spacer size, or
+  absent when a chart has none), and the on-screen help says the spacers stay
+  outside the grid. Standard targets are unaffected.
+- The reference-data picker's label now lists **.ti3** alongside
+  .cie/.txt/.cxf — accepting a .ti3 was always intended (measure the target
+  yourself with a spectrophotometer and you get the most accurate reference
+  possible for your exact copy), but only the file dialog and the ⓘ help knew.
+
+### Fixed
+- **"100 % sample area" no longer silently reads ≈ 50 % on ChromIQ charts.**
+  Every ChromIQ chart's `.cht` ships with a baked-in default read margin
+  (`BOX_SHRINK`, ≈ the old 50 % sample area) for third-party use of the
+  sidecar; the reading pipeline neutralised it at every sample area except
+  exactly 100 %, where it survived. It is now pinned to 0 there too.
+- **Stale prepared `.cht` files from earlier releases are swept** from a
+  ChromIQ chart's folder before each read — their naming scheme changed
+  between betas, so a months-old leftover (old sample area, even an old
+  upside-down fiducial line) could sit beside the current files and mislead
+  anyone inspecting the folder.
+
 ## v3.13.4-beta.4
 
 Knut's beta-3 follow-ups (#119): new defaults from his measurements, an

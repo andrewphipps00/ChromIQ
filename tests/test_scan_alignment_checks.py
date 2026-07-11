@@ -669,3 +669,11 @@ def test_migrate_schema2_moves_beta3_defaults(tmp_path):
     assert s.migrate() == []
     assert int(s.get("scanner_flank_min_cells")) == 5
     assert float(s.get("scanner_check_agreement")) == 0.9
+
+    # schema 3: min-boxes default 3 → 2 (Knut's beta.4 preference)
+    s = _fresh("boxes_echo", scanner_flank_min_boxes=3)
+    assert s.migrate() == ["scanner_flank_min_boxes"]
+    assert int(s.get("scanner_flank_min_boxes")) == 2
+    s = _fresh("boxes_chosen", scanner_flank_min_boxes=5)
+    assert s.migrate() == []
+    assert int(s.get("scanner_flank_min_boxes")) == 5
