@@ -31,9 +31,18 @@ from pathlib import Path
 
 __all__ = ["PlacementReport", "dense_placement_agreement"]
 
-# Largest sample-area fraction the EDGE check will sense (see the comment at
-# its use). The colour mean always spans the user's chosen area.
-FLANK_SAMPLE_MAX = 0.50
+# Share of each FULL patch the edge check's sensing grid covers (Knut's #119
+# activation-box design). The G×G sub-cell grid always spans this much of the
+# patch; which of its cells actually detect is decided by the ACTIVATION box —
+# the real (equal-margin) sample box plus half a sub-cell on every side — so
+# detection follows the sample area's rim at every Patch-sample-area setting,
+# and the outermost cells only wake up at ~80 %. 0.95 calibrated on Knut's
+# real scans (0.90/0.92/0.95 tried): the grid's outer edge stays clear of a
+# contiguous chart's border blur while an aligned 80 % grid passes.
+FLANK_GRID_COVER = 0.95
+# Largest share of the patch (per side) the activation box may reach — the
+# calibrated safe zone on a contiguous chart (see its use below).
+FLANK_REACH_MAX = 0.52
 
 
 
@@ -196,8 +205,17 @@ def dense_placement_agreement(
     # pitch (cht units): smallest positive gap between box starts, per axis;
     # falls back to the median box size for single-column/row layouts.
     def _pitch(vals: list[float], fallback: float) -> float:
+        """Patch pitch from the box origins. A gap only counts when it is a
+        meaningful fraction of a box — boxes can't overlap, so the true
+        pitch is never smaller than a box width. Sub-unit float scatter
+        between same-column origins (the sample-area shrink/grow round-trip
+        leaves each box with its own rounding, #119: it made the smallest
+        'gap' ~0.002 units, the ladder offsets collapsed to nothing and
+        every position read identically — agreement pinned at 100.00 %)
+        must never be mistaken for the pitch."""
         u = sorted(set(round(v, 3) for v in vals))
-        gaps = [b - a for a, b in zip(u, u[1:]) if b - a > 1e-3]
+        floor_gap = max(1e-3, 0.25 * fallback)
+        gaps = [b - a for a, b in zip(u, u[1:]) if b - a > floor_gap]
         return min(gaps) if gaps else fallback
     widths = sorted(b.x2 - b.x1 for b in named)
     heights = sorted(b.y2 - b.y1 for b in named)
@@ -249,33 +267,21 @@ def dense_placement_agreement(
         spreads[b.name] = devs
         box_ixs[b.name] = ixs
 
-    # Edge-check sensing boxes scale with the user's sample area UP TO
-    # FLANK_SAMPLE_MAX and are pinned there. Every supported chart's boxes
-    # are contiguous (the neighbour's ink starts exactly at the box edge),
-    # so a larger sensing box plus its outer ring enters the borders'
-    # blur-and-distortion zone and reads "on an edge" on a PERFECTLY
-    # aligned grid — measured on Knut's real 600 dpi LaserSoft: 5 flagged
-    # patches at 55 %, 4 at 60 %, 56 at 70 %, 208 at 80 %, all on his own
-    # aligned placement, while 50 % leaves a single one. No cell rule can
-    # silence that (his D20/Q16 streaks span MORE cells as the box grows).
-    # The per-patch agreement, which always measures the full sample area,
-    # covers contamination of larger colour boxes.
-    flank_frac = min(sample_frac, FLANK_SAMPLE_MAX)
-    if flank_frac >= sample_frac - 1e-9:
-        flank_ixs = box_ixs
-    else:
-        flank_ixs = {}
-        for b in named:
-            cx, cy = (b.x1 + b.x2) / 2.0, (b.y1 + b.y2) / 2.0
-            hx = (b.x2 - b.x1) * flank_frac / 2.0
-            hy = (b.y2 - b.y1) * flank_frac / 2.0
-            ixs = []
-            for ox, oy in offsets:
-                xa, ya = warp(cx + ox - hx, cy + oy - hy)
-                xb, yb = warp(cx + ox + hx, cy + oy + hy)
-                ixs.append(_box_ixs(min(xa, xb), min(ya, yb),
-                                    max(xa, xb), max(ya, yb)))
-            flank_ixs[b.name] = ixs
+    # Edge-check sensing boxes (Knut's #119 activation-box design): the
+    # sensing grid always covers FLANK_GRID_COVER of the FULL patch —
+    # activation, not geometry, follows the Patch-sample-area setting.
+    flank_ixs = {}
+    for b in named:
+        cx, cy = (b.x1 + b.x2) / 2.0, (b.y1 + b.y2) / 2.0
+        hx = (b.x2 - b.x1) * FLANK_GRID_COVER / 2.0
+        hy = (b.y2 - b.y1) * FLANK_GRID_COVER / 2.0
+        ixs = []
+        for ox, oy in offsets:
+            xa, ya = warp(cx + ox - hx, cy + oy - hy)
+            xb, yb = warp(cx + ox + hx, cy + oy + hy)
+            ixs.append(_box_ixs(min(xa, xb), min(ya, yb),
+                                max(xa, xb), max(ya, yb)))
+        flank_ixs[b.name] = ixs
 
     # Chroma planes, swept one at a time (two integral images live at once —
     # keeps memory flat): the edge term takes the strongest spread across
@@ -601,39 +607,34 @@ def dense_placement_agreement(
                     return False
         return True
 
-    # Sub-grid size, decided once for the page: the inner grid tiles the
-    # sample box 18×18 (20×20 with the ring — Knut, #119) so the outer ring
-    # cells are only 1/18 of the box wide. The ring senses OUTSIDE the box,
-    # so its width is exactly how far ahead of the box edge the detector
-    # fires; the old 9×9 ring was twice as wide, warned a few percent of the
-    # box early, and on a zero-gap chart it reached the neighbour's border
-    # at a large sample area even when the grid was perfectly aligned. When
-    # the scan is too small for 18×18 (sub-pixel cells), fall back to 9×9 —
-    # coarser is better than blind.
-    _sample_px = [min((x2 - x1) / 18.0, (y2 - y1) / 18.0)
+    # Sub-grid size, decided once for the page (Knut's #119 activation-box
+    # design): a G×G grid tiles FLANK_GRID_COVER of the full patch. G = 20;
+    # when the scan is too small for that (sub-pixel cells), fall back to
+    # 10 — coarser is better than blind.
+    _sample_px = [min((x2 - x1) / 20.0, (y2 - y1) / 20.0)
                   for (x1, y1, x2, y2) in
                   (flank_ixs[b.name][0] for b in named
                    if flank_ixs[b.name][0] is not None)]
     _med_cell = (sorted(_sample_px)[len(_sample_px) // 2]
                  if _sample_px else 0.0)
-    n_in = 18 if _med_cell >= 1.2 else 9
-    G = n_in + 2
+    G = 20 if _med_cell >= 1.2 else 10
 
     def cell_peaks(ix):
-        """Peak gradient per cell of a G×G grid: the inner n_in×n_in tiles
-        the sample box with FULL coverage (float edges — the old integer
-        cells cropped up to 8 px at the right/bottom, so edges entering from
-        those sides went unseen until much deeper: Knut's beta.142
-        asymmetry), and the outer ring of one cell width sits OUTSIDE the
-        box, detecting a patch border while the box is still APPROACHING it
-        (Knut's ring design). Returns G*G values, row-major."""
+        """Peak gradient per cell of the G×G grid tiling *ix* with FULL
+        coverage (float edges — integer cells cropped up to 8 px at the
+        right/bottom, so edges entering from those sides went unseen until
+        much deeper: Knut's beta.142 asymmetry). Cells whose centre falls
+        outside the user's marquee (possible when a boundary patch's box is
+        probed at a nearby position) would see the chart's frame — expected
+        structure — and read 0. Returns G*G values, row-major."""
         xa, ya, xb, yb = ix
-        cw, ch = (xb - xa) / float(n_in), (yb - ya) / float(n_in)
+        cw, ch = (xb - xa) / float(G), (yb - ya) / float(G)
         if cw < 1 or ch < 1:
             return None
-        x0, y0 = xa - cw, ya - ch
-        xs = [int(round(x0 + i * cw)) for i in range(G + 1)]
-        ys = [int(round(y0 + j * ch)) for j in range(G + 1)]
+        xs = [int(round(xa + i * cw)) for i in range(G + 1)]
+        ys = [int(round(ya + j * ch)) for j in range(G + 1)]
+        quad_safe = all(_in_quad(x_, y_) for x_, y_ in
+                        ((xa, ya), (xb, ya), (xb, yb), (xa, yb)))
         H, W = grad.shape
         vals = []
         for j in range(G):
@@ -643,15 +644,56 @@ def dense_placement_agreement(
                 if bx - ax < 1 or by - ay < 1:
                     vals.append(0.0)
                     continue
-                if (i == 0 or i == G - 1 or j == 0 or j == G - 1) and \
+                if not quad_safe and \
                         not _in_quad((ax + bx) / 2.0, (ay + by) / 2.0):
                     vals.append(0.0)
                     continue
                 vals.append(float(grad[ay:by, ax:bx].max()))
         return vals
 
-    # Grain floor from the user's own boxes: print grain and scanner noise
-    # raise every sub-cell; an edge only the cells it crosses.
+    # Activation (Knut's #119 design): only the sub-cells that the SAMPLE
+    # box reaches take part in edge detection — the "activation box" is the
+    # real (equal-margin) read zone plus half a sub-cell on every side,
+    # centred on the patch, and a sub-cell is active when that box touches
+    # it. So detection follows the sample area's rim: a small sample box
+    # only wakes the middle of the grid, an 80 % one reaches the outermost
+    # cells, and at every setting the warning fires when a border comes
+    # close to what is actually being READ — instead of at one fixed
+    # sensing size for all settings. Per patch, because each patch shape
+    # gets its own margin.
+    from workflow.scanin_runner import sample_margin
+    active_by_patch: dict[str, list[bool]] = {}
+    span_by_patch: dict[str, int] = {}
+    for b in named:
+        w, h = b.x2 - b.x1, b.y2 - b.y1
+        mg = sample_margin(w, h, sample_frac)
+        axes = []
+        for full in (w, h):
+            cell = FLANK_GRID_COVER * full / G
+            g0 = -FLANK_GRID_COVER * full / 2.0
+            # The activation reach is CAPPED at the calibrated safe zone:
+            # on a contiguous chart the borders' blur-and-distortion tails
+            # reach a good way into each patch (measured on Knut's real
+            # 600 dpi LaserSoft: cells beyond ≈ 55 % of the patch per side
+            # read "edge" on a perfectly aligned grid — 13 flagged patches
+            # at a 40 % sample area, 160+ at 60 %, with uncapped
+            # activation). Below the cap the activation follows the sample
+            # box's rim exactly as designed; a large sample area senses at
+            # the cap, and the placement agreement — which always measures
+            # the full area — covers what lies beyond.
+            a_half = min((full / 2.0 - mg) + cell / 2.0,
+                         FLANK_REACH_MAX * full / 2.0)
+            axes.append([(g0 + i * cell) < a_half
+                         and (g0 + (i + 1) * cell) > -a_half
+                         for i in range(G)])
+        ax_, ay_ = axes
+        active_by_patch[b.name] = [ax_[i] and ay_[j]
+                                   for j in range(G) for i in range(G)]
+        span_by_patch[b.name] = min(sum(ax_), sum(ay_))
+
+    # Grain floor from the user's own boxes — ACTIVE cells only: print
+    # grain and scanner noise raise every cell; an edge only the cells it
+    # crosses; inactive cells are not read at all.
     user_cells: dict[str, list[float]] = {}
     all_peaks: list[float] = []
     for b in named:
@@ -662,12 +704,9 @@ def dense_placement_agreement(
         if c is None:
             continue
         user_cells[b.name] = [float(v) for v in c]
-        # Grain floor from the INNER cells only: the outer ring's whole job
-        # is to sit near borders, so its peaks are edge signal, not grain —
-        # letting them into the floor inflates the threshold until real
-        # edges stop registering.
+        mask = active_by_patch[b.name]
         all_peaks.extend(v for k, v in enumerate(user_cells[b.name])
-                         if 1 <= k // G <= n_in and 1 <= k % G <= n_in)
+                         if mask[k])
     fbp: dict[str, float] = {}
     if all_peaks:
         gfloor = float(np.percentile(all_peaks, 75))
@@ -680,8 +719,8 @@ def dense_placement_agreement(
         k_ring = min(steps, max(1, int(round(0.20 / step_frac))))
         ring_ix = [1 + d * steps + (k_ring - 1) for d in range(8)]
 
-        def hot_count(vals) -> int:
-            return int(sum(1 for v in vals if v > thr))
+        def hot_count(vals, mask) -> int:
+            return int(sum(1 for v, a in zip(vals, mask) if a and v > thr))
 
         # "Clean" for the clean-nearby test means AS CLEAN AS THIS PAGE GETS,
         # not literally noise-free: on a noisy scan the sensor speckle alone
@@ -693,34 +732,24 @@ def dense_placement_agreement(
         # through (Knut, #119: detection 12–15 % late on the demo targets).
         # The bar is the page's median hot-cell count, so quiet real scans
         # keep the strict ≤1 and noisy pages get their own baseline.
-        _counts = sorted(hot_count(v) for v in user_cells.values())
+        _counts = sorted(hot_count(v, active_by_patch[n])
+                         for n, v in user_cells.items())
         clean_bar = max(1, _counts[len(_counts) // 2] if _counts else 1)
 
         need = max(2, int(flank_min_cells))
 
-        # A qualifying group must also LOOK like a border: it must contain a
-        # STRAIGHT contiguous run of hot cells, parallel to a box side, at
-        # least a third of the box long. The marquee grid is aligned to the
-        # patch grid, so a real border always crosses the box near-parallel
-        # to one of its edges — and a corner crossing (two borders at once)
-        # contains such a run along each. Grain fails it: a speck lights a
-        # compact clump with no length, and a diagonal streak never puts
-        # more than 2–3 hot cells in any single row or column (measured on
-        # Knut's real LaserSoft: his false positives Q16/D20 are a 3×3 clump
-        # and an 8×5 diagonal; every genuine pulled-corner hit carries a
-        # straight run of 8+).
-        need_len = max(need, n_in // 3)
-
-        def _line_like(vals) -> bool:
+        def _line_like(vals, mask, need_len) -> bool:
             """Knut's side-by-side rule (#119): a border line crossing the
-            box runs through ``flank_min_cells``+ INTERCONNECTED sub-cells —
-            each hugging the next on one of its four sides — while dust
-            specks scatter and don't connect. The interconnected cells must
-            form a straight contiguous run (a border is a line; see above).
-            Any separate run that reaches the length flags the patch, so
-            grain elsewhere in the box can't mask a real edge."""
-            hot = [v > thr for v in vals]
-            if sum(hot) < need:
+            active window runs through ``flank_min_cells``+ INTERCONNECTED
+            sub-cells — each hugging the next on one of its four sides —
+            while dust specks scatter and don't connect. The interconnected
+            cells must form a straight contiguous run (a border is a line,
+            near-parallel to a box side since the grid is aligned to the
+            chart); inactive cells break a run. Any separate run that
+            reaches the length flags the patch, so grain elsewhere in the
+            window can't mask a real edge."""
+            hot = [a and v > thr for v, a in zip(vals, mask)]
+            if sum(hot) < need_len:
                 return False
             for j in range(G):                    # horizontal runs
                 run = 0
@@ -737,7 +766,12 @@ def dense_placement_agreement(
             return False
 
         for n, vals in user_cells.items():
-            if not _line_like(vals):
+            mask = active_by_patch[n]
+            # The required run never exceeds what the active window can
+            # hold (a 20 % sample area only wakes ~half the grid), with a
+            # floor of 3 — Knut's original line-vs-dust minimum.
+            need_len = max(3, min(need, span_by_patch[n]))
+            if not _line_like(vals, mask, need_len):
                 # dust and noise spikes light scattered cells; only a
                 # connected run of hot cells is an edge (Knut).
                 fbp[n] = 0.0
@@ -751,14 +785,14 @@ def dense_placement_agreement(
                 if ix is None:
                     continue
                 c = cell_peaks(ix)
-                if c is not None and hot_count(c) <= clean_bar:
+                if c is not None and hot_count(c, mask) <= clean_bar:
                     clean_nearby = True
                     break
             if not clean_nearby:
                 fbp[n] = 0.0
                 continue
-            hot = sorted(((v - gfloor) / lum_range for v in vals),
-                         reverse=True)
+            hot = sorted(((v - gfloor) / lum_range
+                          for v, a in zip(vals, mask) if a), reverse=True)
             fbp[n] = max(0.0, hot[min(3, len(hot)) - 1])
     rep.flank_by_patch = fbp
     return rep

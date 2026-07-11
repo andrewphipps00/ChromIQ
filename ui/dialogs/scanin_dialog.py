@@ -2227,23 +2227,17 @@ class ScannerProfileDialog(_ToolDialogBase):
             text = orig_cht.read_text(errors="ignore")
         except OSError:
             text = None
-        # Engine charts' geometry IS their render's pixel truth — rectarg's
-        # integer-edge redistribution would move scanin's sampling up to
-        # ~20 % of a patch off the printed columns (Basti, #108 showcase).
-        # The realignment stays for rectarg-rendered standard targets, whose
-        # images really do sit on those edges.
-        engine_chart = bool(not self._standard_mode() and self._layout
-                            and self._layout.get("patches"))
-        if (text is not None and corners and len(corners) == 4
-                and not engine_chart):
-            import math
-            wpx = math.hypot(corners[1][0] - corners[0][0], corners[1][1] - corners[0][1])
-            hpx = math.hypot(corners[3][0] - corners[0][0], corners[3][1] - corners[0][1])
-            from ui.scan_grid_marquee import rectarg_align_cht
-            aligned = rectarg_align_cht(text, wpx, hpx)
-            if aligned != text:
-                cht = base.parent / f"{orig_cht.stem}-{tag}-aligned.cht"
-                cht.write_text(aligned)
+        # The chart's own float geometry is used as-is for EVERY chart kind
+        # (#119, Knut's CMP Studio find). The old rectarg "integer edge"
+        # realignment assumed the image was rendered at exactly the corner
+        # distance — true for nothing: a hand-placed corner is a few pixels
+        # off, which shifts the integer remainder distribution and drags the
+        # INTERIOR columns up to ~15 % of a patch off the image mid-grid
+        # (his diagnostic: corners and edge columns aligned, middle adrift),
+        # and a real printed target is uniform, never integer-edged. The
+        # demo scans are now painted on the same float geometry, so all
+        # three — image, marquee, scanin — agree without any rebuilding.
+        _ = text  # (read above so an unreadable cht still falls through)
         cht = self._apply_fiducial_frame(cht, base)
         return self._apply_sample_area(cht, frac, base)
 

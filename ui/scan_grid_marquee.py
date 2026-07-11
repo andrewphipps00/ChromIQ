@@ -576,22 +576,13 @@ class ScanGridMarquee(QWidget):
         sample.setWidthF(1.4)
         fill = QColor(86, 214, 165, 40)
 
-        # Build the list of full-cell (u, v, w, hh) rects. When the boxes sit on a
-        # uniform grid (gaps allowed), place EACH box on rectarg's exact integer
-        # edges for its (col, row) at the placed quad's pixel size — so the interior
-        # lines up with a rounded rectarg image, not just the pinned corners.
-        # Otherwise fall back to each box's own rect.
-        nc, nr, idx = self._grid.ncols, self._grid.nrows, self._grid.cells
-        if nc and nr and idx and not self._grid.exact_rects:
-            c = self._corners
-            wpx = ((c[1][0] - c[0][0]) ** 2 + (c[1][1] - c[0][1]) ** 2) ** 0.5
-            hpx = ((c[3][0] - c[0][0]) ** 2 + (c[3][1] - c[0][1]) ** 2) ** 0.5
-            ue = rectarg_edges(wpx, nc)
-            ve = rectarg_edges(hpx, nr)
-            cells = [(ue[ci], ve[ri], ue[ci + 1] - ue[ci], ve[ri + 1] - ve[ri])
-                     for (ci, ri) in idx]
-        else:
-            cells = self._grid.rects
+        # Every chart draws its own float box rects (#119, Knut's CMP Studio
+        # find): the old integer-edge rebuild placed interior cells for the
+        # CORNER distance's pixel size, which matches an image only when the
+        # corners are pixel-exact — and the demo scans are now painted on
+        # the same float geometry the .cht carries, so the drawn grid, the
+        # image and scanin agree without any rebuilding.
+        cells = self._grid.rects
 
         for (u, v, w, hh) in cells:
             p.setPen(outline)

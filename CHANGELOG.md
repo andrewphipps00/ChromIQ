@@ -1,5 +1,44 @@
 # Changelog
 
+## v3.13.4-beta.7
+
+Knut's beta-6 round (#119): the stuck-at-100 % agreement bug, the CMP Studio
+mid-grid drift, and his activation-box edge-detection design.
+
+### Fixed
+- **Placement agreement no longer sticks at 100.00 % (#119).** On realigned
+  charts (LaserSoft, CMP Digital Target 4) the sample-area shrink/grow
+  round-trip left each box with its own sub-unit rounding; the probe's pitch
+  detector mistook that float scatter for a ~0.002-unit "pitch", the whole
+  measuring ladder collapsed onto one spot, and every position read
+  identically — 100.00 % everywhere, even a patch off. A gap now only counts
+  as the pitch when it is at least a quarter of a box wide.
+- **The interior of the grid no longer drifts off the image mid-chart
+  (Knut's CMP Digital Target Studio find).** The old "integer edge" rebuild
+  placed interior columns for the corner distance's exact pixel size — a
+  hand-placed corner is a few pixels off, which shifted the remainder
+  distribution and dragged middle columns up to ~15 % of a patch off the
+  image (corners and edge columns looked fine). Every chart now uses its own
+  float geometry in all three places — the drawn grid, the prepared `.cht`,
+  and the demo scans, which are rendered on that same geometry — so they
+  agree at any placement, and real scans (which were never integer-edged)
+  gain accuracy too.
+
+### Changed
+- **Edge detection follows the sample area's rim (Knut's activation-box
+  design, #119).** The sensing grid (20×20 sub-cells) always covers 95 % of
+  each full patch; which cells actually detect is decided by the activation
+  box — the real sample box plus half a sub-cell on every side — so a small
+  sample area only wakes the middle of the grid and detection triggers when
+  a border approaches what is actually being read, at every *Patch sample
+  area* setting (previously the sensing size was pinned, so the trigger
+  point was identical from 50–80 %). The activation reach is capped at the
+  calibrated safe zone (52 % of the patch per side): beyond it, a contiguous
+  chart's border blur reads "edge" on perfectly aligned grids — measured on
+  the real LaserSoft: 13 falsely flagged patches at a 40 % sample area, 160+
+  at 60 %, with the cap none — and the placement agreement, which always
+  measures the full sample area, covers what lies beyond.
+
 ## v3.13.4-beta.6
 
 Knut's beta-5 pixel-measurement round (#119): the selection grid was drawing

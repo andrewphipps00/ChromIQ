@@ -224,36 +224,23 @@ def make_test_scan(cht_path, out_dir):
     W = int((maxx - minx) * scale + 2 * margin); H = int((maxy - miny) * scale + 2 * margin)
     from PIL import ImageDraw
     img = Image.new("RGB", (W, H), (236, 236, 236)); draw = ImageDraw.Draw(img)
-    # Uniform grids render on rectarg's INTEGER cell edges — the same edges the
-    # marquee overlay and the aligned scanin .cht use. Truncating each box's
-    # float position separately drifted up to a pixel per cell against those
-    # edges mid-grid (the corners stay pinned), so the demo scan itself looked
-    # misaligned under the grid (Knut, #108 round 4).
-    cell_edges = None
-    from ui.scan_grid_marquee import GridSpec   # deferred: demo-scan path only
-    grid = GridSpec.from_cht(text)
-    if grid.ncols and grid.nrows and grid.cells:
-        def _int_edges(total: float, n: int) -> list[int]:
-            base = int(total // n); rem = int(round(total - base * n))
-            e = [0]
-            for i in range(n):
-                e.append(e[-1] + base + (1 if i < rem else 0))
-            return e
-        cell_edges = (_int_edges((maxx - minx) * scale, grid.ncols),
-                      _int_edges((maxy - miny) * scale, grid.nrows), grid.cells)
+    # Patches are painted at the .cht's own float geometry, each edge
+    # rounded to the nearest pixel — shared edges round identically, so
+    # adjacent cells stay contiguous with no seams. This is the SAME
+    # geometry the marquee draws and the prepared scanin .cht carries
+    # (#119, Knut's CMP Studio find: the old integer-edge repaint only
+    # matched a grid whose corners were placed pixel-exactly; float
+    # everywhere keeps all three views agreeing to within a pixel at any
+    # placement).
     cie = ['CGATS.17', 'KEYWORD "SAMPLE_LOC"', 'NUMBER_OF_FIELDS 4', 'BEGIN_DATA_FORMAT',
            'SAMPLE_ID XYZ_X XYZ_Y XYZ_Z', 'END_DATA_FORMAT',
            f'NUMBER_OF_SETS {len(boxes)}', 'BEGIN_DATA']
     for i, b in enumerate(boxes):
         r, g, bl = demo_patch_color(i, len(boxes))
-        if cell_edges is not None:
-            xe, ye, cells = cell_edges
-            ci, ri = cells[i]
-            x0 = margin + xe[ci]; x1 = margin + xe[ci + 1]
-            y0 = margin + ye[ri]; y1 = margin + ye[ri + 1]
-        else:
-            x0 = int((b.x1 - minx) * scale + margin); y0 = int((b.y1 - miny) * scale + margin)
-            x1 = int((b.x2 - minx) * scale + margin); y1 = int((b.y2 - miny) * scale + margin)
+        x0 = round((b.x1 - minx) * scale) + margin
+        y0 = round((b.y1 - miny) * scale) + margin
+        x1 = round((b.x2 - minx) * scale) + margin
+        y1 = round((b.y2 - miny) * scale) + margin
         draw.rectangle([x0, y0, x1 - 1, y1 - 1], fill=(r, g, bl))
         # Reference Y = the rendered colour's LUMINANCE (not the green channel):
         # the alignment check rank-compares read luminance against reference Y,
