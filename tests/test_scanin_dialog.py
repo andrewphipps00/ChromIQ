@@ -46,6 +46,20 @@ def _dialog(_app):
     return ScannerProfileDialog(object(), _FakeSettings())
 
 
+def test_marquee_receives_initial_sample_fraction(_app):
+    """#119 (Knut's beta-5 measurement): the spinbox default is set BEFORE its
+    valueChanged connect, so the marquee silently kept its built-in 50 % while
+    scanin read the spinbox's 60 % — the drawn sample boxes were one size
+    smaller than everything the diagnostic image showed. The dialog must push
+    the initial value explicitly."""
+    dlg = _dialog(_app)
+    try:
+        assert abs(dlg._marquee._sample_frac
+                   - dlg._sample_area.value() / 100.0) < 1e-9
+    finally:
+        dlg.deleteLater()
+
+
 def test_profile_type_options_and_mapping(_app):
     dlg = _dialog(_app)
     try:

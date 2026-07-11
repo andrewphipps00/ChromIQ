@@ -2,6 +2,8 @@
 chart's BOX_SHRINK (Knut's request), and the marquee draws the inner read zone."""
 import math
 
+import pytest
+
 from workflow.scanin_runner import sample_area_box_shrink, cht_with_sample_area
 
 _CHT = """
@@ -44,25 +46,43 @@ def test_shrink_from_area_fraction():
     assert sample_area_box_shrink(_CHT, 0.4) > sample_area_box_shrink(_CHT, 0.8)
 
 
-def test_cht_shrinks_boxes_per_axis_keeping_aspect():
-    """#119 (Knut): the read zone must keep each patch's own height-to-width
-    relationship, so the boxes themselves are shrunk √f per axis (centres
-    kept) and BOX_SHRINK — which insets all sides by the same AMOUNT and
-    distorts non-square patches — is pinned to 0."""
-    out = cht_with_sample_area(_CHT, 0.6)
-    lin = math.sqrt(0.6)
-    w = 40 * lin
-    ox = 20 + 40 * (1 - lin) / 2
-    assert f"X A01 A01 _ _ {w:g} {w:g} {ox:g}" in out
-    assert "BOX_SHRINK 0.0" in out and "BOX_SHRINK 6.000" not in out
-    # Fiducials and the reference are untouched.
+@pytest.mark.parametrize("frac", [0.4, 0.5, 0.6, 0.7, 0.8])
+@pytest.mark.parametrize("w,h", [(40.0, 40.0), (20.0, 40.0), (25.62, 51.25)])
+def test_sample_margin_equal_sides_and_exact_area(frac, w, h):
+    """Knut's #119 verification request: for square AND rectangular patches,
+    at 40–80 % sample area, the read zone keeps the SAME distance to the
+    patch border on all four sides while its area is exactly the chosen
+    fraction — and the inverse recovers the full patch from the shrunk box."""
+    from workflow.scanin_runner import sample_margin, sample_margin_inverse
+    m = sample_margin(w, h, frac)
+    assert m > 0
+    sw, sh = w - 2 * m, h - 2 * m
+    assert sw > 0 and sh > 0
+    assert abs(sw * sh - frac * w * h) < 1e-9 * w * h     # exact area
+    # square patches keep the familiar √f-per-side form (no recalibration)
+    if w == h:
+        assert abs(m - w * (1 - math.sqrt(frac)) / 2) < 1e-9
+    # the inverse round-trips
+    assert abs(sample_margin_inverse(sw, sh, frac) - m) < 1e-9
+
+
+@pytest.mark.parametrize("frac", [0.4, 0.6, 0.8])
+def test_cht_boxes_get_equal_margins_per_block(frac):
+    """The prepared .cht encodes the equal-margin rule per box block — the
+    square main grid and a 1:2 GS strip each get their own margin — with
+    BOX_SHRINK pinned to 0 so scanin (and its diagnostic image) read exactly
+    these boxes."""
+    from workflow.scanin_runner import sample_margin
+    cht = _CHT + "  X GS0 GS23 _ _ 20 40 10 300 21 0\n"
+    out = cht_with_sample_area(cht, frac)
+    m1 = sample_margin(40, 40, frac)
+    m2 = sample_margin(20, 40, frac)
+    assert f"X A01 A01 _ _ {40 - 2 * m1:g} {40 - 2 * m1:g} {20 + m1:g} {20 + m1:g}" in out
+    assert f"X GS0 GS23 _ _ {20 - 2 * m2:g} {40 - 2 * m2:g} {10 + m2:g} {300 + m2:g} 21 0" in out
+    # Fiducials and the reference are untouched; increments (pitch) kept.
     assert "F _ _ 0 0 200 0 200 200 0 200" in out
-    assert out.count("\n  X ") == 4 and "EXPECTED XYZ 4" in out
-    # A non-square box keeps its aspect: 20×40 at 60 % area → (20·√f)×(40·√f).
-    tall = "\n\nBOXES 1\n  X GS0 GS0 _ _ 20 40 10 10 0 0\n"
-    out2 = cht_with_sample_area(tall, 0.6)
-    assert f"{20 * lin:g} {40 * lin:g}" in out2
-    assert "BOX_SHRINK 0.0" in out2      # inserted when absent
+    assert "EXPECTED XYZ 4" in out
+    assert "BOX_SHRINK 0.0" in out and "BOX_SHRINK 6.000" not in out
 
 
 def test_full_area_still_pins_baked_box_shrink():

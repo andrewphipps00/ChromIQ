@@ -63,6 +63,33 @@ def sample_area_box_shrink(cht_text: str, frac: float) -> float | None:
     return round(b * (1.0 - frac ** 0.5) / 2.0, 3)
 
 
+def sample_margin(w: float, h: float, frac: float) -> float:
+    """The uniform per-edge inset *m* with ``(w-2m)(h-2m) = frac·w·h`` —
+    Knut's #119 rule for the read zone: the distance from the sample box to
+    the patch border is the SAME on all four sides (it feeds the edge
+    detection), while the sampled area is exactly the chosen fraction. On a
+    square patch this is the familiar ``w·(1-√f)/2``; on a rectangular patch
+    (a Wolf Faust's GS strip) the sample box is a little longer-and-thinner
+    than the patch shape, which is the accepted trade."""
+    from math import sqrt
+    frac = max(0.05, min(1.0, float(frac)))
+    span = w + h
+    disc = span * span - 4.0 * (1.0 - frac) * w * h   # ≥ (w-h)² ≥ 0
+    return (span - sqrt(disc)) / 4.0
+
+
+def sample_margin_inverse(a: float, b: float, frac: float) -> float:
+    """Recover the margin from an already-shrunk box: the *m* with
+    ``a·b = frac·(a+2m)(b+2m)`` — the exact inverse of
+    :func:`sample_margin` (used to grow a prepared .cht's boxes back to the
+    full patches)."""
+    from math import sqrt
+    frac = max(0.05, min(1.0, float(frac)))
+    span = a + b
+    disc = frac * frac * span * span + 4.0 * frac * (1.0 - frac) * a * b
+    return (sqrt(disc) - frac * span) / (4.0 * frac)
+
+
 _XY_LINE = re.compile(
     r"^(\s*[XY]\s+\S+\s+\S+\s+\S+\s+\S+\s+)"
     r"([-+0-9.eE]+)\s+([-+0-9.eE]+)\s+([-+0-9.eE]+)\s+([-+0-9.eE]+)"
@@ -70,15 +97,15 @@ _XY_LINE = re.compile(
 
 
 def cht_with_sample_area(cht_text: str, frac: float) -> str:
-    """Return *cht_text* with every patch box shrunk to sample-area *frac* —
-    per axis, so the sampled region always keeps the patch's own height-to-
-    width relationship (Knut, #119: on tall narrow patches like a Wolf
-    Faust's greyscale strip, the single global ``BOX_SHRINK`` scanin offers
-    insets all four sides by the same AMOUNT and distorts the read zone).
-    Each ``X``/``Y`` block's ``w h ox oy`` become ``w·√f  h·√f`` centred in
-    the original box (√f per side = *f* of the area); the increments — the
-    patch pitch — are untouched, and ``BOX_SHRINK`` is pinned to 0 so scanin
-    reads exactly these boxes. Fiducials (``F``) and diagnostic marks (``D``)
+    """Return *cht_text* with every patch box shrunk to sample-area *frac*,
+    using Knut's #119 equal-margin rule (:func:`sample_margin`): each
+    ``X``/``Y`` block's box is inset by the SAME distance on all four sides,
+    chosen so the remaining area is exactly *frac* of the patch. The margin
+    is computed per block from that block's own ``w h`` — a Wolf Faust's GS
+    strip gets its own, larger margin than the square main grid — and the
+    increments (the patch pitch) are untouched. ``BOX_SHRINK`` is pinned to
+    0 so scanin reads exactly these boxes and the diagnostic image shows
+    exactly what was sampled. Fiducials (``F``) and diagnostic marks (``D``)
     are never moved. Box-less text is returned unchanged.
 
     Full area (≥ 0.999) keeps the boxes but still pins ``BOX_SHRINK`` to 0:
@@ -90,14 +117,12 @@ def cht_with_sample_area(cht_text: str, frac: float) -> str:
     if not _XY_LINE.search(cht_text):
         return cht_text
     if frac < 0.999:
-        lin = frac ** 0.5
-
         def _shrink(m: re.Match) -> str:
             w, h = float(m.group(2)), float(m.group(3))
             ox, oy = float(m.group(4)), float(m.group(5))
-            return (f"{m.group(1)}{w * lin:g} {h * lin:g} "
-                    f"{ox + w * (1.0 - lin) / 2.0:g} "
-                    f"{oy + h * (1.0 - lin) / 2.0:g}{m.group(6)}")
+            mg = sample_margin(w, h, frac)
+            return (f"{m.group(1)}{w - 2.0 * mg:g} {h - 2.0 * mg:g} "
+                    f"{ox + mg:g} {oy + mg:g}{m.group(6)}")
 
         cht_text = _XY_LINE.sub(_shrink, cht_text)
     if _SHRINK_LINE.search(cht_text):

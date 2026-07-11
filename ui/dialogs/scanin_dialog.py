@@ -1216,6 +1216,13 @@ class ScannerProfileDialog(_ToolDialogBase):
         self._sample_area.setMinimumWidth(110)
         self._sample_area.valueChanged.connect(
             lambda v: self._marquee.set_sample_fraction(v / 100.0))
+        # Push the INITIAL value explicitly: setValue() above ran before the
+        # connect, so the signal never fired and the marquee kept its own
+        # built-in 50 % — invisible while the default WAS 50, but the moment
+        # the default moved to 60 the drawn sample boxes silently stayed a
+        # size smaller than everything scanin read (Knut measured it, #119:
+        # grid 50.8 %, diagnostic 60 %).
+        self._marquee.set_sample_fraction(self._sample_area.value() / 100.0)
         row_sa.addWidget(self._sample_area)
         row_sa.addStretch(1)
         row_sa.addWidget(self._tip(
@@ -2835,21 +2842,21 @@ class ScannerProfileDialog(_ToolDialogBase):
         class _Box:
             __slots__ = ("x1", "y1", "x2", "y2", "name")
 
-            def __init__(self, b, grow: float) -> None:
-                cx, cy = (b.x1 + b.x2) / 2.0, (b.y1 + b.y2) / 2.0
-                hw = (b.x2 - b.x1) / 2.0 * grow
-                hh = (b.y2 - b.y1) / 2.0 * grow
-                self.x1, self.y1 = cx - hw, cy - hh
-                self.x2, self.y2 = cx + hw, cy + hh
+            def __init__(self, b, frac: float) -> None:
+                mg = 0.0
+                if frac < 0.999:
+                    from workflow.scanin_runner import sample_margin_inverse
+                    mg = sample_margin_inverse(b.x2 - b.x1, b.y2 - b.y1, frac)
+                self.x1, self.y1 = b.x1 - mg, b.y1 - mg
+                self.x2, self.y2 = b.x2 + mg, b.y2 + mg
                 self.name = _plain_id(b.name)
 
         # The prepared cht's boxes are already shrunk to the sample area —
-        # per axis, keeping each patch's aspect (cht_with_sample_area). The
-        # probe wants the FULL patch boxes (it applies the sample fraction
-        # itself), so undo the √f-per-side shrink around each box's centre.
+        # equal margins on all four sides (cht_with_sample_area). The probe
+        # wants the FULL patch boxes (it applies the sample fraction
+        # itself), so undo that margin around each box.
         frac = self._sample_area.value() / 100.0
-        grow = 1.0 / (frac ** 0.5) if frac < 0.999 else 1.0
-        boxes = [_Box(b, grow) for b in geom.patches]
+        boxes = [_Box(b, frac) for b in geom.patches]
         expected = {_plain_id(k): v for k, v in exp.items()}
         if not printer:
             # Scanner/standard mode: the reference carries full XYZ — hand

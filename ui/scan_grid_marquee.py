@@ -561,8 +561,15 @@ class ScanGridMarquee(QWidget):
         if not self._grid.rects or len(self._corners) != 4:
             return
         h = unit_quad_homography(self._corners)
-        lin = self._sample_frac ** 0.5            # area frac → per-side scale
-        inset = (1.0 - lin) / 2.0
+        # Knut's #119 equal-margin rule, the same maths scanin reads with
+        # (workflow.scanin_runner.sample_margin): the sample box keeps the
+        # SAME distance to the patch border on all four sides, its area is
+        # exactly the chosen fraction, and each differently-shaped cell (a
+        # Wolf Faust GS strip vs its square main grid) gets its own margin.
+        # Computed per cell below; the aspect factor puts the normalised
+        # u/v units on a common scale first.
+        from workflow.scanin_runner import sample_margin
+        asp = self._grid.aspect or 1.0
         outline = QPen(QColor(86, 214, 165, 90))  # full patch cell — faint
         outline.setWidthF(1.0)
         sample = QPen(QColor(86, 214, 165, 220))  # sampled sub-area — solid
@@ -591,7 +598,9 @@ class ScanGridMarquee(QWidget):
             p.setBrush(Qt.BrushStyle.NoBrush)
             p.drawPolygon(*[self._to_widget(*apply_h(h, x, y)) for x, y in
                             ((u, v), (u + w, v), (u + w, v + hh), (u, v + hh))])
-            iu, iv, iw, ih = u + w * inset, v + hh * inset, w * lin, hh * lin
+            mg = sample_margin(w * asp, hh, self._sample_frac)
+            iu, iv = u + mg / asp, v + mg
+            iw, ih = w - 2.0 * mg / asp, hh - 2.0 * mg
             p.setPen(sample)
             p.setBrush(fill)
             p.drawPolygon(*[self._to_widget(*apply_h(h, x, y)) for x, y in

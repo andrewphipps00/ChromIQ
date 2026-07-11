@@ -1,5 +1,39 @@
 # Changelog
 
+## v3.13.4-beta.6
+
+Knut's beta-5 pixel-measurement round (#119): the selection grid was drawing
+one size smaller than everything scanin read, and rectangular patches get his
+equal-margin rule.
+
+### Fixed
+- **The selection grid drew a 50 % sample box while everything else used the
+  chosen value (#119).** Knut measured it: grid 50.8 %, diagnostic image
+  60 %. The sample-area spinbox's initial value was set before its change
+  signal was connected, so the marquee silently kept its built-in 50 % —
+  invisible while the default WAS 50, exposed the moment beta.5 moved the
+  default to 60. The dialog now pushes the initial value explicitly, and a
+  regression test holds the two together.
+
+### Changed
+- **Rectangular patches keep an equal border distance on all four sides
+  (#119, Knut's rule).** The sample box is inset by the same margin on every
+  edge — chosen per patch shape so the sampled area is exactly the set
+  percentage. On square patches this is identical to before (nothing
+  recalibrates); on a Wolf Faust's tall GS strip the read zone is now a
+  little longer-and-thinner than the patch shape, in exchange for the
+  uniform safety margin the edge detection relies on. Applied identically
+  in the on-screen grid, the prepared `.cht` scanin reads, and the
+  diagnostic image — for ChromIQ charts (with or without printer mode) and
+  standard targets alike, verified by parametrised tests at 40–80 % for
+  square and 1:2 patches.
+- `BOX_SHRINK` question settled (Knut): scanin's `BOX_SHRINK` is exactly
+  the equal-margin principle, but it is one global value for all boxes —
+  it cannot give differently-sized patches their own percentage — and
+  scanin does not require it. ChromIQ therefore standardises on writing the
+  margins into the box definitions themselves with `BOX_SHRINK 0`, so the
+  diagnostic image always shows exactly what was sampled.
+
 ## v3.13.4-beta.5
 
 Knut's beta-4 follow-ups (#119): ChromIQ-chart alignment polish and the last
