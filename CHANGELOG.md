@@ -1,5 +1,31 @@
 # Changelog
 
+## v3.13.5
+
+Chart notes and the stamp choice now survive a reload — a chart put back on
+screen shows everything it was made with. Thanks to mavtop for the report.
+
+### Improvements
+- **Chart notes and the "Stamp targen …" checkbox are restored when a chart
+  is loaded.** Every newly generated chart — layout-engine and printtarg
+  alike — records both values alongside its layout, and opening the project
+  (or the `.ti2`) puts them back exactly as they were. Charts saved with an
+  earlier ChromIQ don't carry this information, so loading them leaves the
+  two fields untouched and behaves exactly as before.
+- **Presets carry the notes and stamp choice too.** Saving a user preset
+  (★) stores both values; loading it brings them back. Presets saved with
+  an earlier ChromIQ keep their current behaviour.
+- **The message after loading a chart now says precisely what was
+  restored** — it no longer mentions chart notes when the loaded chart
+  carries none.
+
+### Under the hood
+- Both values live in the chart's `channels.json` sidecar; the restore is
+  gated on the keys being present, so nothing changes for existing files.
+- The restored stamp value is applied after the layout-engine toggle, whose
+  mode default would otherwise overwrite it — pinned by a regression test.
+- 6 new tests; the 2 new log messages are translated in all 13 languages.
+
 ## v3.13.4
 
 Knut's edge-detection redesign lands as stable: the misalignment check now
