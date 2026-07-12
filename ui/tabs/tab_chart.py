@@ -3425,11 +3425,25 @@ class TabChart(QWidget):
             self._set_margin_chart(list(tiffs), ti2)
             # And bring the option panels back to the settings this chart
             # was actually made with, so screen and chart tell one story.
-            if self._restore_chart_settings(ti2):
+            restored_full = self._restore_chart_settings(ti2)
+            notes_too = getattr(self, "_restored_notes_stamp", False)
+            if restored_full and notes_too:
                 self._log.appendPlainText(tr(
                     "Restored the chart's own layout settings — patch size, "
                     "spacers, margins, seed, notes and patch count now show "
                     "the values this chart was made with."))
+            elif restored_full:
+                # Chart saved before notes/stamp were recorded per chart.
+                self._log.appendPlainText(tr(
+                    "Restored the chart's own layout settings — patch size, "
+                    "spacers, margins, seed and patch count now show the "
+                    "values this chart was made with."))
+            elif notes_too:
+                self._log.appendPlainText(tr(
+                    "This chart carries no saved layout recipe (made with "
+                    "printtarg), so its instrument, paper, patch count, "
+                    "chart notes and stamp choice were restored — the "
+                    "preview still shows the chart exactly as it is."))
             else:
                 self._log.appendPlainText(tr(
                     "This chart carries no saved layout recipe (made with "
@@ -4807,6 +4821,17 @@ class TabChart(QWidget):
                 self._sync_manual_selection_from_panel()
         else:
             self._refresh_manual_command_preview()   # show printtarg controls
+        # Chart notes + stamp choice, gated on key presence so presets saved
+        # without them keep the fields untouched. AFTER the engine block: an
+        # engine flip resets the stamp checkbox to its mode default via
+        # _refresh_manual_command_preview, which would overwrite these.
+        if "chart_notes" in data and self._manual_chart_notes_edit is not None:
+            self._manual_chart_notes_edit.setText(
+                str(data.get("chart_notes") or ""))
+        if ("stamp_commands" in data
+                and self._manual_stamp_cmd_check is not None):
+            self._manual_stamp_cmd_check.setChecked(
+                bool(data.get("stamp_commands")))
 
     def _preset_save_prefill(self) -> tuple[str, bool, bool, bool]:
         """Initial (name, auto_run, attach, from_generator) for the Save Preset
@@ -5107,6 +5132,15 @@ class TabChart(QWidget):
             from dataclasses import replace
             capture["layout_recipe"] = replace(
                 self._manual_layout_panel.get_recipe(), seed=None).to_dict()
+        # Chart notes + stamp choice round-trip with the preset (mavtop,
+        # forum). Presets saved before these keys existed simply lack them,
+        # and loading such a preset leaves both fields untouched.
+        capture["chart_notes"] = (
+            self._manual_chart_notes_edit.text().strip()
+            if self._manual_chart_notes_edit is not None else "")
+        capture["stamp_commands"] = bool(
+            self._manual_stamp_cmd_check is not None
+            and self._manual_stamp_cmd_check.isChecked())
         (_prefill_name, prefill_run, prefill_attach,
          prefilled_from_target) = self._preset_save_prefill()
         # A patch set can only be attached if one is currently loaded.
@@ -5932,7 +5966,13 @@ class TabChart(QWidget):
         follow, and the patch count is pinned to the chart's real total.
         printtarg charts store no recipe — only instrument/paper (seeded by
         the callers) and the patch count can be recovered. Returns True when
-        a full recipe was restored."""
+        a full recipe was restored.
+
+        Newer sidecars additionally carry ``chart_notes`` and
+        ``stamp_commands`` (both chart kinds — the TIFF stamp itself can't be
+        read back), restored gated on key presence so older charts keep the
+        fields untouched; ``self._restored_notes_stamp`` tells the caller
+        whether they were, for an accurate log line (mavtop, forum)."""
         import json as _json
         import re as _re
         # Patch count from the .ti2 itself — works for every chart kind.
@@ -5949,35 +5989,63 @@ class TabChart(QWidget):
             log.warning("could not seed patch count from %s", ti2_path,
                         exc_info=True)
         sidecar = Path(ti2_path).with_suffix(".channels.json")
+        self._restored_notes_stamp = False
         if not sidecar.is_file():
             return False
         try:
             doc = _json.loads(sidecar.read_text())
-            layout = doc.get("layout") or {}
-            rec_dict = layout.get("recipe") or {}
-            if not rec_dict:
-                return False
-            from workflow.layout_engine.presets import LayoutRecipe
-            recipe = LayoutRecipe.from_dict(rec_dict)
-            # Engine on first (builds/updates the panel), then the recipe.
-            if (self._manual_engine_check is not None
-                    and not self._manual_engine_check.isChecked()):
-                self._manual_engine_check.setChecked(True)
-            if self._manual_layout_panel is not None:
-                self._manual_layout_panel.set_recipe(recipe)
-            n_pages = 1 + max((int(p.get("page", 0))
-                               for p in layout.get("patches") or []),
-                              default=0)
-            if self._manual_pages_spin is not None:
-                self._manual_pages_spin.setValue(n_pages)
-            if (self._manual_chart_notes_edit is not None
-                    and getattr(recipe, "chart_text", "")):
-                self._manual_chart_notes_edit.setText(recipe.chart_text)
-            return True
         except Exception:  # noqa: BLE001 — never block a load on a bad sidecar
             log.warning("could not restore chart settings from %s", sidecar,
                         exc_info=True)
             return False
+        restored_full = False
+        try:
+            layout = doc.get("layout") or {}
+            rec_dict = layout.get("recipe") or {}
+            if rec_dict:
+                from workflow.layout_engine.presets import LayoutRecipe
+                recipe = LayoutRecipe.from_dict(rec_dict)
+                # Engine on first (builds/updates the panel), then the recipe.
+                if (self._manual_engine_check is not None
+                        and not self._manual_engine_check.isChecked()):
+                    self._manual_engine_check.setChecked(True)
+                if self._manual_layout_panel is not None:
+                    self._manual_layout_panel.set_recipe(recipe)
+                n_pages = 1 + max((int(p.get("page", 0))
+                                   for p in layout.get("patches") or []),
+                                  default=0)
+                if self._manual_pages_spin is not None:
+                    self._manual_pages_spin.setValue(n_pages)
+                if (self._manual_chart_notes_edit is not None
+                        and "chart_notes" not in doc
+                        and getattr(recipe, "chart_text", "")):
+                    # Sidecar predates the chart_notes key: the recipe's
+                    # on-sheet text is the only note-like value left to show.
+                    self._manual_chart_notes_edit.setText(recipe.chart_text)
+                restored_full = True
+        except Exception:  # noqa: BLE001 — never block a load on a bad sidecar
+            log.warning("could not restore chart settings from %s", sidecar,
+                        exc_info=True)
+        # Chart notes + stamp choice — recorded for BOTH chart kinds. A
+        # missing key means an older chart: leave the fields untouched.
+        # Applied AFTER the engine toggle above, which resets the stamp
+        # checkbox to its mode default (_refresh_manual_command_preview)
+        # and would overwrite anything set earlier.
+        try:
+            if ("chart_notes" in doc
+                    and self._manual_chart_notes_edit is not None):
+                self._manual_chart_notes_edit.setText(
+                    str(doc.get("chart_notes") or ""))
+                self._restored_notes_stamp = True
+            if ("stamp_commands" in doc
+                    and self._manual_stamp_cmd_check is not None):
+                self._manual_stamp_cmd_check.setChecked(
+                    bool(doc.get("stamp_commands")))
+                self._restored_notes_stamp = True
+        except Exception:  # noqa: BLE001
+            log.warning("could not restore notes/stamp from %s", sidecar,
+                        exc_info=True)
+        return restored_full
 
     def reflect_loaded_chart(self, ti2_path: Path, tiffs: list[Path]) -> None:
         """Mirror a chart loaded in the Print/Measure tab, read-only.

@@ -90,3 +90,32 @@ def test_preset_auto_toggles_engine(qapp):
                             "pages": 1, "auto_patches": False})
     assert t._settings.get("use_chromiq_layout_engine", False) is False
     assert not t._manual_printtarg_grp.isHidden()     # printtarg controls shown
+
+
+def test_named_preset_restores_notes_and_stamp(qapp):
+    """chart_notes / stamp_commands round-trip with a preset. The stamp value
+    is applied after the engine auto-toggle, which would otherwise reset the
+    checkbox to its mode default (mavtop, forum)."""
+    t = _tab(qapp)
+    t._settings.set("use_chromiq_layout_engine", False)
+    rec = LayoutRecipe(instrument="i1", paper="A4", clip_border=True)
+    t._restore_user_preset({"layout_recipe": replace(rec, seed=None).to_dict(),
+                            "pages": 1, "auto_patches": False,
+                            "chart_notes": "Canon / Baryta",
+                            "stamp_commands": True})
+    assert t._manual_chart_notes_edit.text() == "Canon / Baryta"
+    # The engine flipped ON (that defaults the box to unchecked) — the
+    # preset's True must survive.
+    assert t._manual_stamp_cmd_check.isChecked() is True
+
+
+def test_preset_without_notes_keys_leaves_fields(qapp):
+    """Presets saved before the chart_notes / stamp_commands keys existed
+    leave both fields exactly as they are (backward compatibility)."""
+    t = _tab(qapp)
+    t._manual_chart_notes_edit.setText("keep me")
+    t._manual_stamp_cmd_check.setChecked(False)
+    t._restore_user_preset({"printtarg_-i": "i1", "printtarg_-p": "A4",
+                            "pages": 1, "auto_patches": False})
+    assert t._manual_chart_notes_edit.text() == "keep me"
+    assert t._manual_stamp_cmd_check.isChecked() is False

@@ -1291,7 +1291,14 @@ class ChartCreator:
         channels = resolve_ink_channels(params.device_type, params.extra_targen_args)
         sidecar = work_dir / f"{stem}.channels.json"
         try:
-            sidecar.write_text(json.dumps({"ink_channels": channels}))
+            sidecar.write_text(json.dumps({
+                "ink_channels": channels,
+                # Create Chart restores these two when the chart is loaded
+                # again — the TIFF stamp itself can't be read back (mavtop,
+                # forum). Recorded for engine and printtarg charts alike.
+                "chart_notes": params.chart_notes,
+                "stamp_commands": bool(params.stamp_commands),
+            }))
             log.debug("Wrote channel sidecar %s: %s", sidecar.name, channels)
         except Exception as exc:
             log.warning("Could not write channel sidecar: %s", exc)
