@@ -223,11 +223,11 @@ DEFAULTS: dict[str, Any] = {
     # How many interconnected sensing sub-cells inside ONE reading box must
     # carry an edge — in a straight run, since a border is a line — before
     # that box counts as sitting on an edge (Knut, #119). Guards against
-    # grain and specs, which light scattered or compact cells. Expressed in
-    # reference-grid units (20 cells across a box) and scaled to the actual
-    # sensing grid, so it means the same physical line length at every grid
-    # size. 8 is Knut's beta.9 pick — 6 was already clean on his scans, 8
-    # adds buffer — with the range opened up to 20.
+    # grain and specs, which light scattered or compact cells. The count is
+    # LITERAL cells of the actual sensing grid (6 means 6 — Knut rejected a
+    # round that converted it to a reference scale); max 20 = 20 of the 30
+    # cells on a side of the 30×30 grid. 8 is Knut's pick: 6 was already
+    # clean on his scans, 8 adds buffer.
     "scanner_flank_min_cells":   8,
     # Bumped by AppSettings.migrate() — see SETTINGS_SCHEMA.
     "settings_schema":           0,

@@ -181,14 +181,18 @@ def test_aligned_real_scan_stays_silent(target):
 
 
 def test_tenth_patch_shift_is_detected(target):
-    """Under Knut's rim-following design (#119) a tenth-of-a-patch shift IS
-    detected: the sensing follows the sample box's rim, and a 10 % shift
-    brings real borders within its reach — this replaced the pinned-sensing
-    era's expectation that small shifts stay silent."""
+    """Under Knut's activation-box design (#119, strict geometry since the
+    localised edge operator) the check fires when a border reaches the
+    ACTIVATION box. At a 60 % sample area that box extends to ~9.9 % of a
+    patch from the border, so a tenth-of-a-patch shift MUST fire; at 50 %
+    it only reaches ~13 %, so the same shift is by design the agreement
+    ladder's business, not the edge check's."""
     tif, boxes, corners, quad, exp, px = target
     shifted = [(x + 0.10 * px, y) for x, y in corners]
-    n = _n_on_edge(tif, boxes, shifted, quad, exp)
-    assert n >= MIN_BOXES, f"10 % shift flags only {n} boxes"
+    rep = dense_placement_agreement(tif, boxes, shifted, exp, sample_frac=0.6,
+                                    objective="response", src_quad=quad)
+    n = sum(1 for v in rep.flank_by_patch.values() if v > LIMIT)
+    assert n >= MIN_BOXES, f"10 % shift flags only {n} boxes at 60 % area"
 
 
 def test_fifth_of_a_patch_shift_is_detected(target):

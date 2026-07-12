@@ -1,5 +1,41 @@
 # Changelog
 
+## v3.13.4-beta.11
+
+Knut's beta-10 field test (#119): the edge check fired while a border was
+still ~10 % of a patch away from the sample box — observably "as if the
+outer sensing rings never disabled". His observation was correct; the cause
+was in the detector, and it's fixed at the root.
+
+### Fixed
+- **The edge operator is now localised, so a disabled sensing ring truly
+  shields the cells behind it.** The old detector took the raw |centred
+  difference| of the image, which lights every pixel whose ±4 px window
+  merely CROSSES a border — a halo around the true edge line. A border
+  sitting past a deactivated outer ring could therefore still light the
+  outermost awake cell, which is exactly the too-early triggering Knut
+  measured (~10 % of a patch at a 40 % sample area). The operator now keeps
+  only the crest of its response (non-maximum suppression along each axis),
+  which sits on the border's own transition zone — a sensing cell fires
+  only when the edge line genuinely overlaps that cell. Verified on his
+  protocol: the trigger distances collapse from ~10–16 % of a patch to the
+  activation box's own edge plus the scan's physical blur, and detection
+  gets stronger, not weaker (real-scan quarter-shift and pulled-corner
+  counts all rise). The aligned matrices improve too: the real LaserSoft is
+  now silent through a 50 % sample area (beta.10: flagged from 30 %), the
+  real Wolf Faust and all five demo renders stay at zero everywhere.
+- **"…needing this many sensing cells in a row" now counts literal cells,
+  exactly as set** (Knut's correction): 6 means a straight run of 6 cells
+  of the 30×30 sensing grid, 8 means 8 — the beta.10 conversion to a
+  20-cell reference scale is gone. The maximum of 20 means 20 of the 30
+  cells along one side. The default stays 8. Help text rewritten to say
+  precisely this (German included).
+
+### Added
+- The reply on #119 documents which sensing cells are awake at every
+  Patch-sample-area setting — table plus rendered diagram
+  (`docs/dev/119-activation-map.png`), directly from the shipped geometry.
+
 ## v3.13.4-beta.10
 
 Knut's grid-coverage verification round (#119): the sensing grid moves to

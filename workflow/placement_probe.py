@@ -573,24 +573,41 @@ def dense_placement_agreement(
     # sub-cells, while dust or a noise spike lights only one or two. This
     # sees the border the moment the line enters the box — even a 1–2 %
     # overlap — where any area-mean measure dilutes to nothing.
-    # CENTRED derivative, two scales. Centred matters: a one-sided diff
+    # CENTRED derivative, LOCALISED. Centred matters: a one-sided diff
     # assigns the edge's gradient to the right/bottom pixel of each pair,
     # shifting the whole "edge line" by the stride — boxes crossing an edge
     # leftward contained it, boxes crossing rightward didn't until much
     # deeper (Knut's beta.140 test: only the left direction triggered).
-    # Two spans (4 px and 8 px) cover real transitions — ~3–4 px at
-    # 300 dpi, ~5–8 px at 600 dpi and on the demo renders — so the step
-    # height is recovered whatever the scan's blur, without smearing.
-    def _cgrad(plane, k):
-        g = np.zeros_like(plane)
-        g[:, k:-k] = np.abs(plane[:, 2 * k:] - plane[:, :-2 * k])
-        gy = np.abs(plane[2 * k:, :] - plane[:-2 * k, :])
-        g[k:-k, :] = np.maximum(g[k:-k, :], gy)
-        return g
+    # Localised matters even more (Knut's beta.10 test): the raw |centred
+    # diff| lights every pixel whose window CROSSES the border — a halo of
+    # ±k px around the true edge line. A border sitting past a DEACTIVATED
+    # outer ring could therefore still light the outermost active cell,
+    # and the check fired while the border was ~10 % of a patch away from
+    # the sample box: observably "as if the rings never disabled", exactly
+    # what he reported. Non-maximum suppression along each diff axis keeps
+    # only the crest of the response — the border's own transition zone —
+    # so a sensing cell now fires only when the edge LINE genuinely
+    # overlaps that cell, and a deactivated ring truly shields the cells
+    # behind it. One span (4 px) covers real transitions (~3–4 px at
+    # 300 dpi, ~5–8 px at 600 dpi before downscaling); the suppression
+    # keeps its response centred on the edge whatever the blur.
+    def _cgrad_local(plane, k):
+        dx = np.zeros_like(plane)
+        dx[:, k:-k] = np.abs(plane[:, 2 * k:] - plane[:, :-2 * k])
+        keep = np.zeros(plane.shape, dtype=bool)
+        keep[:, 1:-1] = (dx[:, 1:-1] >= dx[:, :-2]) & \
+                        (dx[:, 1:-1] >= dx[:, 2:])
+        g = np.where(keep, dx, 0.0)
+        dy = np.zeros_like(plane)
+        dy[k:-k, :] = np.abs(plane[2 * k:, :] - plane[:-2 * k, :])
+        keep = np.zeros(plane.shape, dtype=bool)
+        keep[1:-1, :] = (dy[1:-1, :] >= dy[:-2, :]) & \
+                        (dy[1:-1, :] >= dy[2:, :])
+        return np.maximum(g, np.where(keep, dy, 0.0))
 
     grad = None
     for plane in [lum] + chroma:
-        g = np.maximum(_cgrad(plane, 2), _cgrad(plane, 4))
+        g = _cgrad_local(plane, 2)
         grad = g if grad is None else np.maximum(grad, g)
 
     # The user's marquee quad in the (possibly downscaled) sampling space.
@@ -753,9 +770,9 @@ def dense_placement_agreement(
                     upp = ext / px_span
                     # One-sided danger radius: half the measured 10–90 %
                     # transition (the width straddles the border) plus the
-                    # gradient operator's own 4 px span plus rounding — the
-                    # distance at which a border still lights a cell.
-                    clearance = (_blur_px / 2.0 + 5.0) * upp
+                    # localised operator's own ±2 px crest plus rounding —
+                    # the distance at which a border still lights a cell.
+                    clearance = (_blur_px / 2.0 + 3.0) * upp
                     a_half = min(a_half, full / 2.0 - clearance)
             axes.append([(g0 + i * cell) < a_half
                          and (g0 + (i + 1) * cell) > -a_half
@@ -846,15 +863,13 @@ def dense_placement_agreement(
 
         for n, vals in user_cells.items():
             mask = active_by_patch[n]
-            # The required run never exceeds what the active window can
-            # hold (a 20 % sample area only wakes ~half the grid), with a
-            # floor of 3 — Knut's original line-vs-dust minimum. The count
-            # is scaled to the grid (the default 6 was calibrated on 20
-            # cells across a box; at G=30 the same PHYSICAL line length is
-            # 6·30/20 = 9 cells), so a finer grid doesn't quietly lower the
-            # bar and let shorter grain streaks through.
-            need_len = max(3, min(round(need * G / 20.0),
-                                  span_by_patch[n]))
+            # The setting counts LITERAL sensing cells of the actual grid —
+            # 6 means 6 cells, never converted (Knut's #119 correction: an
+            # earlier round scaled the count to a 20-cell reference, which
+            # silently turned the user's number into a different one). The
+            # required run just never exceeds what the active window can
+            # hold (a 20 % sample area only wakes part of the grid).
+            need_len = max(1, min(need, span_by_patch[n]))
             if not _line_like(vals, mask, need_len):
                 # dust and noise spikes light scattered cells; only a
                 # connected run of hot cells is an edge (Knut).
