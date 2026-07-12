@@ -659,11 +659,14 @@ def test_migrate_schema2_moves_beta3_defaults(tmp_path):
             s._qs.setValue(k, v)
         return s
 
-    s = _fresh("echo", scanner_flank_min_cells=3, scanner_check_agreement=0.85)
+    s = _fresh("echo", scanner_flank_min_cells=3, scanner_check_agreement=0.87)
     assert sorted(s.migrate()) == ["scanner_check_agreement",
                                    "scanner_flank_min_cells"]
     assert int(s.get("scanner_flank_min_cells")) == 8
-    assert float(s.get("scanner_check_agreement")) == 0.87
+    # schema 5 (Knut's GA number): the agreement floor settles at 0.85 —
+    # stored echoes of EITHER shipped default (0.85 pre-schema-2, 0.87
+    # since) fall through to it.
+    assert float(s.get("scanner_check_agreement")) == 0.85
 
     s = _fresh("chosen", scanner_flank_min_cells=5, scanner_check_agreement=0.9)
     assert s.migrate() == []

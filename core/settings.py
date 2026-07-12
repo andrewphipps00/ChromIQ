@@ -196,7 +196,7 @@ DEFAULTS: dict[str, Any] = {
     # 8-direction probe star on Knut's normalised scale (best probe = 1,
     # worst = 0). Calibrated on his real Wolf Faust scan so a 25 % grid
     # offset flags and ≤15 % passes at 50 % sample area (#108).
-    "scanner_check_agreement":   0.87,
+    "scanner_check_agreement":   0.85,
     # Flank override (Knut's derivative design): patch borders are LINES of
     # high spatial gradient (centred, two scales — symmetric in all 8
     # directions); a box is ON an edge when 3+ CONNECTED sub-cells of its
@@ -414,7 +414,7 @@ def thresholds_for_combo(
 # Bump when a shipped default changes in a way that must reach users who have
 # the OLD default persisted. Settings → Save writes every key, so a stored
 # value otherwise pins a user to the old behaviour for good.
-SETTINGS_SCHEMA = 4
+SETTINGS_SCHEMA = 5
 
 # key → the old default(s) it must no longer be stuck on. Only a stored value
 # EQUAL to one of the old defaults is dropped (so it falls through to the new
@@ -430,9 +430,10 @@ _SUPERSEDED_DEFAULTS: dict[str, tuple[float, ...]] = {
     # measured clean value, 6 the default with buffer. schema 4: Knut moved
     # the default to 8 for extra buffer alongside the 85 % sensing grid.
     "scanner_flank_min_cells": (3, 6),
-    # schema 2: with the per-patch agreement a correct grid reads ≥ 90 % and
-    # crossings collapse fast, so the floor moves up to 0.87 (Knut's number).
-    "scanner_check_agreement": (0.85,),
+    # schema 2 raised the floor to 0.87; schema 5 settles it at 0.85 (Knut's
+    # final number for GA) — stored echoes of either shipped default fall
+    # through, a deliberately chosen value survives.
+    "scanner_check_agreement": (0.85, 0.87),
     # schema 3 (#119, Knut's beta.4 test): with the straight-run cell rule an
     # aligned scan leaves at most 1 edge-flagged patch, so 2 warns earlier
     # without false alarms (his preference after testing).

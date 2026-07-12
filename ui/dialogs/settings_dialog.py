@@ -917,7 +917,7 @@ class SettingsDialog(QDialog):
         # together (Knut, #119):
         #   0,1  profile self-check      3  placement agreement
         #   5,6,7  patch-edge detection
-        defaults = {0: "30", 1: "12", 3: "0.87", 5: "2", 6: "0.20", 7: "6"}
+        defaults = {0: "30", 1: "12", 3: "0.85", 5: "2", 6: "0.20", 7: "8"}
 
         def _row(r: int, label: str, spin, tip_title: str, tip_body: str) -> None:
             g.addWidget(QLabel(label, grp), r, 0)
@@ -954,7 +954,7 @@ class SettingsDialog(QDialog):
         self._scan_check_spin.setRange(0.5, 0.99)
         self._scan_check_spin.setDecimals(2)
         self._scan_check_spin.setSingleStep(0.01)
-        self._scan_check_spin.setValue(float(s.get("scanner_check_agreement", 0.87)))
+        self._scan_check_spin.setValue(float(s.get("scanner_check_agreement", 0.85)))
         self._scan_check_spin.setMinimumWidth(120)
         _row(3, tr("Check alignment: flag placements below (0.5–0.99):"),
              self._scan_check_spin,
@@ -1021,7 +1021,7 @@ class SettingsDialog(QDialog):
                 "Why the default is 2: an edge has to look like a straight "
                 "border line before a patch is counted at all (see the "
                 "settings below), so grain, specks and a target's own "
-                "printed features no longer inflate the count — on real "
+                "printed features can't inflate the count — on real "
                 "600 dpi scans of a LaserSoft and a Wolf Faust IT8, a "
                 "correct grid leaves at most 1 counted patch. Dragging one "
                 "corner of the grid inwards, until a few patches in that "
@@ -1105,25 +1105,24 @@ class SettingsDialog(QDialog):
                 "reading grid — not whole patches. (The setting above, "
                 "\"Warn when this many patches sit on an edge\", counts "
                 "whole patches.)\n\n"
-                "The number counts REAL sensing cells, exactly as set: 6 "
+                "The number counts real sensing cells, exactly as set: 6 "
                 "means a straight run of 6 cells of the 30×30 sensing "
-                "grid, 8 means 8 — nothing is converted or scaled behind "
-                "your back. The maximum of 20 is 20 of the 30 cells along "
-                "one side of that grid: two thirds of a patch have to lie "
-                "on a straight colour change in a row before it can count "
-                "as an edge.\n\n"
+                "grid, 8 means 8 — the value is never converted or scaled. "
+                "The maximum of 20 is 20 of the 30 cells along one side of "
+                "that grid: two thirds of a patch have to lie on a straight "
+                "colour change in a row before it can count as an edge.\n\n"
                 "What to change: if a grainy or textured scan keeps "
                 "flagging patches you know are clean, raise this — a real "
                 "border crosses the whole box, so it easily lights more "
                 "cells than any speck, and there is room up to 20. Lower it "
                 "if you want the earliest possible warning and your scans "
                 "are very clean.\n\n"
-                "Why the default is 8: on real 600 dpi scans, a long narrow "
-                "speck of grey inside one patch still lit a straight run of "
-                "several cells, and 6 stayed clean through all of the beta "
-                "testing; 8 simply adds a little more buffer on top, while "
-                "a genuine border crosses the whole reading box — dozens of "
-                "cells in a row — and fires regardless.\n\n"
+                "Why the default is 8: on real 600 dpi scans, grain and "
+                "even a long narrow speck of grey inside a patch light "
+                "straight runs of only a few cells, while a genuine border "
+                "crosses the whole reading box — dozens of cells in a row. "
+                "8 sits comfortably above anything grain produces and far "
+                "below what every real border delivers.\n\n"
                 "More than one group can be checked at once: if a speck "
                 "lights a few cells in one corner while a real border "
                 "crosses elsewhere in the same box, the border still "
@@ -1425,7 +1424,7 @@ class SettingsDialog(QDialog):
         # Scanner Limits — must follow Restore Factory Defaults too (Knut #108)
         self._scan_peak_spin.setValue(float(s.get("scanner_selfcheck_peak", 30.0)))
         self._scan_avg_spin.setValue(float(s.get("scanner_selfcheck_avg", 12.0)))
-        self._scan_check_spin.setValue(float(s.get("scanner_check_agreement", 0.87)))
+        self._scan_check_spin.setValue(float(s.get("scanner_check_agreement", 0.85)))
         self._scan_flank_spin.setValue(float(s.get("scanner_flank_limit", 0.20)))
         self._scan_flank_min_combo.setCurrentIndex(max(0, self._scan_flank_min_combo
             .findData(int(s.get("scanner_flank_min_boxes", 2)))))

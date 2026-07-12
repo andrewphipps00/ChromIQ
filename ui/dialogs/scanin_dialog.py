@@ -2529,7 +2529,7 @@ class ScannerProfileDialog(_ToolDialogBase):
                 _read, exp = self._read_expected_dicts(p.out_ti3)
             report = self._dense_report(p, p.is_printer, exp)
             floor = 100.0 * float(self._settings.get(
-                "scanner_check_agreement", 0.87))
+                "scanner_check_agreement", 0.85))
             where = self._page_label(job.get("page", 1) - 1)
             on_edge = self._flank_offenders(report) if report else []
             if on_edge:
@@ -2761,7 +2761,7 @@ class ScannerProfileDialog(_ToolDialogBase):
                         w=where, worst=", ".join(on_edge[:6]),
                         a=self._agreement_txt(report)))
             floor = 100.0 * float(self._settings.get(
-                "scanner_check_agreement", 0.87))
+                "scanner_check_agreement", 0.85))
             if not on_edge and agree < floor:
                 worst = ", ".join(n for n, _p in report.offenders[:5])
                 out.append(tr(

@@ -1,5 +1,56 @@
 # Changelog
 
+## v3.13.4
+
+Knut's edge-detection redesign lands as stable: the misalignment check now
+senses exactly where it reads — no more, no less — plus chart-settings
+restore on reload, and a fully translated release in all 13 languages.
+
+### Improvements
+- **Patch-edge detection follows Knut's activation-box design, verified
+  measurement by measurement over eleven beta rounds.** Every patch carries
+  a 30×30 grid of sensing cells over an 85 % equal-margin box (the coverage
+  chosen by comparing 85/90/92/95 % on real and synthetic scans — 85 is the
+  only one that never false-flags an aligned target). Only the cells around
+  the reading box are awake — the box plus one thin ring outside it,
+  following the *Patch sample area* setting in and out — and the localised
+  edge operator guarantees a cell fires only on an edge that genuinely
+  overlaps it, so deactivated outer rings truly shield. On the reference
+  scans, every correctly aligned target reads zero flagged patches at every
+  sample area from 20–80 %, while a quarter-patch shift flags dozens to
+  hundreds and a single pulled corner is caught reliably.
+- **Reading boxes use equal margins on all four sides** at every *Patch
+  sample area* setting, and the sampled area is exactly the chosen
+  percentage — pinned by tests to the pixel.
+- **Loading a chart restores its creation settings.** Opening a `.ti2` from
+  Print or Measure now fills Create Chart with the chart's own patch size,
+  spacers, margins, seed, notes and patch count (charts made with the
+  ChromIQ layout engine carry a complete recipe; printtarg charts restore
+  instrument, paper and count). Thanks to mavtop for the request.
+- **File dialogs open with a readable sidebar** — the location shortcuts
+  panel no longer starts squeezed to a sliver.
+- **New defaults from the beta round's field testing** (one-time migration;
+  values you chose yourself are never touched): placement-agreement floor
+  0.85, edge warning at 2 patches, sensing-cell run of 8 (range now 2–20 —
+  the value counts real cells of the 30×30 grid, exactly as set), edge
+  strength 0.20.
+- **All help texts for the misalignment checks rewritten** — plain-language
+  outcome first, precise mechanics after, and strictly describing the
+  behaviour as implemented.
+- **Complete translations in all 13 languages** — every text added during
+  the 3.13.4 cycle is translated in German, Spanish, French, Italian,
+  Japanese, Dutch, Norwegian, Polish, Portuguese, Russian, Swedish and
+  Simplified Chinese.
+- ChromIQ is free and always will be — if it saves you time or ink, a
+  coffee on [Ko-fi](https://ko-fi.com/itsab1989) is a kind way to say
+  thanks.
+
+### Thanks
+Eleven beta rounds of exact, patient measurement by **Knut** shaped the
+edge detector — the activation-box design, the 85 % sensing grid and the
+literal cell counting are his. The chart-settings restore came from
+**mavtop**'s report.
+
 ## v3.13.4-beta.11
 
 Knut's beta-10 field test (#119): the edge check fired while a border was
