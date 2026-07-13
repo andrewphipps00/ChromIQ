@@ -822,8 +822,8 @@ parameters:
         al hebt gekalibreerd en extra kaarten wilt meten zonder opnieuw te
         kalibreren.
     "-p":
-      name: "Meetveld-voor-meetveld-modus"
-      tooltip_title: "Meetveld-voor-meetveld-modus (-p)"
+      name: "Per-meetveld-modus"
+      tooltip_title: "Per-meetveld-modus (-p)"
       tooltip_body: |-
         Schakelt van strooklezen over op het meten van losse meetvelden.
         Nuttig voor losse handmetingen of wanneer strooklezen op een

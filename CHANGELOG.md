@@ -1,5 +1,22 @@
 # Changelog
 
+## v3.13.6
+
+Stable. Multi-ink profiling in the layout engine (device-native CMYK/N TIFFs +
+a full-vector PDF export), and a thoroughly reworked scanner/camera profile
+builder with detailed, per-context colprof settings (#72, #121). All 13
+languages are fully translated.
+
+### Highlights (see the beta notes below for detail)
+- **Device-native CMYK / CMYK+N charts** and a **vector-PDF chart export** from
+  the layout engine (#72).
+- **"Build profile with scanner or camera"** — renamed, and rebuilt to mirror
+  the Build-Profile tab's Manual module: grouped, labelled colprof controls with
+  a live command preview, ClayRGB1998 preselected as the printer gamut source,
+  input-profile white-point handling, and settings remembered separately for a
+  printer profile vs a chart-scanner vs a standard-target profile (#121).
+- Every ⓘ tooltip is beginner-first, and now translated into all 13 languages.
+
 ## v3.13.6-beta.4
 
 A beta for review — finishes the tool rename (#121, Knut).
