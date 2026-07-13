@@ -20,22 +20,17 @@ def _app():
     return QApplication.instance() or QApplication([])
 
 
-def test_algo_mapping_and_inverse():
-    assert sc.algo_from_ui("shaper", "x") == "s"
-    assert sc.algo_from_ui("matrix", "x") == "m"
-    assert sc.algo_from_ui("clut", "x") == "x"
-    assert sc.algo_from_ui("clut", "l") == "l"
-    # inverse groups the forced/gamma variants sensibly
-    assert sc.ui_from_algo("s") == ("shaper", "x")
-    assert sc.ui_from_algo("m") == ("matrix", "x")
-    assert sc.ui_from_algo("l") == ("clut", "l")
-    assert sc.ui_from_algo("x") == ("clut", "x")
+def test_ptype_choices_are_colprof_algo_letters():
+    """The profile type IS the colprof -a algorithm (XYZ/Lab folded in as the two
+    cLUT variants, per Knut — no separate 'colour space' control)."""
+    assert [d for d, _ in sc.PTYPE_CHOICES] == ["s", "m", "x", "l"]
+    assert set(sc.CLUT_ALGOS) == {"x", "l"}       # quality applies only to these
 
 
 def test_make_profile_params_default_matches_previous_output():
     """Defaults must reproduce the previous scanner build (-as -qm, ChromIQ)."""
     p = sc.make_profile_params(Path("x.ti3"), "My scanner",
-                               {"ptype": "shaper", "colourspace": "x", "quality": "m"}, {})
+                               {"ptype": "s", "quality": "m"}, {})
     args = ProfileBuilder(None)._build_args(p)
     assert "-as" in args and "-qm" in args
     assert args[args.index("-A") + 1] == "ChromIQ"       # unchanged default metadata
@@ -45,7 +40,7 @@ def test_make_profile_params_default_matches_previous_output():
 def test_make_profile_params_full_advanced_reaches_command():
     p = sc.make_profile_params(
         Path("x.ti3"), "Epson V850 scanner",
-        {"ptype": "clut", "colourspace": "l", "quality": "h"},
+        {"ptype": "l", "quality": "h"},                  # cLUT Lab, high
         {"-r": 1.5, "-ni": True, "-A": "Epson", "-C": "(c) me", "extra_args": "-U 1.0"})
     cmd = " ".join(ProfileBuilder(None)._build_args(p))
     assert "-al" in cmd and "-qh" in cmd          # cLUT Lab, high

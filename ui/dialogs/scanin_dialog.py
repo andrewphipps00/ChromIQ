@@ -1325,9 +1325,8 @@ class ScannerProfileDialog(_ToolDialogBase):
             self._ptype.addItem(label, data)
         row3.addWidget(self._ptype, 1)
         row3.addWidget(self._tip(
-            tr("Profile type, colour space and quality"),
-            tr("How the scanner or camera profile models colour — the three most "
-               "common colprof settings.\n\n"
+            tr("Profile type and quality"),
+            tr("How the scanner or camera profile models colour.\n\n"
                "Profile type (-a):\n"
                "• Shaper + matrix — a small, robust profile (per-channel curves "
                "plus a 3×3 matrix). The usual choice for scanners: forgiving of "
@@ -1335,39 +1334,41 @@ class ScannerProfileDialog(_ToolDialogBase):
                "colour. Recommended.\n"
                "• Matrix only — even simpler; use it if a chart has very few "
                "patches or the shaper curves misbehave.\n"
-               "• cLUT — a full look-up table that can follow the device more "
-               "closely. Worth it only with a large chart and clean, repeatable "
-               "scans; with noisy data it just fits the noise.\n\n"
-               "Colour space (cLUT only): whether the look-up table works in XYZ "
-               "or Lab. Both are accurate; Lab sometimes gives slightly smoother "
-               "neutrals. It has no effect on the matrix types.\n\n"
-               "Quality (-q, cLUT only): the table's grid resolution — higher is "
-               "finer but slower, and needs better data to be worth it. Medium is "
-               "a good default; Low is a quick test, High/Ultra for large, clean "
-               "charts.")), 0, Qt.AlignmentFlag.AlignVCenter)
+               "• cLUT — XYZ table / cLUT — Lab table — a full look-up table that "
+               "can follow the device more closely. XYZ and Lab are just how the "
+               "table stores colour inside; both are accurate, and Lab sometimes "
+               "gives slightly smoother neutrals. A cLUT is worth it only with a "
+               "large chart and clean, repeatable scans; with noisy data it just "
+               "fits the noise.\n\n"
+               "Quality (-q): the cLUT's grid resolution — higher is finer but "
+               "slower, and needs better data to be worth it. It applies only to "
+               "the two cLUT types (greyed for the matrix types). Medium is a "
+               "good default; Low is a quick test, High/Ultra for large, clean "
+               "charts.\n\n"
+               "Note: a scanner or camera profile is an input profile, so there's "
+               "no working-space (like sRGB) or rendering-intent choice here — "
+               "those belong to a printer/output profile.")),
+            0, Qt.AlignmentFlag.AlignVCenter)
         form.addLayout(row3)
 
-        # Colour space + quality on their own row (kept off the type row so the
-        # window never needs to scroll sideways). Both apply only to the cLUT type.
+        # Quality (cLUT only) + the Advanced button, on their own row so the type
+        # row above never has to scroll sideways.
         row3b = QHBoxLayout()
-        self._cs_label = QLabel(tr("Colour space:"), self)
-        row3b.addWidget(self._cs_label)
-        self._pcs = NoScrollComboBox(self)
-        for data, label in scanner_colprof.COLOURSPACE_CHOICES:
-            self._pcs.addItem(label, data)
-        row3b.addWidget(self._pcs)
-        row3b.addSpacing(16)
-        row3b.addWidget(QLabel(tr("Quality (-q):"), self))
+        self._q_label = QLabel(tr("Quality (-q):"), self)
+        row3b.addWidget(self._q_label)
         self._pq = NoScrollComboBox(self)
         for data, label in scanner_colprof.QUALITY_CHOICES:
             self._pq.addItem(label, data)
         self._pq.setCurrentIndex(1)                      # Medium
         row3b.addWidget(self._pq)
         row3b.addStretch(1)
-        # Advanced… (less-common colprof options), on the same row, right-aligned.
+        # Advanced… (less-common colprof options), on the same row. The trailing
+        # spacer matches the ⓘ tooltip column so the button's right edge lines up
+        # with the combos / fields / command box above and below it (Knut).
         self._adv_btn = QPushButton(tr("Advanced…"), self)
         self._adv_btn.clicked.connect(self._open_colprof_advanced)
         row3b.addWidget(self._adv_btn)
+        row3b.addSpacing(32)                              # ⓘ tooltip column width
         form.addLayout(row3b)
 
         # Profile description (-D): the name embedded in the .icc and shown in
@@ -1427,13 +1428,13 @@ class ScannerProfileDialog(_ToolDialogBase):
 
         # Restore remembered settings, wire live updates, size the label column.
         self._apply_colprof_config(self._adv_vals)
-        for _w in (self._ptype, self._pcs, self._pq):
+        for _w in (self._ptype, self._pq):
             _w.currentIndexChanged.connect(self._on_colprof_changed)
         self._prof_name.textChanged.connect(self._update_command_preview)
         self._on_colprof_changed()
-        # One shared label column → the spinbox, combo and name field all
+        # One shared label column → the spinbox, combos and name field all
         # start at the same x (Basti, #108 follow-up).
-        _labels = (self._sa_label, self._pt_label, self._pn_label, self._cs_label)
+        _labels = (self._sa_label, self._pt_label, self._q_label, self._pn_label)
         _w = max(l.sizeHint().width() for l in _labels) + 8
         for _l in _labels:
             _l.setFixedWidth(_w)
@@ -1447,8 +1448,7 @@ class ScannerProfileDialog(_ToolDialogBase):
 
     def _current_main_vals(self) -> dict:
         return {
-            "ptype": self._ptype.currentData() or "shaper",
-            "colourspace": self._pcs.currentData() or "x",
+            "ptype": self._ptype.currentData() or "s",   # -a letter
             "quality": self._pq.currentData() or "m",
         }
 
@@ -1465,15 +1465,13 @@ class ScannerProfileDialog(_ToolDialogBase):
                 combo.setCurrentIndex(i)
         if cfg.get("ptype"):
             _sel(self._ptype, cfg["ptype"])
-        if cfg.get("colourspace"):
-            _sel(self._pcs, cfg["colourspace"])
         if cfg.get("quality"):
             _sel(self._pq, cfg["quality"])
 
     def _on_colprof_changed(self) -> None:
-        is_clut = self._ptype.currentData() == "clut"
-        self._pcs.setEnabled(is_clut)          # colour space / quality only apply
-        self._pq.setEnabled(is_clut)           # to the look-up-table type
+        is_clut = self._ptype.currentData() in scanner_colprof.CLUT_ALGOS
+        self._q_label.setEnabled(is_clut)      # quality only applies to a cLUT
+        self._pq.setEnabled(is_clut)
         self._save_colprof_config()
         self._update_command_preview()
 

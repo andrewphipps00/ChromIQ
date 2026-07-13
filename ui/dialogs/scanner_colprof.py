@@ -26,36 +26,21 @@ from ui.parameter_widget import ParameterWidget
 # QSettings prefix for the remembered scanner colprof configuration.
 SETTINGS_PREFIX = "scanner_colprof"
 
-# Main-window profile-algorithm choices (colprof -a). "Colour space" (XYZ/Lab)
-# is a separate control that only applies to the cLUT type, so the four device
-# choices here combine with it into the final -a letter — see ALGO_FROM_UI.
+# Main-window profile type = colprof's -a algorithm directly (data = the -a
+# letter). The XYZ vs Lab distinction is how a cLUT stores colour internally, so
+# it belongs to the profile type, not a separate "colour space" control — a
+# scanner/camera *input* profile has no working-space or rendering-intent choice
+# (those are output/printer-profile concepts). (Knut, #121)
 PTYPE_CHOICES = [
-    ("shaper", tr("Shaper + matrix (recommended)")),
-    ("matrix", tr("Matrix only")),
-    ("clut", tr("cLUT (look-up table)")),
+    ("s", tr("Shaper + matrix (recommended)")),
+    ("m", tr("Matrix only")),
+    ("x", tr("cLUT — XYZ table")),
+    ("l", tr("cLUT — Lab table")),
 ]
-COLOURSPACE_CHOICES = [("x", tr("XYZ")), ("l", tr("Lab"))]
 QUALITY_CHOICES = [
     ("l", tr("Low")), ("m", tr("Medium")), ("h", tr("High")), ("u", tr("Ultra")),
 ]
-
-
-def algo_from_ui(ptype: str, colourspace: str) -> str:
-    """Combine the profile-type + colour-space choices into a colprof -a letter."""
-    if ptype == "matrix":
-        return "m"
-    if ptype == "shaper":
-        return "s"
-    return "l" if colourspace == "l" else "x"      # cLUT: Lab or XYZ
-
-
-def ui_from_algo(algo: str) -> tuple[str, str]:
-    """Inverse of :func:`algo_from_ui` → ``(ptype, colourspace)``."""
-    if algo in ("m", "M"):
-        return "matrix", "x"
-    if algo in ("s", "S", "g", "G"):
-        return "shaper", "x"
-    return "clut", ("l" if algo in ("l",) else "x")
+CLUT_ALGOS = ("x", "l")            # the -a letters for which -q quality applies
 
 
 # Advanced (less-common) colprof options, rendered with ParameterWidget so the
@@ -112,7 +97,7 @@ def advanced_params() -> list[dict[str, Any]]:
 
 
 # Keys of the values dict this module round-trips (main + advanced).
-MAIN_KEYS = ("ptype", "colourspace", "quality")
+MAIN_KEYS = ("ptype", "quality")
 ADVANCED_FLAGS = ("-r", "-ni", "-A", "-C")
 EXTRA_ARGS_KEY = "extra_args"
 
@@ -123,8 +108,7 @@ def make_profile_params(ti3, description: str, main_vals: dict[str, Any],
     advanced values. Used both for the real build and the command preview, so
     the preview shown is exactly what runs."""
     from workflow.profile_builder import ProfileParams
-    algo = algo_from_ui(main_vals.get("ptype", "shaper"),
-                        main_vals.get("colourspace", "x"))
+    algo = main_vals.get("ptype", "s")          # ptype data IS the colprof -a letter
     try:
         smoothing = float(adv_vals.get("-r", 0.5))
     except (TypeError, ValueError):
@@ -182,6 +166,13 @@ class ScannerAdvancedDialog(QDialog):
             self._extra.set_value(values[EXTRA_ARGS_KEY])
         v.addWidget(self._extra)
         v.addStretch(1)
+
+        # Recolour the ParameterWidget ⓘ icons to the window's green accent
+        # (ParameterWidget uses the app's default accent, which is magenta).
+        from ui.styles import SPEC_GREEN
+        from ui.tooltip_button import TooltipButton
+        for tb in body.findChildren(TooltipButton):
+            tb.set_color(SPEC_GREEN)
 
         scroll.setWidget(body)
         outer.addWidget(scroll, 1)

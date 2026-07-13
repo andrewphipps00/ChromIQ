@@ -80,6 +80,11 @@ class TooltipButton(QToolButton):
                 and not self._explicitly_disabled):
             super().setEnabled(True)
 
+    def set_color(self, color: str) -> None:
+        """Override the ⓘ icon colour (e.g. to match a dialog's own accent)."""
+        self._color_override = color
+        self._set_icon()
+
     def _set_icon(self) -> None:
         color = getattr(self, "_color_override", None) or self.__class__.ACCENT
         self.setIcon(self._draw_icon(QColor(color)))
