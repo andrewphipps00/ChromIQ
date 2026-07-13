@@ -115,6 +115,28 @@ def test_devicen_colourspace_present_for_extra_inks(tmp_path):
     assert " scn" in _content(out)
 
 
+def test_pdf_metadata_states_colourspace(tmp_path):
+    """File → Properties shows the colour space + inks, so it's obvious a CMYK/N
+    chart is device-native and not an RGB picture."""
+    from pypdf import PdfReader
+    f = ["CMYKOG_C", "CMYKOG_M", "CMYKOG_Y", "CMYKOG_K", "CMYKOG_O", "CMYKOG_G"]
+    target = ColorTarget("CMYKOG", f,
+                         [(tuple(float((i * (5 + c)) % 100) for c in range(6)),
+                           (40.0, 45.0, 50.0)) for i in range(80)])
+    res, w, h = _render(target, dpi=150)
+    out = vector_pdf.save_vector_pdf(res, target, tmp_path / "c.pdf",
+                                     paper_w_mm=w, paper_h_mm=h, dpi=150)
+    meta = PdfReader(str(out)).metadata
+    assert "CMYKOG" in meta.title and "6-channel" in meta.title
+    assert "Orange" in meta.subject and "Green" in meta.subject
+    # an RGB chart is labelled RGB, not CMYK
+    rgb = _rgb_target(40)
+    r2, w2, h2 = _render(rgb, dpi=150)
+    out2 = vector_pdf.save_vector_pdf(r2, rgb, tmp_path / "r.pdf",
+                                      paper_w_mm=w2, paper_h_mm=h2, dpi=150)
+    assert "RGB" in PdfReader(str(out2)).metadata.title
+
+
 def test_export_pdf_via_build_chart(tmp_path):
     import workflow.ti2_relayout as R
     ti1 = tmp_path / "s.ti1"

@@ -89,7 +89,7 @@ class _Obj:
     def set(self, num: int, body: bytes) -> None:
         self.bodies[num] = body
 
-    def assemble(self) -> bytes:
+    def assemble(self, info_num: int | None = None) -> bytes:
         header = b"%PDF-1.5\n%\xe2\xe3\xcf\xd3\n"
         parts = [header]
         n = len(self.bodies) - 1
@@ -104,7 +104,8 @@ class _Obj:
         for i in range(1, n + 1):
             xref.append(f"{offsets[i]:010d} 00000 n \n".encode("ascii"))
         parts.extend(xref)
-        parts.append((f"trailer\n<< /Size {n + 1} /Root 1 0 R >>\n"
+        info = f" /Info {info_num} 0 R" if info_num else ""
+        parts.append((f"trailer\n<< /Size {n + 1} /Root 1 0 R{info} >>\n"
                       f"startxref\n{xref_pos}\n%%EOF\n").encode("ascii"))
         return b"".join(parts)
 
@@ -292,6 +293,22 @@ def save_vector_pdf(result, target, out_path: str | Path, *,
     objs.set(catalog, (f"{catalog} 0 obj\n<< /Type /Catalog /Pages {pages_obj} 0 R >>"
                        f"\nendobj\n").encode("ascii"))
 
+    # Document info: File → Properties plainly shows the colour space + inks, so
+    # it's obvious a CMYK/N chart is device-native and not an RGB picture (#72).
+    cs_name = ("RGB" if target.color_rep.upper() in ("RGB", "IRGB")
+               else "Gray" if n == 1 else target.color_rep.upper())
+    inks = ", ".join(_colorant_names(device_fields))
+
+    def _pdfstr(s: str) -> str:
+        return "(" + s.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)") + ")"
+
+    info_num = objs.add(
+        (f"{len(objs.bodies)} 0 obj\n"
+         f"<< /Title {_pdfstr(f'ChromIQ chart - {cs_name} ({n}-channel)')}"
+         f" /Subject {_pdfstr(f'Colorants: {inks}')}"
+         f" /Creator (ChromIQ) /Producer (ChromIQ vector PDF export) >>\n"
+         f"endobj\n").encode("latin-1"))
+
     out = Path(out_path)
-    out.write_bytes(objs.assemble())
+    out.write_bytes(objs.assemble(info_num))
     return out
