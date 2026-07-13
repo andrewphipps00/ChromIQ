@@ -1373,6 +1373,20 @@ class ScannerProfileDialog(_ToolDialogBase):
         self._adv_btn = QPushButton(tr("Advanced…"), self)
         self._adv_btn.clicked.connect(self._open_colprof_advanced)
         row3b.addWidget(self._adv_btn)
+        # Save the current type / quality / description / Advanced choices as the
+        # defaults for next time — the same explicit affordance the Build-Profile
+        # tab offers (Basti, #121). Without it, changes live only for this window.
+        self._save_defaults_btn = QPushButton(tr("Save as Defaults"), self)
+        self._save_defaults_btn.setToolTip(
+            tr("Store everything you've set here — the profile type, quality, the "
+               "description, and every option under Advanced — as your defaults. "
+               "Next time you open this window they'll already be filled in, so "
+               "you don't have to set them up again.\n\n"
+               "Your choices are only remembered when you click this. Closing the "
+               "window without saving leaves your defaults untouched, and "
+               "“Restore factory defaults” in Preferences clears them again."))
+        self._save_defaults_btn.clicked.connect(self._save_defaults_clicked)
+        row3b.addWidget(self._save_defaults_btn)
         row3b.addSpacing(32)                              # ⓘ tooltip column width
         form.addLayout(row3b)
 
@@ -1433,16 +1447,21 @@ class ScannerProfileDialog(_ToolDialogBase):
 
         # Restore remembered settings, wire live updates, size the label column.
         self._apply_colprof_config(self._adv_vals)
-        # Track whether the user picked a profile type by hand: if they haven't,
-        # ticking "Profile my printer" swaps the default to a cLUT (a printer
-        # profile wants one) and back to shaper+matrix for a scanner (#121).
-        self._ptype_user_set = bool(self._adv_vals.get("ptype"))
+        # Track whether the user picked a profile type by hand THIS session: if
+        # they haven't, ticking "Profile my printer" swaps the default to a cLUT
+        # (a printer profile wants one) and back to shaper+matrix for a scanner
+        # (#121). Only an explicit pick (the `activated` signal) counts — a
+        # merely-persisted `ptype` must NOT block the mode default, or the
+        # "(default)" marker moves to Lab cLUT while the selection stays put
+        # (Basti, #121).
+        self._ptype_user_set = False
         self._ptype.activated.connect(
             lambda *_: setattr(self, "_ptype_user_set", True))
         for _w in (self._ptype, self._pq):
             _w.currentIndexChanged.connect(self._on_colprof_changed)
         self._prof_name.textChanged.connect(self._update_command_preview)
         self._on_colprof_changed()
+        self._mark_default_combos()
         # One shared label column → the spinbox, combos and name field all
         # start at the same x (Basti, #108 follow-up).
         _labels = (self._sa_label, self._pt_label, self._q_label, self._pn_label)
@@ -1464,10 +1483,25 @@ class ScannerProfileDialog(_ToolDialogBase):
         }
 
     def _save_colprof_config(self) -> None:
+        """Persist the current main + advanced settings as the defaults. Only
+        called from the explicit "Save as Defaults" button (like the Build-Profile
+        tab) — settings are NOT silently written on every change."""
         cfg = dict(self._adv_vals)
         cfg.update(self._current_main_vals())
         self._adv_vals = cfg
         self._settings.set("scanner_colprof_config", cfg)
+
+    def _save_defaults_clicked(self) -> None:
+        self._save_colprof_config()
+        if getattr(self, "_log", None) is not None:
+            self._log.appendPlainText(tr("Profile settings saved as defaults."))
+        # Brief in-place confirmation on the button itself.
+        btn = self._save_defaults_btn
+        btn.setText(tr("Saved ✓"))
+        btn.setEnabled(False)
+        from PyQt6.QtCore import QTimer
+        QTimer.singleShot(1400, lambda: (btn.setText(tr("Save as Defaults")),
+                                         btn.setEnabled(True)))
 
     def _apply_colprof_config(self, cfg: dict) -> None:
         def _sel(combo, data) -> None:
@@ -1483,22 +1517,45 @@ class ScannerProfileDialog(_ToolDialogBase):
         is_clut = self._ptype.currentData() in scanner_colprof.CLUT_ALGOS
         self._q_label.setEnabled(is_clut)      # quality only applies to a cLUT
         self._pq.setEnabled(is_clut)
-        self._save_colprof_config()
-        self._update_command_preview()
+        self._update_command_preview()         # persistence is now explicit (Save button)
+
+    def _mark_default_combos(self) -> None:
+        """Label the factory-default option in each dropdown "(default)" so the
+        user sees at a glance what the default is (Knut, #121). The profile-type
+        default is mode-aware — Lab cLUT for a printer, shaper+matrix for a
+        scanner — so this is re-run whenever the printer tick changes."""
+        printer = self._printer_mode()
+        ptype_default = scanner_colprof.PTYPE_DEFAULT[printer]
+        for combo, choices, default in (
+                (self._ptype, scanner_colprof.PTYPE_CHOICES, ptype_default),
+                (self._pq, scanner_colprof.QUALITY_CHOICES, "m")):
+            for i, (data, label) in enumerate(choices):
+                combo.setItemText(
+                    i, tr("{option} (default)").format(option=label)
+                    if data == default else label)
 
     def _open_colprof_advanced(self) -> None:
-        dlg = scanner_colprof.ScannerAdvancedDialog(self._adv_vals, self)
+        from workflow.softproof_runner import argyll_ref_dir
+        dlg = scanner_colprof.ScannerAdvancedDialog(
+            self._adv_vals, self, printer=self._printer_mode(),
+            ref_dir=argyll_ref_dir(self._settings))
         if dlg.exec():
-            self._adv_vals.update(dlg.values())
-            self._save_colprof_config()
+            self._adv_vals.update(dlg.values())   # in-memory only until "Save as Defaults"
             self._update_command_preview()
+
+    def _effective_adv(self) -> dict:
+        """Advanced values for the current mode: printer mode preselects the
+        default gamut source, scanner mode strips printer-only options (#121)."""
+        from workflow.softproof_runner import argyll_ref_dir
+        return scanner_colprof.effective_adv_vals(
+            self._adv_vals, self._printer_mode(), argyll_ref_dir(self._settings))
 
     def _update_command_preview(self) -> None:
         try:
             desc = self._prof_name.text().strip() or tr("<chart name> scanner")
             params = scanner_colprof.make_profile_params(
                 Path("<measurements>.ti3"), desc,
-                self._current_main_vals(), self._adv_vals)
+                self._current_main_vals(), self._effective_adv())
             args = self._profiler._build_args(params)
             self._cmd_preview.setText("colprof " + " ".join(args))
         except Exception:                       # never let the preview break the UI
@@ -1894,13 +1951,19 @@ class ScannerProfileDialog(_ToolDialogBase):
         # A printer profile is best as a cLUT, so if the user hasn't chosen a type
         # by hand, default to Lab cLUT in printer mode and shaper+matrix otherwise.
         if not getattr(self, "_ptype_user_set", False):
-            _i = self._ptype.findData("l" if checked else "s")
+            _i = self._ptype.findData(scanner_colprof.PTYPE_DEFAULT[checked])
             if _i >= 0:
                 self._ptype.setCurrentIndex(_i)          # triggers preview refresh
+        self._mark_default_combos()          # the -a default flips with the mode
         self._update_command_preview()
-        self._run_btn.setText(
-            tr("Build printer profile") if checked else
-            tr("Build scanner or camera profile"))
+        # The window builds a printer profile in this mode, so the masthead title
+        # and window title must say so — not "scanner or camera" (Knut, #121).
+        title = (tr("Build printer profile") if checked
+                 else tr("Build scanner or camera profile"))
+        self._run_btn.setText(title)
+        self.setWindowTitle(title)
+        if getattr(self, "_header", None) is not None:
+            self._header.set_texts(self.EYEBROW, title)
         self._refresh()
 
     def _pick_scanner_profile(self) -> None:
@@ -3169,7 +3232,7 @@ class ScannerProfileDialog(_ToolDialogBase):
         ti3, custom = self._apply_profile_name(ti3)
         desc = custom or f"{base.name} (scanner-measured)"
         params = scanner_colprof.make_profile_params(       # #121: same settings
-            ti3, desc, self._current_main_vals(), self._adv_vals)
+            ti3, desc, self._current_main_vals(), self._effective_adv())
 
         def _done(code: int) -> None:
             icc = self._profiler.expected_icc_path(params)
@@ -3243,7 +3306,7 @@ class ScannerProfileDialog(_ToolDialogBase):
         combined, custom = self._apply_profile_name(combined)
         desc = custom or f"{base.name} scanner"
         params = scanner_colprof.make_profile_params(       # #121: main + advanced
-            combined, desc, self._current_main_vals(), self._adv_vals)
+            combined, desc, self._current_main_vals(), self._effective_adv())
 
         def _done(code: int) -> None:
             # Resolve the profile the same robust way the printer builder does:

@@ -143,6 +143,11 @@ class ProfileParams:
     # Curve / embedding flags
     no_grid_pos: bool = False
     no_embedded_data: bool = False
+    # Input-profile white-point handling (#121): wp_mode ∈ {"", "u", "ua", "uc",
+    # "scale"} → -u / -ua / -uc / -u <wp_scale>; clip_primaries → -R.
+    wp_mode: str = ""
+    wp_scale: float = 0.0
+    clip_primaries: bool = False
 
 
 class ProfileBuilder:
@@ -332,6 +337,18 @@ class ProfileBuilder:
             args.append("-ni")
         if p.no_output_shaper:
             args.append("-no")
+        # Input-profile white-point handling (-u / -ua / -uc / -u <scale>) and the
+        # general primary clamp (-R). Mutually-exclusive -u modes (#121, Knut).
+        if p.wp_mode == "u":
+            args.append("-u")
+        elif p.wp_mode == "ua":
+            args.append("-ua")
+        elif p.wp_mode == "uc":
+            args.append("-uc")
+        elif p.wp_mode == "scale" and p.wp_scale > 0:
+            args += ["-u", f"{p.wp_scale:g}"]
+        if p.clip_primaries:
+            args.append("-R")
         if p.extra_args:
             args += shlex.split(p.extra_args)
         # Base name without extension

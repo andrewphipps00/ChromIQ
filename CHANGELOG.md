@@ -1,5 +1,38 @@
 # Changelog
 
+## v3.13.6-beta.2
+
+A beta for review — Knut's feedback on the scanner/camera profile builder (#121).
+
+### Scanner / camera profile settings (#121)
+- **The Advanced window now mirrors tab "4 Build profile" → Manual exactly** —
+  the same grouped sections (Measurement & Smoothing, Gamut Mapping, Profile
+  Metadata, Advanced), the same checkbox-gated controls, and the same
+  (-flag) labels — so a user who knows one knows the other. The free-form
+  "extra arguments" box is gone; every option is now a proper, labelled control.
+- **The gamut source ("colour space") is a clear dropdown**, and **ClayRGB1998
+  (Adobe RGB) is preselected** as the default source for a printer profile —
+  the right choice for most photographic workflows.
+- **All applicable options are offered for both paths.** The scanner path now
+  also exposes the profile Model, dark-region emphasis, the full set of
+  curve/embedding diagnostics, and colprof's input-profile **white-point
+  handling** (auto-scale -u, absolute -ua, clip-highlights -uc, or a manual
+  scale) plus the primary clamp (-R); the printer path adds the rendering-intent
+  overrides and the B2A table quality. Printer-only and scanner-only options
+  never leak into the other kind of profile.
+- **The window title now follows the mode** — it reads "Build printer profile"
+  when "Profile my printer from this scan" is ticked, and the default profile
+  type switches to Lab cLUT (and is labelled "(default)").
+- **Every dropdown marks its default** with "(default)" so the recommended
+  choice is obvious at a glance.
+- **A "Save as Defaults" button** (next to Advanced…) remembers the current
+  settings for next time — settings are no longer written silently on every
+  change.
+- **The command preview updates live** with every selection, and the
+  gamut-source file picker opens on — and pins a shortcut to — Argyll's ref/
+  folder. All the ⓘ tooltips are beginner-first (friendly, plain-language,
+  current behaviour only), and the folder/ⓘ icons use the window's green accent.
+
 ## v3.13.6-beta.1
 
 A beta for review. Multi-ink profiling comes to the layout engine (device-native

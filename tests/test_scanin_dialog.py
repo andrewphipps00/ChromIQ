@@ -168,7 +168,8 @@ def test_printer_mode_switches_default_profile_type(_app):
 
 def test_profile_type_clut_lab_high_maps_and_previews(_app):
     """#121: cLUT — Lab + High → -al -qh, quality becomes active, and the command
-    preview + persistence follow."""
+    preview follows. Persistence is now explicit (the Save-as-Defaults button),
+    not silent-on-change (Basti)."""
     dlg = _dialog(_app)
     try:
         dlg._ptype.setCurrentIndex(dlg._ptype.findData("l"))   # cLUT — Lab
@@ -177,6 +178,10 @@ def test_profile_type_clut_lab_high_maps_and_previews(_app):
         assert dlg._current_main_vals() == {"ptype": "l", "quality": "h"}
         txt = dlg._cmd_preview.text()
         assert "-al" in txt and "-qh" in txt
+        # nothing persisted yet — the change was only in the live window
+        assert not dlg._settings.get("scanner_colprof_config", {})
+        # clicking "Save as Defaults" writes the current main + advanced settings
+        dlg._save_defaults_clicked()
         cfg = dlg._settings.get("scanner_colprof_config", {})
         assert cfg.get("ptype") == "l" and cfg.get("quality") == "h"
     finally:
@@ -1080,5 +1085,52 @@ def test_engine_chart_keeps_exact_geometry(_app, tmp_path):
         got = {b.name: b.x1 for b in parse_cht(out.read_text()).patches}
         for p in patches:                         # positions byte-true, no rewrite
             assert got[p["loc"]] == p["x"]
+    finally:
+        dlg.deleteLater()
+
+
+def test_window_title_and_defaults_are_mode_aware(_app):
+    """Knut, #121: the window builds a printer profile when 'Profile my printer
+    from this scan' is ticked, so the masthead/window title must say so — and the
+    factory-default option in each dropdown is labelled '(default)', with the
+    profile-type default flipping to Lab cLUT for a printer."""
+    dlg = _dialog(_app)
+    try:
+        # scanner mode: input-profile title + shaper+matrix marked default
+        assert dlg.windowTitle() == "Build scanner or camera profile"
+        ptypes = [dlg._ptype.itemText(i) for i in range(dlg._ptype.count())]
+        assert "Shaper + matrix (default)" in ptypes
+        quals = [dlg._pq.itemText(i) for i in range(dlg._pq.count())]
+        assert "Medium (default)" in quals
+        # printer mode: title changes, Lab cLUT becomes the marked default & selection
+        dlg._printer_cb.setChecked(True)
+        assert dlg.windowTitle() == "Build printer profile"
+        assert dlg._header._title_lbl.text() == "Build printer profile"
+        assert dlg._ptype.currentData() == "l"                 # Lab cLUT default
+        ptypes = [dlg._ptype.itemText(i) for i in range(dlg._ptype.count())]
+        assert "cLUT — Lab table (default)" in ptypes
+        assert "Shaper + matrix (default)" not in ptypes       # marker moved
+    finally:
+        dlg.deleteLater()
+
+
+def test_printer_toggle_moves_selection_not_just_marker(_app):
+    """Basti, #121: a merely-persisted `ptype` must NOT freeze the selection —
+    ticking printer mode moves the actual selection to Lab cLUT, not only the
+    "(default)" label. A type the user picks BY HAND is still respected."""
+    from ui.dialogs.scanin_dialog import ScannerProfileDialog
+    settings = _FakeSettings(scanner_colprof_config={"ptype": "s", "quality": "m"})
+    dlg = ScannerProfileDialog(object(), settings)
+    try:
+        assert dlg._ptype.currentData() == "s"                 # restored scanner type
+        dlg._printer_cb.setChecked(True)
+        assert dlg._ptype.currentData() == "l"                 # selection followed, not just marker
+        # a hand-pick survives a later toggle
+        dlg._printer_cb.setChecked(False)
+        i = dlg._ptype.findData("x")
+        dlg._ptype.setCurrentIndex(i)
+        dlg._ptype.activated.emit(i)                           # simulate explicit pick
+        dlg._printer_cb.setChecked(True)
+        assert dlg._ptype.currentData() == "x"                 # respected
     finally:
         dlg.deleteLater()
