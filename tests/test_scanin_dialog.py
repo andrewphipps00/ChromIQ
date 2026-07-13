@@ -61,14 +61,23 @@ def test_marquee_receives_initial_sample_fraction(_app):
 
 
 def test_profile_type_options_and_mapping(_app):
+    """#121: profile type / colour space / quality controls, whose defaults keep
+    the previous scanner output (shaper+matrix, medium)."""
+    from ui.dialogs import scanner_colprof as sc
     dlg = _dialog(_app)
     try:
-        combo = dlg._ptype
-        got = [(combo.itemData(i)) for i in range(combo.count())]
-        # Three choices, in order: Matrix, LUT medium, LUT high.
-        assert got == [("s", "m"), ("x", "m"), ("x", "h")]
-        # Default selection = Matrix (keeps the previous shaper+matrix output).
-        assert combo.currentData() == ("s", "m")
+        assert [dlg._ptype.itemData(i) for i in range(dlg._ptype.count())] == \
+            ["shaper", "matrix", "clut"]
+        assert dlg._ptype.currentData() == "shaper"      # default
+        assert dlg._pq.currentData() == "m"              # medium default
+        # Default main values still map to the previous -as -qm output.
+        mv = dlg._current_main_vals()
+        assert sc.algo_from_ui(mv["ptype"], mv["colourspace"]) == "s"
+        assert mv["quality"] == "m"
+        # Colour space / quality are disabled unless cLUT is chosen.
+        assert not dlg._pcs.isEnabled() and not dlg._pq.isEnabled()
+        # The command preview reflects the settings.
+        assert "colprof" in dlg._cmd_preview.text() and "-as" in dlg._cmd_preview.text()
     finally:
         dlg.deleteLater()
 
@@ -140,12 +149,24 @@ def test_extrapolate_to_fiducials_derives_marks_from_patch_quad(_app):
     assert extrapolate_to_fiducials([(0, 0)], txt) is None    # need four corners
 
 
-def test_profile_type_high_selects_xh(_app):
+def test_profile_type_clut_lab_high_maps_and_previews(_app):
+    """#121: cLUT + Lab + High → -al -qh, colour space/quality become active, and
+    the command preview + persistence follow."""
+    from ui.dialogs import scanner_colprof as sc
     dlg = _dialog(_app)
     try:
-        combo = dlg._ptype
-        combo.setCurrentIndex(2)
-        assert combo.currentData() == ("x", "h")
+        dlg._ptype.setCurrentIndex(dlg._ptype.findData("clut"))
+        dlg._pcs.setCurrentIndex(dlg._pcs.findData("l"))
+        dlg._pq.setCurrentIndex(dlg._pq.findData("h"))
+        assert dlg._pcs.isEnabled() and dlg._pq.isEnabled()
+        mv = dlg._current_main_vals()
+        assert sc.algo_from_ui(mv["ptype"], mv["colourspace"]) == "l"
+        assert mv["quality"] == "h"
+        txt = dlg._cmd_preview.text()
+        assert "-al" in txt and "-qh" in txt
+        # Settings were persisted to the (fake) settings store.
+        cfg = dlg._settings.get("scanner_colprof_config", {})
+        assert cfg.get("ptype") == "clut" and cfg.get("quality") == "h"
     finally:
         dlg.deleteLater()
 

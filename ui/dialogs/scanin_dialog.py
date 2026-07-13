@@ -32,6 +32,7 @@ from ui.dialogs.tools_dialogs import (
 from ui.scan_grid_marquee import GridSpec, ScanGridMarquee
 from ui.styles import SPEC_GREEN
 from ui.dialogs.scanin_target_dialog import WHICH_CHART_HELP, WHICH_CHART_CAMERA_NOTE
+from ui.dialogs import scanner_colprof
 from ui.theme import resolve_mode
 from ui.tooltip_button import TooltipButton
 from ui.widgets import (NoScrollComboBox, NoScrollSpinBox, make_browse_button,
@@ -542,6 +543,9 @@ class ScannerProfileDialog(_ToolDialogBase):
         self._runner = runner
         self._scanin = ScaninRunner(runner)
         self._profiler = ProfileBuilder(runner)
+        # Scanner colprof settings (#121, Knut): remembered main + advanced
+        # values, stored in QSettings so Restore-factory-defaults clears them.
+        self._adv_vals: dict = self._load_colprof_config()
         self._ti3: Path | None = None
         self._layout: dict | None = None
         self._printer_scan_profile: Path | None = None   # scanner ICC for printer mode
@@ -1308,61 +1312,175 @@ class ScannerProfileDialog(_ToolDialogBase):
         opts.addWidget(self._use_fiducials_cb, 1, 0)
         form.addLayout(opts)
 
-        self._pt_label = QLabel(tr("Profile type:"), self)
+        # Profile type (-a) + colour space (-a) + quality (-q), the most-used
+        # colprof settings, next to each other (#121, Knut). The friendly
+        # profile-type combo maps to colprof -a; colour space picks the cLUT PCS
+        # (only meaningful for the look-up-table type); the rest lives behind
+        # "Advanced…". Same method + (-flag) label style as tab "4 Build profile".
+        self._pt_label = QLabel(tr("Profile type (-a):"), self)
         row3 = QHBoxLayout()
         row3.addWidget(self._pt_label)
         self._ptype = NoScrollComboBox(self)
-        # data = (colprof -a algorithm, -q quality). "s" (shaper+matrix) keeps the
-        # previous default output exactly under the friendly "Matrix" label.
-        self._ptype.addItem(tr("Matrix (recommended)"), ("s", "m"))
-        self._ptype.addItem(tr("LUT — medium quality"), ("x", "m"))
-        self._ptype.addItem(tr("LUT — high quality"), ("x", "h"))
+        for data, label in scanner_colprof.PTYPE_CHOICES:
+            self._ptype.addItem(label, data)
         row3.addWidget(self._ptype, 1)
+        self._pcs = NoScrollComboBox(self)
+        for data, label in scanner_colprof.COLOURSPACE_CHOICES:
+            self._pcs.addItem(label, data)
+        row3.addWidget(QLabel(tr("Colour space:"), self))
+        row3.addWidget(self._pcs)
+        self._pq = NoScrollComboBox(self)
+        for data, label in scanner_colprof.QUALITY_CHOICES:
+            self._pq.addItem(label, data)
+        self._pq.setCurrentIndex(1)                      # Medium
+        row3.addWidget(QLabel(tr("Quality (-q):"), self))
+        row3.addWidget(self._pq)
         row3.addWidget(self._tip(
-            tr("Profile type"),
-            tr("How the scanner profile models colour.\n\n"
-            "• Matrix — a small, robust profile (a matrix with per-channel "
-            "curves). The most common choice for scanners: forgiving of noise "
-            "and few patches, and enough for faithful colour. Recommended.\n\n"
-            "• LUT — medium / high quality — a look-up-table profile that can "
-            "follow the scanner more closely. Use it when you have a chart with "
-            "many patches and clean, repeatable scans; high is finer but needs "
-            "the best data or it just fits the noise.")), 0,
-            Qt.AlignmentFlag.AlignVCenter)
+            tr("Profile type, colour space and quality"),
+            tr("How the scanner or camera profile models colour — the three most "
+               "common colprof settings.\n\n"
+               "Profile type (-a):\n"
+               "• Shaper + matrix — a small, robust profile (per-channel curves "
+               "plus a 3×3 matrix). The usual choice for scanners: forgiving of "
+               "noise and a modest number of patches, and enough for faithful "
+               "colour. Recommended.\n"
+               "• Matrix only — even simpler; use it if a chart has very few "
+               "patches or the shaper curves misbehave.\n"
+               "• cLUT — a full look-up table that can follow the device more "
+               "closely. Worth it only with a large chart and clean, repeatable "
+               "scans; with noisy data it just fits the noise.\n\n"
+               "Colour space (cLUT only): whether the look-up table works in XYZ "
+               "or Lab. Both are accurate; Lab sometimes gives slightly smoother "
+               "neutrals. It has no effect on the matrix types.\n\n"
+               "Quality (-q, cLUT only): the table's grid resolution — higher is "
+               "finer but slower, and needs better data to be worth it. Medium is "
+               "a good default; Low is a quick test, High/Ultra for large, clean "
+               "charts.")), 0, Qt.AlignmentFlag.AlignVCenter)
         form.addLayout(row3)
-        # Optional profile name (Nelson): without it the .icc inherits the
-        # chart / target scan's name, which reads like a paper profile — let the
-        # user call it e.g. "Epson ET-8550 scanner" instead.
+
+        # Advanced… (less-common colprof options) + the live command preview.
+        row_adv = QHBoxLayout()
+        self._adv_btn = QPushButton(tr("Advanced…"), self)
+        self._adv_btn.clicked.connect(self._open_colprof_advanced)
+        row_adv.addWidget(self._adv_btn)
+        row_adv.addStretch(1)
+        form.addLayout(row_adv)
+
+        # Profile description (-D): the name embedded in the .icc and shown in
+        # colour-management menus. Renamed from "Profile name" and given
+        # scanner-appropriate examples (#121, Knut).
         row4 = QHBoxLayout()
-        self._pn_label = QLabel(tr("Profile name:"), self)
+        self._pn_label = QLabel(tr("Profile description (-D):"), self)
         row4.addWidget(self._pn_label)
         self._prof_name = QLineEdit(self)
         self._prof_name.setPlaceholderText(
-            tr("optional — otherwise named after the chart / target"))
+            tr("e.g. Epson V850 · Photo · Positive · 2026-07"))
         row4.addWidget(self._prof_name, 1)
         row4.addWidget(self._tip(
-            tr("Profile name"),
-            tr("The name of the finished profile — used for the .icc file "
-               "itself and for the name colour-managed programs (Photoshop, "
-               "your scanning software, the printer driver…) show in their "
-               "profile lists.\n\n"
-               "You can leave this empty: the profile is then named after the "
-               "chart or target scan it was built from. That works, but a name "
-               "like “Moab_Satin_240gsm” is easy to mistake for a paper or "
-               "printer profile later. A name that says what the profile "
-               "actually is — “Epson ET-8550 scanner”, or “Brother MFC-9460 "
-               "plain paper” for a printer profile — keeps your profile list "
-               "understandable years from now.\n\n"
-               "The name applies to whichever profile this window builds: the "
-               "scanner or camera profile, or, when “Profile my printer from "
-               "this scan” is ticked, the printer profile.")))
+            tr("Profile description (-D)"),
+            tr("The name embedded in the finished profile (colprof's -D). It's "
+               "used for the .icc file itself and is the name colour-managed "
+               "programs — Photoshop, your scanning software, Preview — show in "
+               "their profile lists.\n\n"
+               "Use a consistent format that says what the profile is, so the "
+               "right one is easy to find later. For a scanner or camera, a good "
+               "recipe is device, media, film/print type, and date:\n\n"
+               "  Device · Media · Type · Date\n"
+               "  e.g. “Epson V850 · Photo paper · Positive · 2026-07”\n"
+               "  e.g. “Canon R5 · IT8 target · 2026-07”\n\n"
+               "A name like “Moab_Satin_240gsm” is easy to mistake for a paper "
+               "or printer profile later, so name it for the scanner/camera it "
+               "actually is.\n\n"
+               "Leave it blank and the profile is named after the chart or target "
+               "scan it was built from. When “Profile my printer from this scan” "
+               "is ticked, this name applies to the printer profile instead.")))
         form.addLayout(row4)
+
+        # Command preview: the exact colprof command the current settings run.
+        row_cmd = QHBoxLayout()
+        self._cmd_label = QLabel(tr("Command:"), self)
+        row_cmd.addWidget(self._cmd_label)
+        self._cmd_preview = QLineEdit(self)
+        self._cmd_preview.setReadOnly(True)
+        self._cmd_preview.setStyleSheet(f"color: {self._hint};")
+        row_cmd.addWidget(self._cmd_preview, 1)
+        row_cmd.addWidget(self._tip(
+            tr("Command preview"),
+            tr("The exact colprof command your current settings will run, "
+               "including anything changed under Advanced. It's shown so you can "
+               "see precisely what happens and copy it if you like; the profile "
+               "is still built by ChromIQ when you press the build button.")))
+        form.addLayout(row_cmd)
+
+        # Restore remembered settings, wire live updates, size the label column.
+        self._apply_colprof_config(self._adv_vals)
+        for _w in (self._ptype, self._pcs, self._pq):
+            _w.currentIndexChanged.connect(self._on_colprof_changed)
+        self._prof_name.textChanged.connect(self._update_command_preview)
+        self._on_colprof_changed()
         # One shared label column → the spinbox, combo and name field all
         # start at the same x (Basti, #108 follow-up).
-        _labels = (self._sa_label, self._pt_label, self._pn_label)
+        _labels = (self._sa_label, self._pt_label, self._pn_label, self._cmd_label)
         _w = max(l.sizeHint().width() for l in _labels) + 8
         for _l in _labels:
             _l.setFixedWidth(_w)
+
+    # ------------------------------------------------------------------
+    # Scanner colprof settings (#121, Knut)
+    # ------------------------------------------------------------------
+    def _load_colprof_config(self) -> dict:
+        cfg = self._settings.get("scanner_colprof_config", {}) or {}
+        return dict(cfg) if isinstance(cfg, dict) else {}
+
+    def _current_main_vals(self) -> dict:
+        return {
+            "ptype": self._ptype.currentData() or "shaper",
+            "colourspace": self._pcs.currentData() or "x",
+            "quality": self._pq.currentData() or "m",
+        }
+
+    def _save_colprof_config(self) -> None:
+        cfg = dict(self._adv_vals)
+        cfg.update(self._current_main_vals())
+        self._adv_vals = cfg
+        self._settings.set("scanner_colprof_config", cfg)
+
+    def _apply_colprof_config(self, cfg: dict) -> None:
+        def _sel(combo, data) -> None:
+            i = combo.findData(data)
+            if i >= 0:
+                combo.setCurrentIndex(i)
+        if cfg.get("ptype"):
+            _sel(self._ptype, cfg["ptype"])
+        if cfg.get("colourspace"):
+            _sel(self._pcs, cfg["colourspace"])
+        if cfg.get("quality"):
+            _sel(self._pq, cfg["quality"])
+
+    def _on_colprof_changed(self) -> None:
+        is_clut = self._ptype.currentData() == "clut"
+        self._pcs.setEnabled(is_clut)          # colour space / quality only apply
+        self._pq.setEnabled(is_clut)           # to the look-up-table type
+        self._save_colprof_config()
+        self._update_command_preview()
+
+    def _open_colprof_advanced(self) -> None:
+        dlg = scanner_colprof.ScannerAdvancedDialog(self._adv_vals, self)
+        if dlg.exec():
+            self._adv_vals.update(dlg.values())
+            self._save_colprof_config()
+            self._update_command_preview()
+
+    def _update_command_preview(self) -> None:
+        try:
+            desc = self._prof_name.text().strip() or tr("<chart name> scanner")
+            params = scanner_colprof.make_profile_params(
+                Path("<measurements>.ti3"), desc,
+                self._current_main_vals(), self._adv_vals)
+            args = self._profiler._build_args(params)
+            self._cmd_preview.setText("colprof " + " ".join(args))
+        except Exception:                       # never let the preview break the UI
+            self._cmd_preview.setText("colprof …")
 
     def _custom_profile_stem(self) -> str | None:
         """The user-chosen profile name as a filesystem-safe stem, or None."""
@@ -3097,13 +3215,10 @@ class ScannerProfileDialog(_ToolDialogBase):
             self._finish(False)
             return
         self._log.appendPlainText(tr("Building the scanner profile…"))
-        alg, quality = self._ptype.currentData() or ("s", "m")
         combined, custom = self._apply_profile_name(combined)
         desc = custom or f"{base.name} scanner"
-        params = ProfileParams(
-            ti3_path=combined, algorithm=alg, quality=quality,
-            description=desc, manufacturer="ChromIQ",
-            model=desc, verbose=True)                     # show colprof's output
+        params = scanner_colprof.make_profile_params(       # #121: main + advanced
+            combined, desc, self._current_main_vals(), self._adv_vals)
 
         def _done(code: int) -> None:
             # Resolve the profile the same robust way the printer builder does:

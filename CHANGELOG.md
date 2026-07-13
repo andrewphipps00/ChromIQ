@@ -1,10 +1,25 @@
 # Changelog
 
-## v3.13.6
+## v3.13.6-beta.1
 
-Multi-ink profiling comes to the layout engine: it now writes real
-device-native CMYK / CMYK+N charts, and any chart can be exported as a crisp
-vector PDF alongside the TIFF.
+A beta for review. Multi-ink profiling comes to the layout engine (device-native
+CMYK/N TIFFs + a crisp vector-PDF export), and the scanner/camera profile builder
+gains detailed colprof settings.
+
+### Scanner / camera profile settings (#121)
+- **The "Build scanner or camera profile" window now exposes the main colprof
+  settings** — profile type (-a), colour space, and quality (-q) — next to each
+  other, using the same method and (-flag) label style as tab "4 Build profile".
+  The defaults reproduce the previous output (shaper + matrix, medium).
+- **An "Advanced…" button** opens the less-common options (average deviation -r,
+  no input curves -ni, manufacturer -A, copyright -C, and free-form extra
+  arguments), each showing its default and remembering your last value.
+- **The window shows the exact colprof command** your current settings will run,
+  updating live as you change them.
+- **"Profile name" is now "Profile description (-D)"** with scanner-appropriate
+  naming examples.
+- All settings are remembered between runs; **Restore factory defaults** in
+  Preferences clears them back to the defaults.
 
 ### Improvements
 - **The engine writes device-native CMYK and CMYK + extra-ink charts.** A
