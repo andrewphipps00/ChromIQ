@@ -477,8 +477,8 @@ WORKFLOWS: list[dict] = [
                 "profile next to the scan. Multi-page charts: place each page's "
                 "scan (and, if you like, several scans per page to average), all "
                 "combined into one profile.")),
-            (3, tr("No ChromIQ chart — or profiling a camera? In Build scanner "
-                "or camera profile choose “A standard target I own”, pick your "
+            (3, tr("No ChromIQ chart — or profiling a camera? In Build profile "
+                "with scanner or camera choose “A standard target I own”, pick your "
                 "target type (IT8, X-Rite ColorChecker, LaserSoft…) and load the "
                 "reference data file that came with it, then scan the target — or "
                 "photograph it for a camera. Everything else is the same. See the "

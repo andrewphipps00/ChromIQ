@@ -2,7 +2,7 @@
 
 These `.cht` files describe **where the patches sit** on standard scanner/camera
 calibration targets (IT8, ColorChecker-style, etc.). ChromIQ uses them in
-**Tools ▸ Build scanner or camera profile** so it can lay its reading grid over
+**Tools ▸ Build profile with scanner or camera** so it can lay its reading grid over
 a scan or photo of a target you own. They contain **geometry only — no colours**;
 the true patch colours come from the reference file that ships with your own
 physical target (batch-specific, so it can't be bundled).

@@ -456,11 +456,11 @@ class ScaninTargetDialog(_ToolDialogBase):
         self._log.appendPlainText((
             tr("Recognition files for {n} patches on one page saved next to your "
                "chart. Scan or photograph the printed chart, then use 'Build "
-               "scanner or camera profile'.")
+               "profile with scanner or camera'.")
             if res.n_pages == 1 else
             tr("Recognition files for {n} patches on {pages} pages saved next to "
                "your chart. Scan or photograph the printed chart, then use 'Build "
-               "scanner or camera profile'.")
+               "profile with scanner or camera'.")
         ).format(n=res.n_patches, pages=res.n_pages))
 
     def _execute_chromiq(self) -> None:

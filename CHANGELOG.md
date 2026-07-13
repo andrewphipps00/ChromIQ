@@ -1,5 +1,15 @@
 # Changelog
 
+## v3.13.6-beta.4
+
+A beta for review — finishes the tool rename (#121, Knut).
+
+- **The new name "Build profile with scanner or camera" now appears in every
+  help text** that mentions the tool — the welcome guide, the target-tool's
+  saved-files message, the landing page and the bundled-target README. A few
+  references had been split across lines and missed the first pass; their
+  translations are restored, German included.
+
 ## v3.13.6-beta.3
 
 A beta for review — Knut's second round of feedback on the profile builder (#121).

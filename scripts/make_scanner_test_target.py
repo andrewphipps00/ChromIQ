@@ -2,7 +2,7 @@
 
 The image is rendered directly from the target's own ``.cht``, so ChromIQ's
 reading grid lands exactly on the patches once you place the four corners on the
-patch block — a hardware-free way to check the *Build scanner or camera profile*
+patch block — a hardware-free way to check the *Build profile with scanner or camera*
 flow (or to isolate whether a real scan that misregisters is a file problem).
 
     python scripts/make_scanner_test_target.py QPcard_202 [out_dir]
