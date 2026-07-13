@@ -17,7 +17,19 @@ import numpy as np
 import pytest
 import tifffile
 
-from workflow.postscript_generator import PostScriptGenerator
+from workflow.postscript_generator import PdfGenerator, PostScriptGenerator
+
+
+def test_pdf_devicen_tint_maps_each_ink_not_all_magenta():
+    """The DeviceN→CMYK tint transform must map each ink to its own CMYK
+    contribution (so a viewer previews real colours), not collapse everything
+    into one channel (the old average-into-magenta bug). #72"""
+    body = PdfGenerator._pdf_tint_fn_body(6, ["c", "m", "y", "k", "o", "g"])
+    # orange contributes magenta(0.4)+yellow(0.7); green contributes cyan+yellow(0.5)
+    assert "0.7000 mul" in body and "0.4000 mul" in body and "0.5000 mul" in body
+    # the buggy form averaged all inks (`6 div … 4 1 roll`); make sure it's gone
+    assert "6 div" not in body
+    assert body.count("index") >= 4          # weighted sums via stack copies
 
 
 def _write_tiff(path: Path, w_px: int, h_px: int, dpi: int = 200) -> None:

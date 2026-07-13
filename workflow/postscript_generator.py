@@ -401,7 +401,7 @@ class PdfGenerator:
         ).encode("ascii") + img_data + b"\nendstream\nendobj\n"
 
         if has_tint_fn:
-            tint_body = self._pdf_tint_fn_body(n_ch).encode("ascii")
+            tint_body = self._pdf_tint_fn_body(n_ch, ink_channels).encode("ascii")
             domain = " ".join(["0 1"] * n_ch)
             obj_bodies[6] = (
                 f"6 0 obj\n"
@@ -431,13 +431,31 @@ class PdfGenerator:
         return f"[/DeviceN [{names}] /DeviceCMYK 6 0 R]"
 
     @staticmethod
-    def _pdf_tint_fn_body(n_ch: int) -> str:
-        """PDF Type 4 tint function: N inks → CMYK via grayscale-average-to-K mapping.
+    def _pdf_tint_fn_body(n_ch: int, ink_channels: list[str] | None = None) -> str:
+        """PDF Type-4 tint function: N ink values → CMYK, each output the weighted
+        sum of the inks' CMYK contributions (clamped) so a viewer previews the
+        real colours. CMYK inks pass through 1:1; extra inks map to their nearest
+        CMYK via _INK_TO_CMYK. (An earlier version averaged every ink into one
+        channel, which previewed a CMYK+N chart as all-magenta.)
 
         PDF Type 4 restricts operators to arithmetic/boolean/stack — no def/begin/end.
         """
-        adds = (" ".join(["add"] * (n_ch - 1)) + " ") if n_ch > 1 else ""
-        return f"{{ {adds}{n_ch} div dup 1 gt {{ pop 1 }} if 0 0 0 4 1 roll }}"
+        channels = (list(ink_channels[:n_ch]) if ink_channels and len(ink_channels) >= n_ch
+                    else [f"ink{i + 1}" for i in range(n_ch)])
+        w = [_INK_TO_CMYK.get(c, (0.0, 0.0, 0.0, 0.0)) for c in channels]
+        ops: list[str] = []
+        for j in range(4):                       # C, M, Y, K outputs
+            terms = [(i, w[i][j]) for i in range(n_ch) if w[i][j]]
+            if not terms:
+                ops.append("0")
+            else:
+                for k, (i, weight) in enumerate(terms):
+                    ops.append(f"{j + k + (n_ch - 1 - i)} index {weight:.4f} mul")
+                ops.extend(["add"] * (len(terms) - 1))
+            ops.append("dup 0 lt {pop 0} if dup 1 gt {pop 1} if")   # clamp 0..1
+        ops.append(f"{n_ch + 4} 4 roll")         # drop the N inputs under the CMYK
+        ops.extend(["pop"] * n_ch)
+        return "{ " + " ".join(ops) + " }"
 
     @staticmethod
     def _assemble_pdf(obj_bodies: list[bytes], n_objs: int) -> bytes:
