@@ -1324,17 +1324,6 @@ class ScannerProfileDialog(_ToolDialogBase):
         for data, label in scanner_colprof.PTYPE_CHOICES:
             self._ptype.addItem(label, data)
         row3.addWidget(self._ptype, 1)
-        self._pcs = NoScrollComboBox(self)
-        for data, label in scanner_colprof.COLOURSPACE_CHOICES:
-            self._pcs.addItem(label, data)
-        row3.addWidget(QLabel(tr("Colour space:"), self))
-        row3.addWidget(self._pcs)
-        self._pq = NoScrollComboBox(self)
-        for data, label in scanner_colprof.QUALITY_CHOICES:
-            self._pq.addItem(label, data)
-        self._pq.setCurrentIndex(1)                      # Medium
-        row3.addWidget(QLabel(tr("Quality (-q):"), self))
-        row3.addWidget(self._pq)
         row3.addWidget(self._tip(
             tr("Profile type, colour space and quality"),
             tr("How the scanner or camera profile models colour — the three most "
@@ -1358,13 +1347,28 @@ class ScannerProfileDialog(_ToolDialogBase):
                "charts.")), 0, Qt.AlignmentFlag.AlignVCenter)
         form.addLayout(row3)
 
-        # Advanced… (less-common colprof options) + the live command preview.
-        row_adv = QHBoxLayout()
+        # Colour space + quality on their own row (kept off the type row so the
+        # window never needs to scroll sideways). Both apply only to the cLUT type.
+        row3b = QHBoxLayout()
+        self._cs_label = QLabel(tr("Colour space:"), self)
+        row3b.addWidget(self._cs_label)
+        self._pcs = NoScrollComboBox(self)
+        for data, label in scanner_colprof.COLOURSPACE_CHOICES:
+            self._pcs.addItem(label, data)
+        row3b.addWidget(self._pcs)
+        row3b.addSpacing(16)
+        row3b.addWidget(QLabel(tr("Quality (-q):"), self))
+        self._pq = NoScrollComboBox(self)
+        for data, label in scanner_colprof.QUALITY_CHOICES:
+            self._pq.addItem(label, data)
+        self._pq.setCurrentIndex(1)                      # Medium
+        row3b.addWidget(self._pq)
+        row3b.addStretch(1)
+        # Advanced… (less-common colprof options), on the same row, right-aligned.
         self._adv_btn = QPushButton(tr("Advanced…"), self)
         self._adv_btn.clicked.connect(self._open_colprof_advanced)
-        row_adv.addWidget(self._adv_btn)
-        row_adv.addStretch(1)
-        form.addLayout(row_adv)
+        row3b.addWidget(self._adv_btn)
+        form.addLayout(row3b)
 
         # Profile description (-D): the name embedded in the .icc and shown in
         # colour-management menus. Renamed from "Profile name" and given
@@ -1396,21 +1400,30 @@ class ScannerProfileDialog(_ToolDialogBase):
                "is ticked, this name applies to the printer profile instead.")))
         form.addLayout(row4)
 
-        # Command preview: the exact colprof command the current settings run.
-        row_cmd = QHBoxLayout()
-        self._cmd_label = QLabel(tr("Command:"), self)
-        row_cmd.addWidget(self._cmd_label)
-        self._cmd_preview = QLineEdit(self)
-        self._cmd_preview.setReadOnly(True)
-        self._cmd_preview.setStyleSheet(f"color: {self._hint};")
-        row_cmd.addWidget(self._cmd_preview, 1)
-        row_cmd.addWidget(self._tip(
+        # Command preview: the exact colprof command the current settings run,
+        # in a green-accented info box (like the Create Chart info box, #121 Knut).
+        _light = resolve_mode(self._settings.get("appearance", "auto")) == "light"
+        _cmd_bg = "#eafaf3" if _light else "#06251a"
+        _cmd_fg = "#0a7a58" if _light else SPEC_GREEN
+        cmd_row = QHBoxLayout()
+        self._cmd_preview = QLabel("", self)
+        self._cmd_preview.setObjectName("info")
+        self._cmd_preview.setWordWrap(True)
+        self._cmd_preview.setTextInteractionFlags(
+            Qt.TextInteractionFlag.TextSelectableByMouse)
+        self._cmd_preview.setStyleSheet(
+            f"QLabel#info {{ background: {_cmd_bg}; color: {_cmd_fg};"
+            f" border: 1px solid {SPEC_GREEN}; border-radius: 4px;"
+            f" padding: 6px 10px; font-family: Menlo, monospace; font-size: 11px; }}")
+        cmd_row.addWidget(self._cmd_preview, 1)
+        cmd_row.addWidget(self._tip(
             tr("Command preview"),
             tr("The exact colprof command your current settings will run, "
                "including anything changed under Advanced. It's shown so you can "
                "see precisely what happens and copy it if you like; the profile "
-               "is still built by ChromIQ when you press the build button.")))
-        form.addLayout(row_cmd)
+               "is still built by ChromIQ when you press the build button.")),
+            0, Qt.AlignmentFlag.AlignTop)
+        form.addLayout(cmd_row)
 
         # Restore remembered settings, wire live updates, size the label column.
         self._apply_colprof_config(self._adv_vals)
@@ -1420,7 +1433,7 @@ class ScannerProfileDialog(_ToolDialogBase):
         self._on_colprof_changed()
         # One shared label column → the spinbox, combo and name field all
         # start at the same x (Basti, #108 follow-up).
-        _labels = (self._sa_label, self._pt_label, self._pn_label, self._cmd_label)
+        _labels = (self._sa_label, self._pt_label, self._pn_label, self._cs_label)
         _w = max(l.sizeHint().width() for l in _labels) + 8
         for _l in _labels:
             _l.setFixedWidth(_w)
