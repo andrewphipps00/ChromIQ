@@ -145,6 +145,27 @@ def test_extrapolate_to_fiducials_derives_marks_from_patch_quad(_app):
     assert extrapolate_to_fiducials([(0, 0)], txt) is None    # need four corners
 
 
+def test_printer_mode_switches_default_profile_type(_app):
+    """#121 (Knut): the colprof settings drive the printer profile too when
+    'Profile my printer from this scan' is ticked. Since a printer wants a cLUT,
+    the type defaults to Lab cLUT in printer mode and shaper+matrix for a scanner
+    — unless the user has picked a type by hand."""
+    dlg = _dialog(_app)
+    try:
+        assert dlg._ptype.currentData() == "s"           # scanner default
+        dlg._printer_cb.setChecked(True)
+        assert dlg._ptype.currentData() == "l"           # printer → Lab cLUT
+        dlg._printer_cb.setChecked(False)
+        assert dlg._ptype.currentData() == "s"           # back to shaper+matrix
+        # A hand-picked type is respected and not overridden by mode toggles.
+        dlg._ptype_user_set = True
+        dlg._ptype.setCurrentIndex(dlg._ptype.findData("m"))
+        dlg._printer_cb.setChecked(True)
+        assert dlg._ptype.currentData() == "m"
+    finally:
+        dlg.deleteLater()
+
+
 def test_profile_type_clut_lab_high_maps_and_previews(_app):
     """#121: cLUT — Lab + High → -al -qh, quality becomes active, and the command
     preview + persistence follow."""

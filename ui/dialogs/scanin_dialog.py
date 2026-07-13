@@ -1345,9 +1345,14 @@ class ScannerProfileDialog(_ToolDialogBase):
                "the two cLUT types (greyed for the matrix types). Medium is a "
                "good default; Low is a quick test, High/Ultra for large, clean "
                "charts.\n\n"
-               "Note: a scanner or camera profile is an input profile, so there's "
-               "no working-space (like sRGB) or rendering-intent choice here — "
-               "those belong to a printer/output profile.")),
+               "These settings build whichever profile this window makes. If you "
+               "tick “Profile my printer from this scan”, the same type, quality "
+               "and Advanced options build the printer profile instead — and "
+               "because a printer is best modelled by a table, the type then "
+               "defaults to “cLUT — Lab” (it's “Shaper + matrix” for a scanner or "
+               "camera). You still won't find a working-space (like sRGB) or "
+               "rendering-intent choice here; those aren't part of building a "
+               "profile from measurements.")),
             0, Qt.AlignmentFlag.AlignVCenter)
         form.addLayout(row3)
 
@@ -1428,6 +1433,12 @@ class ScannerProfileDialog(_ToolDialogBase):
 
         # Restore remembered settings, wire live updates, size the label column.
         self._apply_colprof_config(self._adv_vals)
+        # Track whether the user picked a profile type by hand: if they haven't,
+        # ticking "Profile my printer" swaps the default to a cLUT (a printer
+        # profile wants one) and back to shaper+matrix for a scanner (#121).
+        self._ptype_user_set = bool(self._adv_vals.get("ptype"))
+        self._ptype.activated.connect(
+            lambda *_: setattr(self, "_ptype_user_set", True))
         for _w in (self._ptype, self._pq):
             _w.currentIndexChanged.connect(self._on_colprof_changed)
         self._prof_name.textChanged.connect(self._update_command_preview)
@@ -1878,10 +1889,15 @@ class ScannerProfileDialog(_ToolDialogBase):
             want = Path(self._ti3).with_suffix(".ti2" if checked else ".ti3")
             if want.is_file() and want != Path(self._ti3):
                 self._set_chart(want)
-        # Leave the profile-type selector enabled so its tooltip stays readable
-        # (Qt hides tooltips on disabled widgets). Its *quality* is honoured for the
-        # printer profile; the Matrix/LUT choice isn't (a printer profile is always
-        # a LUT) — see _build_printer_profile.
+        # The colprof settings (type, quality, Advanced) drive whichever profile
+        # this window builds — scanner/camera OR, when ticked, the printer (#121).
+        # A printer profile is best as a cLUT, so if the user hasn't chosen a type
+        # by hand, default to Lab cLUT in printer mode and shaper+matrix otherwise.
+        if not getattr(self, "_ptype_user_set", False):
+            _i = self._ptype.findData("l" if checked else "s")
+            if _i >= 0:
+                self._ptype.setCurrentIndex(_i)          # triggers preview refresh
+        self._update_command_preview()
         self._run_btn.setText(
             tr("Build printer profile") if checked else
             tr("Build scanner or camera profile"))
@@ -3151,11 +3167,9 @@ class ScannerProfileDialog(_ToolDialogBase):
             return
         self._log.appendPlainText(tr("Building the printer profile…"))
         ti3, custom = self._apply_profile_name(ti3)
-        params = ProfileParams(
-            ti3_path=ti3, algorithm="l", quality="m",
-            description=custom or f"{base.name} (scanner-measured)",
-            manufacturer="ChromIQ",
-            model=custom or base.name, verbose=True)
+        desc = custom or f"{base.name} (scanner-measured)"
+        params = scanner_colprof.make_profile_params(       # #121: same settings
+            ti3, desc, self._current_main_vals(), self._adv_vals)
 
         def _done(code: int) -> None:
             icc = self._profiler.expected_icc_path(params)
