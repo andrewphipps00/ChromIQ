@@ -1,5 +1,42 @@
 # Changelog
 
+## v3.13.6
+
+Multi-ink profiling comes to the layout engine: it now writes real
+device-native CMYK / CMYK+N charts, and any chart can be exported as a crisp
+vector PDF alongside the TIFF.
+
+### Improvements
+- **The engine writes device-native CMYK and CMYK + extra-ink charts.** A
+  multi-ink chart is now saved as a true separated TIFF — every patch carries
+  its exact ink values (not an RGB picture of them), each ink is a named
+  channel, and the file opens correctly in Photoshop and print RIPs. Coloured
+  contrast spacers and the notes strip keep their colour in the ink channels,
+  matching printtarg. RGB charts are unchanged.
+- **New "Also export a PDF" option** (Create Chart → Manual → Expert →
+  Output). Ticking it saves a press-ready PDF next to the usual TIFF. It's true
+  vector — the patches are exact device colours, the labels stay crisp at any
+  zoom, and it uses the same fonts as the chart — with all pages in one file.
+  CMYK+N charts carry each ink as a named separation, so a RIP knows exactly
+  which ink is which. File → Properties states the colour space (e.g. "CMYKOG
+  (6-channel)"). The choice is saved in presets and restored when a chart is
+  reloaded.
+
+### Fixes
+- The DeviceN preview tint (used when previewing or printing multi-ink charts)
+  no longer renders every ink as magenta — each ink previews as its real
+  colour. This only affected on-screen preview; the printed ink channels were
+  always correct.
+- Several downstream tools (the scanner-geometry capture, the TIFF ID stamps,
+  the margin inspector) no longer warn on the new device-native charts.
+
+### Under the hood
+- The vector PDF is drawn from the same collected geometry as the TIFF, so the
+  two cannot diverge; glyph outlines come from the chart's exact fonts via
+  freetype. Fidelity is guarded by structural tests that check every patch's
+  exact device value and position in the PDF.
+- New translations for the PDF-export strings in all 13 languages.
+
 ## v3.13.5
 
 Chart notes and the stamp choice now survive a reload — a chart put back on
