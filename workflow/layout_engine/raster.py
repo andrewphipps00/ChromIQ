@@ -771,9 +771,34 @@ def render_pages(
     _ind_font_file, _ind_var = _font_file_and_variation(
         indicator_font, indicator_bold, indicator_italic)
     try:
-        _ind_ascent = font.getmetrics()[0]
+        _ind_ascent, _ind_descent = font.getmetrics()
     except Exception:
-        _ind_ascent = ind_px
+        _ind_ascent, _ind_descent = ind_px, ind_px // 4
+
+    def _collect_rotated_label(cx: int, y_top: int, off: int, text: str,
+                               tile: "Image.Image", degrees: int) -> None:
+        """Collect a rotated strip label as a rotated vector run. The engine lays
+        the letters in an un-rotated tile, rotates it CCW and pastes it centred;
+        for the 0/90/180/270 cases the tile's baseline-left anchor maps to an
+        exact pixel, so the run reproduces it (rotation about that anchor)."""
+        if not (collect_device_geom and _ind_font_file and text):
+            return
+        widths = [draw.textlength(ch, font=font) for ch in text]
+        wc = int(sum(widths) + _spc * (len(text) - 1)) + 4     # un-rotated tile W
+        hc = _ind_ascent + _ind_descent + 4                    # un-rotated tile H
+        ax, ay = 2, 2 + _ind_ascent                            # baseline-left in tile
+        d = degrees % 360
+        if d == 90:
+            adx, ady = ay, wc - 1 - ax
+        elif d == 270:
+            adx, ady = hc - 1 - ay, ax
+        else:                                                  # 180
+            adx, ady = wc - 1 - ax, hc - 1 - ay
+        px_paste = cx - tile.width // 2
+        py_paste = y_top + off
+        _geom_rows.append(("text", px_paste + adx, py_paste + ady, text,
+                           _ind_font_file, ind_px, _spc if len(text) > 1 else 0,
+                           d, (0, 0, 0), _ind_var))
 
     def _collect_label(cx: int, top: int, text: str) -> None:
         """Collect a centred strip label as a vector text run at the exact left/
@@ -880,6 +905,8 @@ def render_pages(
                     else:                             # right: reading-end anchored
                         _off = 0 if _rot == 90 else _extra
                     img.paste(_tile, (_cx - _tile.width // 2, _y + _off), _tile)
+                    _collect_rotated_label(_cx, _y, _off, _lbl, _tile,
+                                           indicator_rotation)
                 if underline_on and underline_mode == "cycle":   # one accent / strip
                     _ly = _y + label_band_h + ul_gap
                     _acc = ACCENT_RGB[global_strip % len(ACCENT_RGB)]

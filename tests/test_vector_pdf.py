@@ -140,14 +140,16 @@ def test_export_pdf_recipe_roundtrip():
 
 
 @pytest.mark.skipif(not shutil.which("sips"), reason="needs macOS sips to rasterise")
-def test_pdf_text_layout_matches_tiff(tmp_path):
-    """CM-proof text-placement check. Patch colour/position exactness is proven
-    structurally above; here we verify the *vector text* lands where Pillow drew
-    it by rasterising the PDF and comparing the strip-label band — black glyphs on
-    white paper, which DeviceRGB colour management leaves untouched (unlike
-    midtone patch colours, whose raster diff is CM-confounded and not used)."""
+@pytest.mark.parametrize("rotation", [0, 90, 270, 180])
+def test_pdf_text_layout_matches_tiff(tmp_path, rotation):
+    """CM-proof text-placement check for every label rotation. Patch colour/
+    position exactness is proven structurally above; here we verify the *vector
+    text* lands where Pillow drew it by rasterising the PDF and comparing the
+    strip-label band — black glyphs on white paper, which DeviceRGB colour
+    management leaves untouched (unlike midtone patch colours, whose raster diff
+    is CM-confounded and not used)."""
     target = _rgb_target(400)                       # many strips → a full label row
-    res, w, h = _render(target, dpi=200)
+    res, w, h = _render(target, dpi=200, indicator_rotation=rotation)
     assert res.label_band_bottom_px, "no label band to test"
     tif = np.asarray(res.images[0].convert("L"))
     out = vector_pdf.save_vector_pdf(res, target, tmp_path / "c.pdf",
@@ -162,6 +164,9 @@ def test_pdf_text_layout_matches_tiff(tmp_path):
     # renders a faint border artifact on the page edge).
     lo, hi = 3, int(res.label_band_bottom_px)
     band_diff = float(np.abs(tif[lo:hi].astype(int) - pdf[lo:hi].astype(int)).mean())
-    assert band_diff < 6.0, f"label-band text diff {band_diff:.2f} — text misplaced"
+    # Aligned vector text diffs in the single digits (glyph rasterisation vs
+    # Pillow's AA, larger for rotated glyphs); a *misplaced* label diffs in the
+    # tens to hundreds, so this bound catches real placement errors.
+    assert band_diff < 12.0, f"label-band text diff {band_diff:.2f} — text misplaced"
     # And the labels are actually present (not a blank band matching a blank band).
     assert (tif[lo:hi] < 80).sum() > 200 and (pdf[lo:hi] < 80).sum() > 200

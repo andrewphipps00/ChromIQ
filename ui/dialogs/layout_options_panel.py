@@ -954,6 +954,30 @@ class LayoutOptionsPanel(QWidget):
                        "are lossless and shrink the file; “None” writes it "
                        "uncompressed (largest, most compatible). All keep the "
                        "exact colours."), self))
+        self.export_pdf = QCheckBox(tr("Also export a PDF"), self)
+        self.export_pdf.toggled.connect(self._emit)
+        add_row(ogg, 2, "", self.export_pdf,
+                tip=TooltipButton(
+                    tr("Also export a PDF"),
+                    tr("Saves a press-ready PDF of the chart next to the usual "
+                       "TIFF — the TIFF is still made, this just adds a PDF copy.\n\n"
+                       "When it helps:\n"
+                       "• Your print shop or RIP prefers PDF, or asks for one.\n"
+                       "• You want a file that prints at the exact paper size, with "
+                       "no print dialog quietly scaling it down.\n"
+                       "• Multi-ink charts (CMYK and CMYK + extra inks): the PDF "
+                       "carries each ink as its own named channel, so a RIP knows "
+                       "exactly which ink is which.\n\n"
+                       "The PDF is drawn as true vector — the patches are exact "
+                       "device colours and the labels stay crisp at any zoom — and "
+                       "it uses the same fonts as the chart. All pages are in one "
+                       "file.\n\n"
+                       "How to use it: tick this, build the chart as usual, and "
+                       "you'll find a .pdf beside the .tif in the chart folder. "
+                       "Print it from your RIP with colour management OFF at 100 % "
+                       "size — same as the TIFF.\n\n"
+                       "Leave it off if you only print through ChromIQ or just need "
+                       "the TIFF."), self))
         _expert_v.addWidget(og)
 
         # ---- Sheet text ----
@@ -2046,6 +2070,7 @@ class LayoutOptionsPanel(QWidget):
         self.patch_align.setCurrentIndex(_ai if _ai >= 0 else
                                          self.patch_align.findData("center-left"))
         self.bit_depth.setCurrentIndex(1 if r.bit16 else 0)
+        self.export_pdf.setChecked(r.export_pdf)
         self.show_indicators.setChecked(r.show_strip_indicators)
         _fi = self.indicator_font.findData(r.indicator_font)
         self.indicator_font.setCurrentIndex(_fi if _fi >= 0 else 0)
@@ -2147,6 +2172,7 @@ class LayoutOptionsPanel(QWidget):
         r.patch_pattern = self.patch_pat.text() or r.patch_pattern
         r.patch_area_align = self.patch_align.currentData() or "center-left"
         r.bit16 = (self.bit_depth.currentData() == 16)
+        r.export_pdf = self.export_pdf.isChecked()
         r.show_strip_indicators = self.show_indicators.isChecked()
         r.indicator_font = self.indicator_font.currentData() or "JetBrains Mono"
         r.indicator_size_mm = self.indicator_size.value()

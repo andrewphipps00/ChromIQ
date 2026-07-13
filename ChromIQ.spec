@@ -38,6 +38,10 @@ _ic_datas, _ic_binaries, _ic_hiddenimports = collect_all('imagecodecs')
 
 _we_datas, _we_binaries, _we_hiddenimports = collect_all('PyQt6-WebEngine')
 
+# freetype-py ships the native libfreetype it binds to; collect_all bundles that
+# dylib + the module so the vector-PDF glyph outlining works in the frozen app.
+_ft_datas, _ft_binaries, _ft_hiddenimports = collect_all('freetype')
+
 # numpy 2.4+ links against a SciPy-built OpenBLAS (`libscipy_openblas64_.dylib`)
 # that may live in any of three places depending on platform / wheel layout:
 #   (a) inside numpy at `numpy/.dylibs/` (delocate-wheel macOS layout)
@@ -81,7 +85,8 @@ else:
 a = Analysis(
     ['main.py'],
     pathex=['.'],
-    binaries=[*_ic_binaries, *_we_binaries, *_oc_binaries, *_ak_binaries, *_np_binaries],
+    binaries=[*_ic_binaries, *_we_binaries, *_oc_binaries, *_ak_binaries,
+              *_np_binaries, *_ft_binaries],
     datas=[
         ('assets',           'assets'),
         ('data/parameters.yaml', 'data'),
@@ -92,6 +97,7 @@ a = Analysis(
         *_we_datas,
         *_oc_datas,
         *_ak_datas,
+        *_ft_datas,
     ],
     hiddenimports=[
         'PyQt6.sip',
@@ -111,10 +117,12 @@ a = Analysis(
         'cups',
         'tifffile',
         'numpy',
+        'freetype',
         *_ic_hiddenimports,
         *_we_hiddenimports,
         *_oc_hiddenimports,
         *_ak_hiddenimports,
+        *_ft_hiddenimports,
     ],
     hookspath=['hooks'],
     hooksconfig={},
