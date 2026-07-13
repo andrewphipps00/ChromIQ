@@ -1,4 +1,4 @@
-"""Tools → "Build scanner or camera profile" — profile a scanner or camera (#98).
+"""Tools → "Build profile with scanner or camera" — profile a scanner or camera (#98).
 
 Workflow: pick a **measured** ChromIQ chart and a **scan** of the printed chart,
 drag the four corners over the patch area (a live grid confirms the fit), and
@@ -462,10 +462,10 @@ def scan_reference_correlation(ti3: Path) -> float | None:
 
 class ScannerProfileDialog(_ToolDialogBase):
     TOOL_KEY    = "scanner_profile"
-    TITLE       = tr("Build scanner or camera profile")
+    TITLE       = tr("Build profile with scanner or camera")
     EYEBROW     = tr("MEASURE · SCANNER / CAMERA PROFILE")
     ACCENT      = SPEC_GREEN
-    RUN_LABEL   = tr("Build scanner or camera profile")
+    RUN_LABEL   = tr("Build profile with scanner or camera")
     BUSY_BAR_IDLE_LABEL = tr("Ready")   # always-visible bar; animates while running
     MIN_WIDTH   = 760
     SCROLLABLE_CONTENT = True    # tall (mode toggle + inputs + marquee + averaging)
@@ -498,7 +498,7 @@ class ScannerProfileDialog(_ToolDialogBase):
         "1200 dpi is preferred; 300 dpi is too coarse for clean patch reads. "
         "Load it here, drag the four corners over "
         "the patch area until the green grid sits on the real patches, and click "
-        "Build scanner or camera profile. ChromIQ compares how your device saw "
+        "Build profile with scanner or camera. ChromIQ compares how your device saw "
         "each patch against the true colours and writes the ICC profile next to "
         "your capture.\n\n"
         "The sections below cover, in order: the best way to capture the target, "
@@ -543,9 +543,15 @@ class ScannerProfileDialog(_ToolDialogBase):
         self._runner = runner
         self._scanin = ScaninRunner(runner)
         self._profiler = ProfileBuilder(runner)
-        # Scanner colprof settings (#121, Knut): remembered main + advanced
-        # values, stored in QSettings so Restore-factory-defaults clears them.
-        self._adv_vals: dict = self._load_colprof_config()
+        # Scanner colprof settings (#121, Knut): remembered main + advanced values,
+        # stored PER CONTEXT — a printer profile, a scanner profile from a ChromIQ
+        # chart, and a scanner profile from a standard target each keep their own
+        # type / quality / description / Advanced choices, so toggling between them
+        # loads the right set (Knut). Persisted to QSettings so Restore-factory-
+        # defaults clears them. `_adv_vals` always mirrors the ACTIVE context.
+        self._ctx_cfg: dict[str, dict] = self._load_ctx_configs()
+        self._active_ctx: str = "chart"
+        self._adv_vals: dict = {}
         self._ti3: Path | None = None
         self._layout: dict | None = None
         self._printer_scan_profile: Path | None = None   # scanner ICC for printer mode
@@ -740,7 +746,12 @@ class ScannerProfileDialog(_ToolDialogBase):
             "Honest expectations: a scanner-based printer profile is great for "
             "clearing colour casts and making everyday prints look better, but it "
             "won't match a profile made with a real spectrophotometer. For critical "
-            "or proofing work, a spectro is still the way.")
+            "or proofing work, a spectro is still the way.\n\n"
+            "Good to know: a printer profile and a scanner profile are different "
+            "things, so this window keeps their settings apart. Turning this on or "
+            "off switches the profile type, quality, description and Advanced "
+            "options to the ones you last used for that kind of profile — your "
+            "printer choices and your scanner choices never overwrite each other.")
         self._printer_cb.toggled.connect(self._on_printer_toggled)
         # An always-visible ⓘ next to the checkbox opens the help on click.
         _pr_row = QHBoxLayout()
@@ -1382,8 +1393,12 @@ class ScannerProfileDialog(_ToolDialogBase):
                "description, and every option under Advanced — as your defaults. "
                "Next time you open this window they'll already be filled in, so "
                "you don't have to set them up again.\n\n"
+               "Each kind of profile is remembered on its own: this saves the "
+               "settings for whatever you're building right now (a printer "
+               "profile, a scanner/camera profile from a ChromIQ chart, or one "
+               "from a standard target), and leaves the other kinds untouched.\n\n"
                "Your choices are only remembered when you click this. Closing the "
-               "window without saving leaves your defaults untouched, and "
+               "window without saving leaves your saved defaults untouched, and "
                "“Restore factory defaults” in Preferences clears them again."))
         self._save_defaults_btn.clicked.connect(self._save_defaults_clicked)
         row3b.addWidget(self._save_defaults_btn)
@@ -1445,21 +1460,12 @@ class ScannerProfileDialog(_ToolDialogBase):
             0, Qt.AlignmentFlag.AlignTop)
         form.addLayout(cmd_row)
 
-        # Restore remembered settings, wire live updates, size the label column.
-        self._apply_colprof_config(self._adv_vals)
-        # Track whether the user picked a profile type by hand THIS session: if
-        # they haven't, ticking "Profile my printer" swaps the default to a cLUT
-        # (a printer profile wants one) and back to shaper+matrix for a scanner
-        # (#121). Only an explicit pick (the `activated` signal) counts — a
-        # merely-persisted `ptype` must NOT block the mode default, or the
-        # "(default)" marker moves to Lab cLUT while the selection stays put
-        # (Basti, #121).
-        self._ptype_user_set = False
-        self._ptype.activated.connect(
-            lambda *_: setattr(self, "_ptype_user_set", True))
+        # Wire live updates, then load the active context's remembered settings.
         for _w in (self._ptype, self._pq):
             _w.currentIndexChanged.connect(self._on_colprof_changed)
         self._prof_name.textChanged.connect(self._update_command_preview)
+        self._active_ctx = self._colprof_context()
+        self._load_context(self._active_ctx)
         self._on_colprof_changed()
         self._mark_default_combos()
         # One shared label column → the spinbox, combos and name field all
@@ -1472,9 +1478,25 @@ class ScannerProfileDialog(_ToolDialogBase):
     # ------------------------------------------------------------------
     # Scanner colprof settings (#121, Knut)
     # ------------------------------------------------------------------
-    def _load_colprof_config(self) -> dict:
-        cfg = self._settings.get("scanner_colprof_config", {}) or {}
-        return dict(cfg) if isinstance(cfg, dict) else {}
+    _CONTEXTS = ("printer", "chart", "standard")
+
+    def _colprof_context(self) -> str:
+        """Which settings bucket the current mode uses (Knut, #121): a printer
+        profile, a scanner profile from a ChromIQ chart, or a scanner profile
+        from a standard target — each remembers its own settings."""
+        if self._printer_mode():
+            return "printer"
+        if self._standard_mode():
+            return "standard"
+        return "chart"
+
+    def _load_ctx_configs(self) -> dict[str, dict]:
+        raw = self._settings.get("scanner_colprof_configs", {}) or {}
+        out: dict[str, dict] = {}
+        for ctx in self._CONTEXTS:
+            c = raw.get(ctx) if isinstance(raw, dict) else None
+            out[ctx] = dict(c) if isinstance(c, dict) else {}
+        return out
 
     def _current_main_vals(self) -> dict:
         return {
@@ -1482,17 +1504,57 @@ class ScannerProfileDialog(_ToolDialogBase):
             "quality": self._pq.currentData() or "m",
         }
 
-    def _save_colprof_config(self) -> None:
-        """Persist the current main + advanced settings as the defaults. Only
-        called from the explicit "Save as Defaults" button (like the Build-Profile
-        tab) — settings are NOT silently written on every change."""
-        cfg = dict(self._adv_vals)
-        cfg.update(self._current_main_vals())
-        self._adv_vals = cfg
-        self._settings.set("scanner_colprof_config", cfg)
+    def _snapshot_context(self, ctx: str) -> None:
+        """Capture the current widgets into *ctx*'s in-memory config."""
+        self._ctx_cfg[ctx] = {
+            "main": {**self._current_main_vals(),
+                     "description": self._prof_name.text()},
+            "adv": dict(self._adv_vals),
+        }
+
+    def _load_context(self, ctx: str) -> None:
+        """Load *ctx*'s remembered settings into the widgets (or the built-in
+        defaults for a bucket that's never been used)."""
+        cfg = self._ctx_cfg.get(ctx) or {}
+        main = cfg.get("main") or {}
+        adv = cfg.get("adv") or {}
+        default_ptype = scanner_colprof.PTYPE_DEFAULT[ctx == "printer"]
+
+        def _sel(combo, data) -> None:
+            i = combo.findData(data)
+            if i >= 0:
+                combo.setCurrentIndex(i)
+        for w in (self._ptype, self._pq):
+            w.blockSignals(True)
+        _sel(self._ptype, main.get("ptype") or default_ptype)
+        _sel(self._pq, main.get("quality") or "m")
+        for w in (self._ptype, self._pq):
+            w.blockSignals(False)
+        self._prof_name.blockSignals(True)
+        self._prof_name.setText(main.get("description", "") or "")
+        self._prof_name.blockSignals(False)
+        self._adv_vals = dict(adv)
+
+    def _sync_colprof_context(self) -> None:
+        """On a mode change, save the settings of the context we're leaving and
+        load the settings of the one we're entering (Knut, #121)."""
+        new = self._colprof_context()
+        if new == self._active_ctx:
+            return
+        self._snapshot_context(self._active_ctx)
+        self._active_ctx = new
+        self._load_context(new)
+        self._on_colprof_changed()          # refresh cLUT-enable + command preview
+        self._mark_default_combos()
 
     def _save_defaults_clicked(self) -> None:
-        self._save_colprof_config()
+        # Save the CURRENT context's settings only — each bucket is independent,
+        # so unsaved edits made in another context aren't persisted here.
+        self._snapshot_context(self._active_ctx)
+        stored = self._settings.get("scanner_colprof_configs", {}) or {}
+        stored = dict(stored) if isinstance(stored, dict) else {}
+        stored[self._active_ctx] = self._ctx_cfg[self._active_ctx]
+        self._settings.set("scanner_colprof_configs", stored)
         if getattr(self, "_log", None) is not None:
             self._log.appendPlainText(tr("Profile settings saved as defaults."))
         # Brief in-place confirmation on the button itself.
@@ -1502,16 +1564,6 @@ class ScannerProfileDialog(_ToolDialogBase):
         from PyQt6.QtCore import QTimer
         QTimer.singleShot(1400, lambda: (btn.setText(tr("Save as Defaults")),
                                          btn.setEnabled(True)))
-
-    def _apply_colprof_config(self, cfg: dict) -> None:
-        def _sel(combo, data) -> None:
-            i = combo.findData(data)
-            if i >= 0:
-                combo.setCurrentIndex(i)
-        if cfg.get("ptype"):
-            _sel(self._ptype, cfg["ptype"])
-        if cfg.get("quality"):
-            _sel(self._pq, cfg["quality"])
 
     def _on_colprof_changed(self) -> None:
         is_clut = self._ptype.currentData() in scanner_colprof.CLUT_ALGOS
@@ -1913,6 +1965,11 @@ class ScannerProfileDialog(_ToolDialogBase):
         self._printer_cb.setVisible(not std)
         if std:
             self._printer_cb.setChecked(False)
+        # A standard-target scanner profile and a ChromIQ-chart scanner profile
+        # keep separate settings, so switching target kind loads the right bucket
+        # (Knut, #121).
+        self._sync_colprof_context()
+        self._apply_mode_title()
         self._refresh_shot_bar()
         self._refresh()
 
@@ -1946,25 +2003,24 @@ class ScannerProfileDialog(_ToolDialogBase):
             want = Path(self._ti3).with_suffix(".ti2" if checked else ".ti3")
             if want.is_file() and want != Path(self._ti3):
                 self._set_chart(want)
-        # The colprof settings (type, quality, Advanced) drive whichever profile
-        # this window builds — scanner/camera OR, when ticked, the printer (#121).
-        # A printer profile is best as a cLUT, so if the user hasn't chosen a type
-        # by hand, default to Lab cLUT in printer mode and shaper+matrix otherwise.
-        if not getattr(self, "_ptype_user_set", False):
-            _i = self._ptype.findData(scanner_colprof.PTYPE_DEFAULT[checked])
-            if _i >= 0:
-                self._ptype.setCurrentIndex(_i)          # triggers preview refresh
-        self._mark_default_combos()          # the -a default flips with the mode
+        # The colprof settings (type, quality, description, Advanced) are stored
+        # per context, so switching printer ON/OFF loads that context's own
+        # remembered settings — a printer profile and a scanner profile are
+        # different things (Knut, #121).
+        self._sync_colprof_context()
         self._update_command_preview()
-        # The window builds a printer profile in this mode, so the masthead title
-        # and window title must say so — not "scanner or camera" (Knut, #121).
-        title = (tr("Build printer profile") if checked
-                 else tr("Build scanner or camera profile"))
+        self._apply_mode_title()
+        self._refresh()
+
+    def _apply_mode_title(self) -> None:
+        """Masthead / window title / build button track what's being built —
+        a printer profile, or a scanner/camera profile (Knut, #121)."""
+        title = (tr("Build printer profile") if self._printer_mode()
+                 else tr("Build profile with scanner or camera"))
         self._run_btn.setText(title)
         self.setWindowTitle(title)
         if getattr(self, "_header", None) is not None:
             self._header.set_texts(self.EYEBROW, title)
-        self._refresh()
 
     def _pick_scanner_profile(self) -> None:
         start = str(self._printer_scan_profile.parent) if self._printer_scan_profile \

@@ -1637,7 +1637,7 @@ class TabCheckRefine(QWidget):
             self._log.appendPlainText(
                 "\n" + tr("[OK] Recognition files (.cht + .cie) saved for {n} "
                           "patches — scan or photograph the printed chart, then "
-                          "use Tools ▸ Build scanner or camera profile."
+                          "use Tools ▸ Build profile with scanner or camera."
                           ).format(n=res.n_patches))
         except Exception:  # noqa: BLE001 — never let this break the assessment
             log.exception("Scanner-target build failed (non-fatal)")

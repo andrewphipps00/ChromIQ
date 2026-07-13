@@ -4465,7 +4465,7 @@ class TabChart(QWidget):
                 f"{rec.get('area_min_patch_mm', 4):g} mm patches).\n"
                 "Print it WITHOUT colour management, scan it on a flatbed "
                 "scanner, then use\n"
-                "Tools → “Build scanner or camera profile” with “Profile my "
+                "Tools → “Build profile with scanner or camera” with “Profile my "
                 "printer from this scan”.\n"
                 "Creates the target right away; the patch set stays fixed but "
                 "you can adjust\nany layout setting and regenerate."

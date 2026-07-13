@@ -59,7 +59,7 @@ _GROUPS: tuple[tuple[str, tuple[ToolEntry, ...]], ...] = (
     )),
     (tr("Scanner & camera"), (
         ToolEntry("scanner_target",  tr("Create scanner or camera target (.cht + .cie)")),
-        ToolEntry("scanner_profile", tr("Build scanner or camera profile (from a scan or photo)")),
+        ToolEntry("scanner_profile", tr("Build profile with scanner or camera (from a scan or photo)")),
     )),
     (tr("i1Profiler interchange"), (
         ToolEntry("ti1_to_i1p", tr("Convert TI1 → i1Profiler")),

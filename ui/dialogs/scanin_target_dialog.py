@@ -110,7 +110,7 @@ WHICH_CHART_CAMERA_NOTE = tr(
     "shoot under, because the profile is tied to that light.\n\n"
     "• For general photography, a ready-made camera target (such as an X-Rite "
     "ColorChecker) is usually easier — load it under 'A standard target I own' "
-    "in Build scanner or camera profile, and see that window's 'Profiling a "
+    "in Build profile with scanner or camera, and see that window's 'Profiling a "
     "camera' section for how to shoot it.")
 
 
@@ -134,7 +134,7 @@ class ScaninTargetDialog(_ToolDialogBase):
         "Pick the chart's measurement (its .ti3); the two files are saved next to "
         "the chart. Then capture the printed chart on the device you want to "
         "profile — scan it on a scanner, or photograph it with a camera — and use "
-        "'Build scanner or camera profile'. ArgyllCMS's scanin reads your capture "
+        "'Build profile with scanner or camera'. ArgyllCMS's scanin reads your capture "
         "against these files, and colprof turns that into the device's ICC "
         "profile. The same two files work for both: scan the chart to profile a "
         "scanner, or photograph it to profile a camera.\n\n"

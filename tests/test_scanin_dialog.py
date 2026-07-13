@@ -157,11 +157,14 @@ def test_printer_mode_switches_default_profile_type(_app):
         assert dlg._ptype.currentData() == "l"           # printer → Lab cLUT
         dlg._printer_cb.setChecked(False)
         assert dlg._ptype.currentData() == "s"           # back to shaper+matrix
-        # A hand-picked type is respected and not overridden by mode toggles.
-        dlg._ptype_user_set = True
-        dlg._ptype.setCurrentIndex(dlg._ptype.findData("m"))
+        # Each context keeps its own choice: a type picked in printer mode is
+        # remembered for printer mode and doesn't bleed into scanner mode.
         dlg._printer_cb.setChecked(True)
-        assert dlg._ptype.currentData() == "m"
+        dlg._ptype.setCurrentIndex(dlg._ptype.findData("m"))
+        dlg._printer_cb.setChecked(False)
+        assert dlg._ptype.currentData() == "s"           # scanner bucket unchanged
+        dlg._printer_cb.setChecked(True)
+        assert dlg._ptype.currentData() == "m"           # printer bucket remembered
     finally:
         dlg.deleteLater()
 
@@ -179,11 +182,13 @@ def test_profile_type_clut_lab_high_maps_and_previews(_app):
         txt = dlg._cmd_preview.text()
         assert "-al" in txt and "-qh" in txt
         # nothing persisted yet — the change was only in the live window
-        assert not dlg._settings.get("scanner_colprof_config", {})
-        # clicking "Save as Defaults" writes the current main + advanced settings
+        assert not dlg._settings.get("scanner_colprof_configs", {})
+        # clicking "Save as Defaults" writes the CURRENT context's (chart) settings
         dlg._save_defaults_clicked()
-        cfg = dlg._settings.get("scanner_colprof_config", {})
-        assert cfg.get("ptype") == "l" and cfg.get("quality") == "h"
+        cfg = dlg._settings.get("scanner_colprof_configs", {})
+        chart = cfg.get("chart", {}).get("main", {})
+        assert chart.get("ptype") == "l" and chart.get("quality") == "h"
+        assert "printer" not in cfg and "standard" not in cfg   # only current bucket saved
     finally:
         dlg.deleteLater()
 
@@ -1097,7 +1102,7 @@ def test_window_title_and_defaults_are_mode_aware(_app):
     dlg = _dialog(_app)
     try:
         # scanner mode: input-profile title + shaper+matrix marked default
-        assert dlg.windowTitle() == "Build scanner or camera profile"
+        assert dlg.windowTitle() == "Build profile with scanner or camera"
         ptypes = [dlg._ptype.itemText(i) for i in range(dlg._ptype.count())]
         assert "Shaper + matrix (default)" in ptypes
         quals = [dlg._pq.itemText(i) for i in range(dlg._pq.count())]
@@ -1114,23 +1119,34 @@ def test_window_title_and_defaults_are_mode_aware(_app):
         dlg.deleteLater()
 
 
-def test_printer_toggle_moves_selection_not_just_marker(_app):
-    """Basti, #121: a merely-persisted `ptype` must NOT freeze the selection —
-    ticking printer mode moves the actual selection to Lab cLUT, not only the
-    "(default)" label. A type the user picks BY HAND is still respected."""
+def test_colprof_settings_are_stored_per_context(_app):
+    """Knut, #121: a printer profile, a ChromIQ-chart scanner profile and a
+    standard-target scanner profile each keep their own type / quality /
+    description / Advanced settings; toggling mode loads the right bucket, and
+    "Save as Defaults" persists only the active bucket."""
     from ui.dialogs.scanin_dialog import ScannerProfileDialog
-    settings = _FakeSettings(scanner_colprof_config={"ptype": "s", "quality": "m"})
+    settings = _FakeSettings()
     dlg = ScannerProfileDialog(object(), settings)
     try:
-        assert dlg._ptype.currentData() == "s"                 # restored scanner type
+        # chart-scanner context (default): give it distinctive settings
+        assert dlg._active_ctx == "chart" and dlg._ptype.currentData() == "s"
+        dlg._pq.setCurrentIndex(dlg._pq.findData("h"))
+        dlg._prof_name.setText("chart-scan")
+        # printer context is independent (defaults to Lab cLUT), not carried over
         dlg._printer_cb.setChecked(True)
-        assert dlg._ptype.currentData() == "l"                 # selection followed, not just marker
-        # a hand-pick survives a later toggle
+        assert dlg._active_ctx == "printer" and dlg._ptype.currentData() == "l"
+        assert dlg._prof_name.text() == ""                     # printer bucket own description
+        dlg._prof_name.setText("printer-prof")
+        dlg._save_defaults_clicked()                           # save printer bucket only
+        # standard-target context is a third independent bucket
         dlg._printer_cb.setChecked(False)
-        i = dlg._ptype.findData("x")
-        dlg._ptype.setCurrentIndex(i)
-        dlg._ptype.activated.emit(i)                           # simulate explicit pick
-        dlg._printer_cb.setChecked(True)
-        assert dlg._ptype.currentData() == "x"                 # respected
+        assert dlg._active_ctx == "chart" and dlg._prof_name.text() == "chart-scan"
+        dlg._mode_standard.setChecked(True)
+        assert dlg._active_ctx == "standard" and dlg._ptype.currentData() == "s"
+        assert dlg._prof_name.text() == ""                     # separate from chart-scanner
+        # only the printer bucket was persisted
+        stored = settings.get("scanner_colprof_configs", {})
+        assert set(stored) == {"printer"}
+        assert stored["printer"]["main"]["description"] == "printer-prof"
     finally:
         dlg.deleteLater()

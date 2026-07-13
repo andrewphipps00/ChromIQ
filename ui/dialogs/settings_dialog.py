@@ -890,7 +890,7 @@ class SettingsDialog(QDialog):
     def _build_scanner_tab(self) -> QWidget:
         """Scanner/camera profiling: the misalignment-check thresholds (Knut,
         #108). Four plain numbers with friendly names — the checks themselves
-        live in the Build scanner or camera profile tool."""
+        live in the Build profile with scanner or camera tool."""
         page = QWidget()
         v = QVBoxLayout(page)
         v.setSpacing(10)

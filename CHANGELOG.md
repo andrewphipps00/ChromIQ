@@ -1,5 +1,21 @@
 # Changelog
 
+## v3.13.6-beta.3
+
+A beta for review — Knut's second round of feedback on the profile builder (#121).
+
+### Scanner / camera profile settings (#121)
+- **Settings are now remembered separately for each kind of profile.** A printer
+  profile, a scanner profile from a ChromIQ chart, and a scanner profile from a
+  standard target each keep their own profile type, quality, description and
+  Advanced choices. Switching "Profile my printer from this scan" on/off, or
+  between "A chart I made in ChromIQ" and "A standard target I own", loads that
+  context's own settings — and "Save as Defaults" saves just the active one.
+- **The tool is renamed "Build profile with scanner or camera"** — the old name
+  didn't convey that it can also build a *printer* profile (with the scanner as
+  the measuring instrument). The window title still switches to "Build printer
+  profile" when that mode is on.
+
 ## v3.13.6-beta.2
 
 A beta for review — Knut's feedback on the scanner/camera profile builder (#121).

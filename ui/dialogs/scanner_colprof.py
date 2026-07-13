@@ -1,6 +1,6 @@
 """Scanner / camera colprof settings for the profile-build dialog (#121, Knut).
 
-The "Build scanner or camera profile" window exposes the most-used colprof
+The "Build profile with scanner or camera" window exposes the most-used colprof
 options directly (profile type, quality, description) and the rest behind an
 **Advanced…** button. The Advanced dialog mirrors the *layout, grouping and
 labels of tab "4 Build profile" → Manual* — the same QGroupBox sections

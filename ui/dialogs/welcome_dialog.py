@@ -470,7 +470,7 @@ WORKFLOWS: list[dict] = [
                 "colour management turned OFF. Scan at 600 dpi or more — "
                 "1200 dpi is preferred; 300 dpi is too coarse for clean patch "
                 "reads.")),
-            (3, tr("Open Tools ▸ Build scanner or camera profile. Pick the "
+            (3, tr("Open Tools ▸ Build profile with scanner or camera. Pick the "
                 "measured chart and the scan, drag the four corners over the "
                 "patch area until the green grid lines up with the real patches, "
                 "and build. ChromIQ runs scanin + colprof and writes an ICC "
@@ -512,7 +512,7 @@ WORKFLOWS: list[dict] = [
                 "management turned OFF — the same settings you profiled it "
                 "with. Scan at 600 dpi or more — 1200 dpi is preferred; "
                 "300 dpi is too coarse for clean patch reads.")),
-            (3, tr("Open Tools ▸ Build scanner or camera profile and tick "
+            (3, tr("Open Tools ▸ Build profile with scanner or camera and tick "
                 "“Profile my printer from this scan”. Pick your scanner "
                 "profile, the chart you printed (its .ti2), and each page's "
                 "scan; drag the four corners so the grid lines up with the "
