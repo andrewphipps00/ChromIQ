@@ -251,6 +251,14 @@ def stamp_left_clip_info(
 def _stamp_one(path: Path, text: str) -> None:
     with tifffile.TiffFile(str(path)) as tf:
         page = tf.pages[0]
+        # Device-native (separated) CMYK / CMYK+N charts: skip the post-render
+        # ID stamp. It renders in RGB and rewriting would drop the InkNames /
+        # InkSet / ExtraSamples tags (and invert the ink convention). The chart
+        # identity is already baked into the raster's on-sheet stamp text, so
+        # nothing is lost. (#72 Tier D)
+        if int(page.photometric) == 5:                # SEPARATED
+            log.debug("Right-edge stamp skipped for %s (separated device TIFF)", path)
+            return
         state = _capture_page_state(page)
         arr = np.array(page.asarray(), copy=True)
 
@@ -304,6 +312,9 @@ def _stamp_left_clip_one(
 ) -> None:
     with tifffile.TiffFile(str(path)) as tf:
         page = tf.pages[0]
+        if int(page.photometric) == 5:                # SEPARATED device TIFF (#72)
+            log.debug("Left-clip stamp skipped for %s (separated device TIFF)", path)
+            return
         state = _capture_page_state(page)
         arr = np.array(page.asarray(), copy=True)
 

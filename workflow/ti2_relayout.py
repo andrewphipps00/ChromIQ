@@ -1421,8 +1421,28 @@ def assert_patches_untouched(before_tif: Path, after_tif: Path, mask: np.ndarray
 
 # ---------------------------------------------------------------------------
 def _imread_rgb(path: Path) -> np.ndarray:
-    """Read a TIFF page as an HxWx3 uint8 array (RGB)."""
+    """Read a TIFF page as an HxWx3 uint8 array (RGB).
+
+    Device-native (separated CMYK / CMYK+N) charts can't be read by Pillow, so
+    they're composited to a paper-white-vs-ink greyscale RGB — enough for the
+    geometry consumers (margin inspector, patch-area detection). RGB charts keep
+    the exact Pillow path unchanged. (#72 Tier D)
+    """
     from PIL import Image
+    try:
+        import tifffile
+        with tifffile.TiffFile(str(path)) as tf:
+            if int(tf.pages[0].photometric) == 5:          # SEPARATED
+                arr = tf.pages[0].asarray()
+                if arr.ndim == 2:
+                    arr = arr[..., None]
+                maxv = (np.iinfo(arr.dtype).max
+                        if np.issubdtype(arr.dtype, np.integer) else 1.0)
+                ink = arr.astype(np.float32).max(axis=2) / float(maxv)
+                g = np.clip((1.0 - ink) * 255.0, 0, 255).astype(np.uint8)
+                return np.repeat(g[..., None], 3, axis=2)
+    except Exception:                                      # noqa: BLE001
+        pass                                               # fall back to Pillow
     return np.asarray(Image.open(path).convert("RGB"), dtype=np.uint8)
 
 

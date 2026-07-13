@@ -18,7 +18,7 @@ from PIL import Image, ImageDraw, ImageFont
 from core.resource_path import resource_path
 
 from . import contrast, geometry, permutation
-from .colorants import to_display_rgb
+from .colorants import to_device_approx, to_device_approx_array, to_display_rgb
 from .geometry import Layout
 from .instruments import Geom
 from .ti1_reader import ColorTarget
@@ -636,6 +636,12 @@ class RenderResult:
     # or None when indicators are off. The measure-tab scan arrow hangs from
     # this line, printtarg-style; without it the arrow floats above the patches.
     label_band_bottom_px: int | None = None
+    # Per-page patch geometry with exact device values, populated only when
+    # ``collect_device_geom`` is set (non-RGB targets → Tier D device-native
+    # raster). Each entry is ``("rect", (x0, y0, xR, yB), device_tuple)`` or
+    # ``("hex", [points], device_tuple)`` — the exact ink coverage of every
+    # measured patch, independent of the display-RGB preview.
+    patch_geom: list[list[tuple]] | None = None
 
 
 def _hexagon_points(x0: int, y0: int, w: int, ph: int, step: int):
@@ -700,6 +706,7 @@ def render_pages(
     clip_image_offset_y_mm: float = 0.0,
     strip_label_offset_mm: float = 0.0,
     text_ctx: "dict | None" = None,
+    collect_device_geom: bool = False,
 ) -> RenderResult:
     """Render one :class:`PIL.Image` per page for *target*.
 
@@ -717,8 +724,13 @@ def render_pages(
     total = len(patches)
     slots = permutation.location_permutation(total, seed, randomize)
     rgb_by_slot: list[tuple[int, int, int]] = [(255, 255, 255)] * total
+    # Device values by slot mirror the RGB fills, so Tier D can paint the exact
+    # ink coverage of each patch into the separated raster (the RGB preview is a
+    # display approximation; these values are what chartread measures).
+    dev_by_slot: list[tuple[float, ...]] = [(0.0,) * target.n_channels] * total
     for i, (dev, _xyz) in enumerate(patches):
         rgb_by_slot[slots[i]] = to_display_rgb(dev, target.color_rep)
+        dev_by_slot[slots[i]] = dev
 
     place = geometry.placement(geom, paper_w_mm, paper_h_mm, layout)
     steps = layout.steps_in_pass
@@ -777,9 +789,11 @@ def render_pages(
             return t                       # leave unknown placeholders literal
 
     images: list[Image.Image] = []
+    page_geoms: list[list[tuple]] = []
     for page in range(layout.pages):
         img = Image.new("RGB", (W, H), (255, 255, 255))
         draw = ImageDraw.Draw(img)
+        _geom_rows: list[tuple] = []
         # Per-page placeholder context: {page} = "page X/Y", plus the chart-wide
         # {project}/{paper}/… from text_ctx. Used for chart text + clip text.
         _pctx = dict(text_ctx or {})
@@ -862,10 +876,15 @@ def render_pages(
                 yB = px(place.y_of(j) + place.plen) + _stag    # patch bottom edge
                 rgb = rgb_by_slot[gslot]
                 if ss_hex:
-                    draw.polygon(_hexagon_points(x0, y0, xR - x0, yB - y0, j),
-                                 fill=rgb)
+                    _pts = _hexagon_points(x0, y0, xR - x0, yB - y0, j)
+                    draw.polygon(_pts, fill=rgb)
+                    if collect_device_geom:
+                        _geom_rows.append(("hex", _pts, dev_by_slot[gslot]))
                 else:
                     draw.rectangle([x0, y0, xR - 1, yB - 1], fill=rgb)
+                    if collect_device_geom:
+                        _geom_rows.append(
+                            ("rect", (x0, y0, xR, yB), dev_by_slot[gslot]))
                 if sp_px > 0 and j + 1 < len(col_slots):
                     y_next = px(place.y_of(j + 1)) + _stag     # next patch top
                     nxt = rgb_by_slot[col_slots[j + 1]]
@@ -876,6 +895,9 @@ def render_pages(
                     _fill = _ov if _ov is not None else contrast.spacer_for_mode(
                         spacer_mode, rgb, nxt, spacer_palette)
                     draw.rectangle([x0, yB, xR - 1, y_next - 1], fill=_fill)
+                    if collect_device_geom:      # coloured spacer → device ink
+                        _geom_rows.append(
+                            ("spacer", (x0, yB, xR, y_next), _fill))
             # Bracket the strip with a leading + trailing spacer (printtarg does
             # this). Fits in space the layout already reserves, so it doesn't
             # change the patch count. Auto-coloured against the paper white on the
@@ -886,15 +908,16 @@ def render_pages(
                 _first = rgb_by_slot[col_slots[0]]
                 _last = rgb_by_slot[col_slots[-1]]
                 _yl = px(place.y_of(0)) + _stag - sp_px     # leading: above patch 0
-                draw.rectangle(
-                    [x0, _yl, xR - 1, _yl + sp_px - 1],
-                    fill=contrast.spacer_for_mode(spacer_mode, _white, _first,
-                                                  spacer_palette))
+                _lead = contrast.spacer_for_mode(spacer_mode, _white, _first,
+                                                 spacer_palette)
+                draw.rectangle([x0, _yl, xR - 1, _yl + sp_px - 1], fill=_lead)
                 _yt = px(place.y_of(len(col_slots) - 1) + place.plen) + _stag  # trailing
-                draw.rectangle(
-                    [x0, _yt, xR - 1, _yt + sp_px - 1],
-                    fill=contrast.spacer_for_mode(spacer_mode, _last, _white,
-                                                  spacer_palette))
+                _trail = contrast.spacer_for_mode(spacer_mode, _last, _white,
+                                                  spacer_palette)
+                draw.rectangle([x0, _yt, xR - 1, _yt + sp_px - 1], fill=_trail)
+                if collect_device_geom:
+                    _geom_rows.append(("spacer", (x0, _yl, xR, _yl + sp_px), _lead))
+                    _geom_rows.append(("spacer", (x0, _yt, xR, _yt + sp_px), _trail))
         # Full-width rule under the whole label row (one continuous line):
         # "segments" splits it into the five accents across the entire width;
         # "black" is a single plain line. ("cycle" is drawn per strip above.)
@@ -937,6 +960,9 @@ def render_pages(
                 if getattr(geom, "clip_side", "left") == "right":
                     _clip = _clip.rotate(180, expand=True)
                 img.paste(_clip, (_ax, _ay))
+                if collect_device_geom:      # colour the notes strip in device ink
+                    _geom_rows.append(
+                        ("clip", (_ax, _ay), np.asarray(_clip.convert("RGB"))))
 
         # Bottom-of-sheet text: custom chart text + optional command stamp,
         # drawn in the bottom margin (clear of the patches).
@@ -950,10 +976,12 @@ def render_pages(
                 draw.text((px(geom.margin_l), yy), ln, font=sfont, fill=(0, 0, 0))
                 yy += line_h
         images.append(img)
+        page_geoms.append(_geom_rows)
 
     flagged = contrast.low_contrast_passes(rgb_by_slot, steps)
     return RenderResult(images=images, low_contrast_passes=flagged,
-                        label_band_bottom_px=_band_bottom)
+                        label_band_bottom_px=_band_bottom,
+                        patch_geom=page_geoms if collect_device_geom else None)
 
 
 def export_clip_template(out_base: str | Path, *, width_px: int, height_px: int,
@@ -987,6 +1015,163 @@ def export_clip_template(out_base: str | Path, *, width_px: int, height_px: int,
     pdf = base.with_suffix(".pdf")
     img.save(str(pdf), "PDF", resolution=float(dpi))  # px/dpi → exact physical mm
     out.append(pdf)
+    return out
+
+
+# Device colorant char (the suffix of a ``.ti1`` device field, e.g. CMYKOG_O →
+# "O") → human ink name for the TIFF ``InkNames`` tag. Covers CMYK and the
+# common extra/light inks; unknown codes fall back to a title-cased suffix.
+_INK_SUFFIX_NAMES = {
+    "C": "Cyan", "M": "Magenta", "Y": "Yellow", "K": "Black",
+    "O": "Orange", "G": "Green", "R": "Red", "B": "Blue", "V": "Violet",
+    "W": "White", "LC": "Light Cyan", "LM": "Light Magenta",
+    "LK": "Light Black", "LY": "Light Yellow", "LLK": "Light Light Black",
+    "MC": "Light Cyan 2", "MM": "Light Magenta 2",
+}
+
+
+def ink_names_from_fields(device_fields: list[str]) -> list[str]:
+    """Human ink names (for the TIFF ``InkNames`` tag) from ``.ti1`` device fields."""
+    out: list[str] = []
+    for f in device_fields:
+        suf = f.split("_")[-1].upper()
+        out.append(_INK_SUFFIX_NAMES.get(suf, suf.title()))
+    return out
+
+
+def _k_channel_index(device_fields: list[str]) -> int | None:
+    """Index of the black (K) channel, or ``None`` if the ink set has none."""
+    for i, f in enumerate(device_fields):
+        if f.split("_")[-1].upper() == "K":
+            return i
+    return None
+
+
+def build_device_pages(result: RenderResult, target, *, bit16: bool = False
+                       ) -> list[np.ndarray]:
+    """Turn a collected render into per-page device-native ``(H, W, n)`` rasters.
+
+    Every measured patch is painted with its **exact** ink coverage (0–100 % →
+    0..max), so what a RIP prints is bit-exact to what chartread expects — the
+    same exactness-by-construction the RGB path has. All page furniture (strip
+    labels, indicators, underlines, spacers, chart text, notes/clip strip) is
+    folded into the **black-ink** channel from the preview's darkness outside the
+    patch areas, keeping the sheet navigable without touching any patch value.
+    """
+    if result.patch_geom is None:
+        raise ValueError("render lacked collect_device_geom=True; no device geometry")
+    n = target.n_channels
+    k_idx = _k_channel_index(target.device_fields)
+    maxval = 65535 if bit16 else 255
+    dtype = np.uint16 if bit16 else np.uint8
+    arrays: list[np.ndarray] = []
+    for img, rows in zip(result.images, result.patch_geom):
+        W, H = img.size
+        dev = np.zeros((H, W, n), dtype=np.float32)
+        occ = np.zeros((H, W), dtype=bool)          # measured-patch pixels
+        for kind, coord, values in rows:
+            if kind == "clip":
+                # Notes/clip strip: carry its rendered artwork into device ink so
+                # a coloured logo/header prints in colour (approx.), black text
+                # stays crisp K. Unmeasured furniture in a reserved band.
+                ax, ay = coord
+                sub = values
+                sh, sw = sub.shape[:2]
+                x1, y1 = min(W, ax + sw), min(H, ay + sh)
+                ax0, ay0 = max(0, ax), max(0, ay)
+                if x1 > ax0 and y1 > ay0:
+                    conv = to_device_approx_array(
+                        sub[ay0 - ay:y1 - ay, ax0 - ax:x1 - ax], target.device_fields)
+                    dev[ay0:y1, ax0:x1, :] = conv
+                    occ[ay0:y1, ax0:x1] = True
+                continue
+            if kind == "spacer":
+                # Coloured contrast spacer: carry its display colour into device
+                # ink (unmeasured furniture, so an approximation is fine) instead
+                # of flattening it to black — matching printtarg's coloured
+                # spacers. Painted like a rect and excluded from the K fold-in.
+                vals = np.asarray(
+                    to_device_approx(values, target.device_fields), dtype=np.float32)
+                x0, y0, xR, yB = coord
+                x0, y0 = max(0, x0), max(0, y0)
+                xR, yB = min(W, xR), min(H, yB)
+                if xR > x0 and yB > y0:
+                    dev[y0:yB, x0:xR, :] = vals
+                    occ[y0:yB, x0:xR] = True
+                continue
+            vals = np.asarray(values, dtype=np.float32)
+            if len(vals) != n:                       # defensive: pad/trim
+                vals = np.resize(vals, n)
+            if kind == "rect":
+                x0, y0, xR, yB = coord
+                x0, y0 = max(0, x0), max(0, y0)
+                xR, yB = min(W, xR), min(H, yB)
+                if xR <= x0 or yB <= y0:
+                    continue
+                dev[y0:yB, x0:xR, :] = vals
+                occ[y0:yB, x0:xR] = True
+            else:                                    # "hex": polygon mask
+                mask = Image.new("L", (W, H), 0)
+                ImageDraw.Draw(mask).polygon(coord, fill=255)
+                m = np.asarray(mask, dtype=bool)
+                dev[m] = vals
+                occ |= m
+        rgb = np.asarray(img, dtype=np.float32)
+        lum = 0.2126 * rgb[..., 0] + 0.7152 * rgb[..., 1] + 0.0722 * rgb[..., 2]
+        furniture_k = (255.0 - lum) * (100.0 / 255.0)
+        furniture_k[occ] = 0.0                        # never overwrite a patch
+        if k_idx is not None:
+            dev[..., k_idx] = np.maximum(dev[..., k_idx], furniture_k)
+        else:                                         # no K: rich composite black
+            for c in range(n):
+                dev[..., c] = np.maximum(dev[..., c], furniture_k)
+        arrays.append(np.clip(dev * (maxval / 100.0) + 0.5, 0, maxval).astype(dtype))
+    return arrays
+
+
+def save_separated_tiffs(arrays: list[np.ndarray], base_path: str | Path,
+                         dpi: int = 300, *, ink_names: list[str],
+                         compression: str = "lzw") -> list[Path]:
+    """Write device-native ``(H, W, n)`` arrays as ``photometric='separated'``
+    TIFF(s) with an ``InkNames`` tag, so a RIP knows exactly which ink each
+    channel drives. CMYK writes ``InkSet=1``; extra-ink sets write ``InkSet=2``
+    with the surplus samples flagged unspecified. Single page → ``base.tif``;
+    multiple → ``base_NN.tif``.
+    """
+    base = Path(base_path)
+    stem = base.with_suffix("")
+    res = dpi / 2.54
+    comp = None if compression in ("none", "", None) else compression
+    out: list[Path] = []
+    for i, arr in enumerate(arrays):
+        n = arr.shape[2]
+        names = "\0".join(ink_names[:n]) + "\0"
+        # Tag structure matched to printtarg's (which Photoshop opens), verified
+        # against Photoshop directly (#72): Orientation set, one strip, InkNames +
+        # NumberOfInks kept for RIP hand-off. Critically **InkSet is only written
+        # for plain CMYK (=1)**; for >4 inks we omit it so it defaults to CMYK,
+        # which makes Photoshop read the surplus inks as spot channels. Writing
+        # InkSet=2 (not-CMYK) is exactly what made Photoshop reject the file.
+        extratags = [
+            (274, "H", 1, 1, True),                       # Orientation = top-left
+            (334, "H", 1, n, True),                       # NumberOfInks
+            (333, "s", 0, names, True),                   # InkNames (NUL-joined)
+        ]
+        if n == 4:
+            extratags.append((332, "H", 1, 1, True))      # InkSet = CMYK
+        kwargs = dict(photometric="separated", resolution=(res, res),
+                      resolutionunit=3, compression=comp, extratags=extratags,
+                      rowsperstrip=arr.shape[0])           # single strip, like printtarg
+        if n > 4:
+            # The inks past CMYK are declared "unspecified" — i.e. extra *ink*
+            # data, not alpha. Verified against Photoshop (#72): "unassalpha"
+            # made Photoshop treat them as transparency (paper = 0 ink → fully
+            # transparent), while "unspecified" opens opaque. The one-time
+            # earlier failure with "unspecified" was the InkSet=2 tag, now gone.
+            kwargs["extrasamples"] = ("unspecified",) * (n - 4)
+        path = base if len(arrays) == 1 else stem.parent / f"{stem.name}_{i + 1:02d}.tif"
+        tifffile.imwrite(str(path), arr, **kwargs)
+        out.append(path)
     return out
 
 

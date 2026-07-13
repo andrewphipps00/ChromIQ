@@ -43,3 +43,65 @@ def luminance(rgb: tuple[int, int, int]) -> float:
     """Rec.709 relative luminance (0–255)."""
     r, g, b = rgb
     return 0.2126 * r + 0.7152 * g + 0.0722 * b
+
+
+def to_device_approx(rgb: tuple[int, int, int],
+                     device_fields: list[str]) -> tuple[float, ...]:
+    """Approximate device ink values (0–100) for a *display* colour.
+
+    Used for **unmeasured** furniture whose colour carries meaning — chiefly the
+    contrast spacers, so a red/yellow separator prints red/yellow on a CMYK+N
+    device instead of collapsing to grey (matching printtarg's coloured spacers).
+    Achromatic colours route to the single black ink (clean, low ink); chromatic
+    colours invert into C/M/Y. Extra inks (O/G/V/light) stay 0 — approximate by
+    design, never applied to a patch that gets measured.
+    """
+    r, g, b = (v / 255.0 for v in rgb)
+    suf = [f.split("_")[-1].upper() for f in device_fields]
+    out = [0.0] * len(suf)
+    mx, mn = max(r, g, b), min(r, g, b)
+    if (mx - mn) < 0.06 and "K" in suf:          # near-neutral → black ink only
+        out[suf.index("K")] = 100.0 * (1.0 - mx)
+        return tuple(out)
+    for i, s in enumerate(suf):                  # chromatic → naive CMY inversion
+        if s == "C":
+            out[i] = 100.0 * (1.0 - r)
+        elif s == "M":
+            out[i] = 100.0 * (1.0 - g)
+        elif s == "Y":
+            out[i] = 100.0 * (1.0 - b)
+    return tuple(out)
+
+
+def to_device_approx_array(rgb, device_fields: list[str]):
+    """Vectorised :func:`to_device_approx` over an ``(H, W, 3)`` uint8 image →
+    ``(H, W, n)`` float device values (0–100).
+
+    Used to carry a *rendered* colour region — chiefly the notes/clip strip —
+    into the device raster so its artwork prints in colour (a CMY(K)
+    approximation; extra inks stay 0) instead of flat black. Near-neutral pixels
+    route to the black ink; black text therefore stays crisp K.
+    """
+    import numpy as np
+
+    r = rgb[..., 0].astype(np.float32) / 255.0
+    g = rgb[..., 1].astype(np.float32) / 255.0
+    b = rgb[..., 2].astype(np.float32) / 255.0
+    suf = [f.split("_")[-1].upper() for f in device_fields]
+    n = len(suf)
+    out = np.zeros(r.shape + (n,), dtype=np.float32)
+    for i, s in enumerate(suf):                  # chromatic → CMY inversion
+        if s == "C":
+            out[..., i] = 100.0 * (1.0 - r)
+        elif s == "M":
+            out[..., i] = 100.0 * (1.0 - g)
+        elif s == "Y":
+            out[..., i] = 100.0 * (1.0 - b)
+    if "K" in suf:                               # near-neutral → single K ink
+        mx = np.maximum(np.maximum(r, g), b)
+        mn = np.minimum(np.minimum(r, g), b)
+        ach = (mx - mn) < 0.06
+        out[ach] = 0.0
+        ki = suf.index("K")
+        out[..., ki] = np.where(ach, 100.0 * (1.0 - mx), out[..., ki])
+    return out

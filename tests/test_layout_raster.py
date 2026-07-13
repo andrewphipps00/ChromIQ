@@ -16,6 +16,16 @@ def _rgb_target(n):
                        patches=patches)
 
 
+def _nchan_target(n, fields, color_rep):
+    """A synthetic N-colorant target (device values 0–100, plausible XYZ)."""
+    ch = len(fields)
+    patches = []
+    for i in range(n):
+        dev = tuple(float((i * (7 + c * 3)) % 100) for c in range(ch))
+        patches.append((dev, (40.0, 45.0, 50.0)))
+    return ColorTarget(color_rep=color_rep, device_fields=fields, patches=patches)
+
+
 def test_render_dimensions_and_pages():
     target = _rgb_target(60)
     geom = instruments.build("i1")
@@ -167,6 +177,172 @@ def test_no_vertical_gap_between_patches_and_spacers():
     white_rows = [y for y in range(y_top, y_bot)
                   if img.getpixel((cx, y)) == (255, 255, 255)]
     assert not white_rows, f"paper showing through at rows {white_rows[:5]}"
+
+
+def test_ink_names_from_fields():
+    assert raster.ink_names_from_fields(
+        ["CMYK_C", "CMYK_M", "CMYK_Y", "CMYK_K"]) == \
+        ["Cyan", "Magenta", "Yellow", "Black"]
+    assert raster.ink_names_from_fields(
+        ["CMYKOG_O", "CMYKOG_G", "CMYKOG_V"]) == ["Orange", "Green", "Violet"]
+    # unknown suffix falls back to a title-cased name (still valid InkNames)
+    assert raster.ink_names_from_fields(["XY_ZZ"]) == ["Zz"]
+
+
+def test_device_pages_exact_patch_values_and_furniture_in_k():
+    """Tier D (#72): the collected device raster carries each patch's EXACT ink
+    coverage (0–100 % → 0..255), and all furniture folds into the K channel with
+    the colour inks left clean — so patches stay bit-exact for chartread."""
+    import numpy as np
+    fields = ["CMYK_C", "CMYK_M", "CMYK_Y", "CMYK_K"]
+    target = _nchan_target(120, fields, "CMYK")
+    geom = instruments.build("i1")
+    lay = geometry.compute(geom, 210.0, 297.0, 120)
+    res = raster.render_pages(target, lay, geom, seed=5, randomize=False,
+                              paper_w_mm=210.0, paper_h_mm=297.0, dpi=150,
+                              chart_text="ChromIQ", collect_device_geom=True)
+    assert res.patch_geom is not None and len(res.patch_geom) == 1
+    arrs = raster.build_device_pages(res, target)
+    arr = arrs[0]
+    assert arr.shape[2] == 4 and arr.dtype == np.uint8
+
+    # every non-media patch's exact 8-bit tuple appears in the raster
+    # (round-half-up, matching build_device_pages' +0.5 quantisation)
+    for dev, _ in target.patches[:10]:
+        exp = np.array([int(v / 100 * 255 + 0.5) for v in dev], dtype=np.uint8)
+        assert np.all(arr == exp, axis=2).sum() > 0, f"missing patch {dev}"
+
+    # furniture (chart text + strip labels) lands in K with clean colour inks
+    c, m, y, k = (arr[..., i] for i in range(4))
+    pure_k = (k > 10) & (c == 0) & (m == 0) & (y == 0)
+    assert pure_k.sum() > 0, "no pure-black furniture found"
+
+
+def test_to_device_approx_colours():
+    from workflow.layout_engine.colorants import to_device_approx
+    f = ["CMYK_C", "CMYK_M", "CMYK_Y", "CMYK_K"]
+    # red (255,0,0) → magenta+yellow, no K (printtarg's "Red" primary)
+    assert to_device_approx((255, 0, 0), f) == (0.0, 100.0, 100.0, 0.0)
+    # yellow → Y only
+    assert to_device_approx((255, 255, 0), f) == (0.0, 0.0, 100.0, 0.0)
+    # near-neutral black → single K ink (clean, not 300 % rich black)
+    c, m, y, k = to_device_approx((0, 0, 0), f)
+    assert (c, m, y) == (0.0, 0.0, 0.0) and k == 100.0
+    # white → paper (no ink)
+    assert to_device_approx((255, 255, 255), f) == (0.0, 0.0, 0.0, 0.0)
+
+
+def test_coloured_spacers_carry_device_ink():
+    """Tier D (#72): a coloured contrast spacer keeps its colour in the device
+    raster (chromatic ink), rather than flattening to black — matching
+    printtarg's coloured spacers."""
+    import numpy as np
+    fields = ["CMYK_C", "CMYK_M", "CMYK_Y", "CMYK_K"]
+    # alternating light/dark patches force vivid contrast spacers between them
+    target = _nchan_target(120, fields, "CMYK")
+    geom = instruments.build("i1")
+    lay = geometry.compute(geom, 210.0, 297.0, 120)
+    res = raster.render_pages(target, lay, geom, seed=5, randomize=False,
+                              paper_w_mm=210.0, paper_h_mm=297.0, dpi=150,
+                              spacer_mode="colored", collect_device_geom=True)
+    assert any(k == "spacer" for row in res.patch_geom for (k, *_ ) in row)
+    arr = raster.build_device_pages(res, target)[0]
+    c, m, y, k = (arr[..., i] for i in range(4))
+    chromatic = ((m > 60) | (y > 60) | (c > 60)) & (k < 20)
+    assert chromatic.sum() > 0, "coloured spacers collapsed to black in device raster"
+
+
+def test_device_pages_no_k_channel_uses_composite_black():
+    """With no K channel the furniture is painted into every colour channel
+    (rich composite black) so it stays visible."""
+    import numpy as np
+    fields = ["CMY_C", "CMY_M", "CMY_Y"]           # 3 inks, no black
+    # force the device path by treating it as n>=... here we call build directly
+    target = _nchan_target(120, fields, "CMY")
+    geom = instruments.build("i1")
+    lay = geometry.compute(geom, 210.0, 297.0, 120)
+    res = raster.render_pages(target, lay, geom, seed=5, randomize=False,
+                              paper_w_mm=210.0, paper_h_mm=297.0, dpi=150,
+                              chart_text="ChromIQ", collect_device_geom=True)
+    assert raster._k_channel_index(fields) is None
+    arr = raster.build_device_pages(res, target)[0]
+    # a furniture pixel in the bottom text band has ink in all three channels
+    band = arr[-int(8 * 150 / 25.4):]
+    inked = (band > 10).all(axis=2)
+    assert inked.sum() > 0, "composite-black furniture not applied to all inks"
+
+
+def test_save_separated_tiffs_tags(tmp_path):
+    """The saved N-channel TIFF is photometric='separated' with InkNames, InkSet
+    and (for >4 inks) ExtraSamples — so a RIP knows every ink channel."""
+    import numpy as np
+    import tifffile as tf
+    # CMYK → InkSet 1 (CMYK), no extra samples, single strip, Orientation set
+    a4 = np.zeros((10, 10, 4), dtype=np.uint8)
+    p = raster.save_separated_tiffs([a4], tmp_path / "cmyk.tif", dpi=200,
+                                    ink_names=["Cyan", "Magenta", "Yellow", "Black"])
+    with tf.TiffFile(str(p[0])) as t:
+        pg = t.pages[0]
+        assert int(pg.photometric) == 5                # SEPARATED
+        assert pg.tags["InkSet"].value == 1
+        assert pg.tags["NumberOfInks"].value == 4
+        assert "Cyan" in pg.tags["InkNames"].value
+        assert int(pg.tags["Orientation"].value) == 1
+        assert pg.tags.get("ExtraSamples") is None
+    # 6-ch CMYKOG → Photoshop-compatible: NO InkSet, InkNames kept, and the two
+    # surplus inks declared "unspecified" (extra ink data, not alpha → opaque).
+    a6 = np.zeros((10, 10, 6), dtype=np.uint16)
+    p6 = raster.save_separated_tiffs(
+        [a6], tmp_path / "cmykog.tif", dpi=200,
+        ink_names=["Cyan", "Magenta", "Yellow", "Black", "Orange", "Green"])
+    with tf.TiffFile(str(p6[0])) as t:
+        pg = t.pages[0]
+        assert pg.tags.get("InkSet") is None           # omitted → defaults to CMYK
+        assert pg.tags["NumberOfInks"].value == 6
+        assert "Orange" in pg.tags["InkNames"].value
+        assert len(pg.tags["ExtraSamples"].value) == 2
+        assert int(pg.tags["Orientation"].value) == 1
+
+
+def test_build_chart_cmyk_writes_separated_tiff(tmp_path):
+    """End to end: build_chart on a CMYK .ti1 writes a device-native separated
+    TIFF whose patch pixels equal the .ti2 device values (Tier D, #72)."""
+    import numpy as np
+    import tifffile as tf
+    from workflow.layout_engine import chart as le_chart
+
+    # write a CMYK .ti1 directly (single-table N-channel format)
+    ti1 = tmp_path / "c.ti1"
+    fields = ["CMYK_C", "CMYK_M", "CMYK_Y", "CMYK_K"]
+    rows = []
+    for i in range(60):
+        rows.append(tuple(float((i * (7 + c * 3)) % 100) for c in range(4)))
+    _write_cmyk_ti1(ti1, fields, rows)
+
+    res = le_chart.build_chart(str(ti1), tmp_path / "chart", instrument="i1",
+                               paper="A4", seed=3, dpi=150)
+    with tf.TiffFile(str(res.tiff_paths[0])) as t:
+        pg = t.pages[0]
+        assert int(pg.photometric) == 5
+        assert pg.tags["InkNames"].value.replace("\x00", " ").split() == \
+            ["Cyan", "Magenta", "Yellow", "Black"]
+        arr = pg.asarray()
+    assert arr.shape[2] == 4
+    # exact patch value present in raster (round-half-up like build_device_pages)
+    exp = np.array([int(v / 100 * 255 + 0.5) for v in rows[1]], dtype=arr.dtype)
+    assert np.all(arr == exp, axis=2).sum() > 0
+
+
+def _write_cmyk_ti1(path, fields, rows):
+    """Minimal single-table CMYK .ti1 (COLOR_REP + device columns + XYZ)."""
+    hdr = ["CTI1", 'COLOR_REP "CMYK"', 'TOTAL_INK_LIMIT "320.0"',
+           f"NUMBER_OF_FIELDS {len(fields) + 4}", "BEGIN_DATA_FORMAT",
+           "SAMPLE_ID " + " ".join(fields) + " XYZ_X XYZ_Y XYZ_Z",
+           "END_DATA_FORMAT", f"NUMBER_OF_SETS {len(rows)}", "BEGIN_DATA"]
+    for i, dev in enumerate(rows, 1):
+        hdr.append(f"{i} " + " ".join(f"{v:.4f}" for v in dev) + " 40.0 45.0 50.0")
+    hdr.append("END_DATA")
+    path.write_text("\n".join(hdr) + "\n")
 
 
 def test_contrast_spacer_choice():

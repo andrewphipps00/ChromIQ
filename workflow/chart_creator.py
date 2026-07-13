@@ -1314,7 +1314,15 @@ class ChartCreator:
         double density at -a0.91–0.93, #108) — fall back to deriving the
         geometry from the rendered TIFF itself, colour-verified patch by patch
         against the ``.ti2`` (:mod:`workflow.layout_from_render`). Both paths
-        are correct-or-absent; never raises into the caller."""
+        are correct-or-absent; never raises into the caller.
+
+        Skipped for non-RGB charts: scan geometry is colour-matched in RGB and a
+        CMYK / CMYK+N printer target is measured with a spectro, never scanned —
+        so there is nothing to capture (and the RGB matchers would only warn)."""
+        if params.device_type not in ("2", "3"):     # 2=Print RGB, 3=Video RGB
+            log.debug("Scanner .cht capture skipped for %s (device -d%s is not RGB)",
+                      stem, params.device_type)
+            return
         if not self._capture_printtarg_cht(work_dir, stem, params):
             self._derive_geometry_from_render(work_dir, stem)
 

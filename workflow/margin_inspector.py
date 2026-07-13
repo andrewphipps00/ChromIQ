@@ -211,14 +211,24 @@ def measure_from_engine(
 
 
 def _tiff_dpi(path: Path, fallback: float) -> float:
-    """Resolution printtarg baked into the TIFF, or ``fallback`` when absent."""
-    try:
-        from PIL import Image
+    """Resolution baked into the TIFF, or ``fallback`` when absent.
 
-        with Image.open(path) as im:
-            dpi = im.info.get("dpi")
-        if dpi and dpi[0] and float(dpi[0]) > 1.0:
-            return float(dpi[0])
+    Read via tifffile (not Pillow) so device-native separated CMYK/N charts,
+    which Pillow can't decode, still report their DPI. (#72 Tier D)
+    """
+    try:
+        import tifffile
+
+        with tifffile.TiffFile(str(path)) as tf:
+            page = tf.pages[0]
+            xr = page.tags.get("XResolution")
+            unit = page.tags.get("ResolutionUnit")
+            if xr and xr.value[1]:
+                val = xr.value[0] / xr.value[1]
+                if unit and int(unit.value) == 3:             # px/cm → px/inch
+                    val *= 2.54
+                if val > 1.0:
+                    return float(val)
     except Exception as exc:  # pragma: no cover - corrupt/odd TIFFs
         log.debug("Could not read TIFF dpi from %s: %s", path, exc)
     return float(fallback)

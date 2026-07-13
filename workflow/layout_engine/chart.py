@@ -286,9 +286,20 @@ def build_chart(
         clip_image_offset_x_mm=clip_image_offset_x,
         clip_image_offset_y_mm=clip_image_offset_y,
         text_ctx=_ctx,
+        # CMYK / CMYK+N targets get a device-native separated TIFF (Tier D, #72);
+        # RGB/CMY/Gray keep the exact display-RGB raster. n>=4 ⇒ the display path
+        # would only approximate the ink values, so collect the real device grid.
+        collect_device_geom=(target.n_channels >= 4),
     )
-    tiff_paths = raster.save_tiffs(render.images, stem.with_suffix(".tif"), dpi=dpi,
-                                   bit16=bit16, compression=compression)
+    if target.n_channels >= 4:
+        device_pages = raster.build_device_pages(render, target, bit16=bit16)
+        tiff_paths = raster.save_separated_tiffs(
+            device_pages, stem.with_suffix(".tif"), dpi=dpi,
+            ink_names=raster.ink_names_from_fields(target.device_fields),
+            compression=compression)
+    else:
+        tiff_paths = raster.save_tiffs(render.images, stem.with_suffix(".tif"),
+                                       dpi=dpi, bit16=bit16, compression=compression)
 
     rects = geometry.strip_rects_px(geom, w_mm, h_mm, layout, dpi)
     patch_rects = geometry.patch_rects_px(geom, w_mm, h_mm, layout, dpi,
