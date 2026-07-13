@@ -37,10 +37,39 @@ def _colorant_names(device_fields: list[str]) -> list[str]:
             for f in device_fields]
 
 
-def _tint_fn_body(n: int) -> str:
-    """PDF Type-4 tint: N inks → CMYK (average of inks → K). Mirrors PdfGenerator."""
-    adds = (" ".join(["add"] * (n - 1)) + " ") if n > 1 else ""
-    return f"{{ {adds}{n} div dup 1 gt {{ pop 1 }} if 0 0 0 4 1 roll }}"
+# Approximate CMYK a colorant contributes, so the DeviceN tint transform previews
+# real colours in a viewer (CMYK maps 1:1; extra inks map to their nearest CMYK).
+_INK_CMYK = {
+    "C": (1, 0, 0, 0), "M": (0, 1, 0, 0), "Y": (0, 0, 1, 0), "K": (0, 0, 0, 1),
+    "O": (0, 0.35, 0.75, 0), "G": (0.65, 0, 0.70, 0), "V": (0.55, 0.65, 0, 0),
+    "R": (0, 0.85, 0.85, 0), "B": (0.85, 0.60, 0, 0), "W": (0, 0, 0, 0),
+    "LC": (0.4, 0, 0, 0), "LM": (0, 0.4, 0, 0), "LY": (0, 0, 0.4, 0),
+    "LK": (0, 0, 0, 0.4), "LLK": (0, 0, 0, 0.2), "MC": (0.25, 0, 0, 0),
+    "MM": (0, 0.25, 0, 0),
+}
+
+
+def _tint_fn_body(device_fields: list[str]) -> str:
+    """PDF Type-4 tint transform: N ink values → CMYK, each output the weighted
+    sum of the inks' CMYK contributions (clamped), so a viewer previews the real
+    colours. CMYK inks pass through; extra inks map to their nearest CMYK."""
+    codes = [f.split("_")[-1].upper() for f in device_fields]
+    n = len(codes)
+    w = [_INK_CMYK.get(c, (0, 0, 0, 0)) for c in codes]
+    ops: list[str] = []
+    for j in range(4):                       # C, M, Y, K outputs
+        terms = [(i, w[i][j]) for i in range(n) if w[i][j]]
+        if not terms:
+            ops.append("0")
+        else:
+            for k, (i, weight) in enumerate(terms):     # in_i lies deeper as we push
+                ops.append(f"{j + k + (n - 1 - i)} index {weight:.4f} mul")
+            ops.extend(["add"] * (len(terms) - 1))
+        ops.append("dup 0 lt {pop 0} if dup 1 gt {pop 1} if")   # clamp 0..1
+    # stack now: in0..in_{n-1} C M Y K — roll the 4 outputs under and drop the inputs
+    ops.append(f"{n + 4} 4 roll")
+    ops.extend(["pop"] * n)
+    return "{ " + " ".join(ops) + " }"
 
 
 class _Obj:
@@ -205,7 +234,7 @@ def save_vector_pdf(result, target, out_path: str | Path, *,
     cs_selected = None
     devicen_obj = None
     if n > 4:
-        tint = _tint_fn_body(n).encode("ascii")
+        tint = _tint_fn_body(device_fields).encode("ascii")
         domain = " ".join(["0 1"] * n)
         fn_obj = objs.add(
             (f"{{X}} 0 obj\n<< /FunctionType 4 /Domain [{domain}] "

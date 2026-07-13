@@ -140,6 +140,42 @@ def test_export_pdf_recipe_roundtrip():
 
 
 @pytest.mark.skipif(not shutil.which("sips"), reason="needs macOS sips to rasterise")
+def test_devicen_tint_previews_real_colours(tmp_path):
+    """The DeviceN tint transform must let a viewer preview each ink as its real
+    colour (guards against the tint collapsing everything to one channel — the
+    magenta-everything bug). Cyan reads blue-ish, yellow yellow, orange orange,
+    green green — each ink distinct, not all pink."""
+    f = ["CMYKOG_C", "CMYKOG_M", "CMYKOG_Y", "CMYKOG_K", "CMYKOG_O", "CMYKOG_G"]
+    devs = [(100, 0, 0, 0, 0, 0), (0, 100, 0, 0, 0, 0), (0, 0, 100, 0, 0, 0),
+            (0, 0, 0, 0, 100, 0), (0, 0, 0, 0, 0, 100)]      # C M Y O G
+    patches = [(tuple(map(float, d)), (50., 50., 50.)) for d in devs] * 12
+    target = ColorTarget("CMYKOG", f, patches)
+    res, w, h = _render(target, dpi=200)
+    out = vector_pdf.save_vector_pdf(res, target, tmp_path / "c.pdf",
+                                     paper_w_mm=w, paper_h_mm=h, dpi=200)
+    png = tmp_path / "c.png"
+    subprocess.run(["sips", "-s", "format", "png", "--resampleWidth",
+                    str(res.images[0].width), str(out), "--out", str(png)],
+                   check=True, capture_output=True)
+    pdf = np.asarray(Image.open(png).convert("RGB").resize(res.images[0].size))
+    names = ["C", "M", "Y", "K", "O", "G"]
+    seen = {}
+    for _, (x0, y0, x1, y1), dev in [e for e in res.patch_geom[0] if e[0] == "rect"]:
+        nz = [i for i, v in enumerate(dev) if v]
+        if len(nz) != 1:                                  # only single-ink patches
+            continue
+        r, g, b = pdf[(y0 + y1) // 2, (x0 + x1) // 2]
+        seen[names[nz[0]]] = (int(r), int(g), int(b))
+        if {"C", "Y", "O", "G"} <= set(seen):
+            break
+    assert seen["C"][2] > seen["C"][0] + 30, f"cyan not blue-ish: {seen['C']}"
+    assert seen["Y"][0] > 150 and seen["Y"][2] < 150, f"yellow wrong: {seen['Y']}"
+    assert seen["O"][0] > seen["O"][2] + 40, f"orange not warm: {seen['O']}"
+    assert seen["G"][1] > seen["G"][0] and seen["G"][1] > seen["G"][2], \
+        f"green not green: {seen['G']}"
+
+
+@pytest.mark.skipif(not shutil.which("sips"), reason="needs macOS sips to rasterise")
 @pytest.mark.parametrize("rotation", [0, 90, 270, 180])
 def test_pdf_text_layout_matches_tiff(tmp_path, rotation):
     """CM-proof text-placement check for every label rotation. Patch colour/
