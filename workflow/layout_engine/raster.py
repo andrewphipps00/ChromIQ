@@ -170,6 +170,20 @@ def _font(px: int, family: str = DEFAULT_INDICATOR_FONT,
     return f
 
 
+def _font_file_and_variation(family: str, bold: bool, italic: bool
+                             ) -> tuple[str | None, str | None]:
+    """The font file path + variable-instance name the renderer uses for
+    *family*/*style* — so the vector-PDF text can load the exact same face."""
+    style = ("bolditalic" if bold and italic else "bold" if bold
+             else "italic" if italic else "regular")
+    path = _font_path(family, style)
+    variation = None
+    if bold or italic:
+        variation = ("Bold Italic" if bold and italic else "Bold" if bold
+                     else "Italic")
+    return path, variation
+
+
 _UPPER = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
 # Tiny gap inserted between letters of a multi-letter strip label (e.g. "AB"),
@@ -752,6 +766,29 @@ def render_pages(
     ind_px = px(effective_indicator_size_mm(
         geom, dpi, indicator_font, indicator_size_mm))
     font = _font(ind_px, indicator_font, indicator_bold, indicator_italic)
+    # Vector-PDF furniture: the exact font file + variable instance + PIL ascent,
+    # so a collected text run places identically to what Pillow drew (#72).
+    _ind_font_file, _ind_var = _font_file_and_variation(
+        indicator_font, indicator_bold, indicator_italic)
+    try:
+        _ind_ascent = font.getmetrics()[0]
+    except Exception:
+        _ind_ascent = ind_px
+
+    def _collect_label(cx: int, top: int, text: str) -> None:
+        """Collect a centred strip label as a vector text run at the exact left/
+        baseline Pillow uses (single letter → centred on advance; multi → spaced)."""
+        if not (collect_device_geom and _ind_font_file and text):
+            return
+        widths = [draw.textlength(ch, font=font) for ch in text]
+        if len(text) > 1 and _spc > 0:
+            total = sum(widths) + _spc * (len(text) - 1)
+        else:
+            total = widths[0] if widths else 0.0
+        left = cx - total / 2.0
+        _geom_rows.append(("text", left, top + _ind_ascent, text, _ind_font_file,
+                           ind_px, _spc if len(text) > 1 else 0, 0, (0, 0, 0),
+                           _ind_var))
     if underline_mode == "colored":          # legacy alias → 5-segment bar
         underline_mode = "segments"
     underline_on = draw_indicators and underline_mode in ("segments", "cycle", "black")
@@ -826,6 +863,7 @@ def render_pages(
                 _y = _lbl_top
                 if _rot == 0:
                     _draw_indicator(draw, _cx, _y, _lbl, font, _spc)
+                    _collect_label(_cx, _y, _lbl)
                 else:                            # rotated label → tile + paste
                     _tile = _indicator_tile(_lbl, font, _spc, indicator_rotation)
                     # Justify within the label band along the reading axis. The
@@ -844,8 +882,11 @@ def render_pages(
                     img.paste(_tile, (_cx - _tile.width // 2, _y + _off), _tile)
                 if underline_on and underline_mode == "cycle":   # one accent / strip
                     _ly = _y + label_band_h + ul_gap
-                    draw.rectangle([x0, _ly, xR - 1, _ly + ul_th - 1],
-                                   fill=ACCENT_RGB[global_strip % len(ACCENT_RGB)])
+                    _acc = ACCENT_RGB[global_strip % len(ACCENT_RGB)]
+                    draw.rectangle([x0, _ly, xR - 1, _ly + ul_th - 1], fill=_acc)
+                    if collect_device_geom:
+                        _geom_rows.append(
+                            ("vrect", (x0, _ly, xR - 1, _ly + ul_th - 1), _acc))
                 # SpectroScan labels the grid 2-D: column letters on top (above)
                 # plus row NUMBERS down the side, in the reserved rlwi band to the
                 # left of the patches. Drawn once, against the leftmost strip (#93,
@@ -865,6 +906,11 @@ def render_pages(
                         _tw = int(draw.textlength(_txt, font=font))
                         draw.text((_rx - _tw, _ry - ind_px // 2), _txt,
                                   font=font, fill=(0, 0, 0))
+                        if collect_device_geom and _ind_font_file:
+                            _geom_rows.append(
+                                ("text", _rx - _tw, _ry - ind_px // 2 + _ind_ascent,
+                                 _txt, _ind_font_file, ind_px, 0, 0, (0, 0, 0),
+                                 _ind_var))
             for j, gslot in enumerate(col_slots):
                 y0 = px(place.y_of(j)) + _stag
                 # Derive each row's bottom edge from its true mm position (the
@@ -929,6 +975,8 @@ def render_pages(
             x_right = px(place.x_of(n_passes - 1) + place.pwid) - 1
             if underline_mode == "black":
                 draw.rectangle([x_left, _ly, x_right, _yb], fill=(0, 0, 0))
+                if collect_device_geom:
+                    _geom_rows.append(("vrect", (x_left, _ly, x_right, _yb), (0, 0, 0)))
             else:                                     # 5 equal segments full-width
                 _span = x_right - x_left + 1
                 _n = len(ACCENT_RGB)
@@ -936,6 +984,9 @@ def render_pages(
                     _sx0 = x_left + round(_span * _k / _n)
                     _sx1 = x_left + round(_span * (_k + 1) / _n) - 1
                     draw.rectangle([_sx0, _ly, _sx1, _yb], fill=ACCENT_RGB[_k])
+                    if collect_device_geom:
+                        _geom_rows.append(
+                            ("vrect", (_sx0, _ly, _sx1, _yb), ACCENT_RGB[_k]))
 
         # Left clip-strip content (i1/p3): rendered natively into the reserved
         # lbord band, since the engine knows its exact geometry.
@@ -968,12 +1019,22 @@ def render_pages(
         # drawn in the bottom margin (clear of the patches).
         _btxt = [t for t in (_chart_text, stamp_text) if t]
         if _btxt:
-            sfont = _font(px(chart_text_size_mm or 3.2), chart_text_font,
+            _sfont_px = px(chart_text_size_mm or 3.2)
+            sfont = _font(_sfont_px, chart_text_font,
                           chart_text_bold, chart_text_italic)
+            _sfile, _svar = _font_file_and_variation(
+                chart_text_font, chart_text_bold, chart_text_italic)
+            try:
+                _sasc = sfont.getmetrics()[0]
+            except Exception:
+                _sasc = _sfont_px
             line_h = px(4.2)
             yy = H - px(text_edge_mm) - line_h * len(_btxt)
             for ln in _btxt:
                 draw.text((px(geom.margin_l), yy), ln, font=sfont, fill=(0, 0, 0))
+                if collect_device_geom and _sfile:
+                    _geom_rows.append(("text", px(geom.margin_l), yy + _sasc, ln,
+                                       _sfile, _sfont_px, 0, 0, (0, 0, 0), _svar))
                 yy += line_h
         images.append(img)
         page_geoms.append(_geom_rows)
@@ -1069,7 +1130,14 @@ def build_device_pages(result: RenderResult, target, *, bit16: bool = False
         W, H = img.size
         dev = np.zeros((H, W, n), dtype=np.float32)
         occ = np.zeros((H, W), dtype=bool)          # measured-patch pixels
-        for kind, coord, values in rows:
+        for elem in rows:
+            kind = elem[0]
+            # Vector-PDF-only furniture (text runs, underline rules) is already
+            # drawn on the preview and folded into K by luminance below; the
+            # device raster ignores it here.
+            if kind in ("text", "vrect"):
+                continue
+            coord, values = elem[1], elem[2]
             if kind == "clip":
                 # Notes/clip strip: carry its rendered artwork into device ink so
                 # a coloured logo/header prints in colour (approx.), black text

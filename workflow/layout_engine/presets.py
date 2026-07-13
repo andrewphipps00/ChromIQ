@@ -92,6 +92,7 @@ class LayoutRecipe:
     offset_y_mm: float = 0.0
     bit16: bool = False            # 16-bit TIFF output
     compression: str = "lzw"       # "lzw" | "zlib" | "none"
+    export_pdf: bool = False        # also write a vector PDF next to the TIFF
     show_strip_indicators: bool = True   # draw the per-strip letter labels
     indicator_font: str = "JetBrains Mono"
     indicator_size_mm: float = 0.0       # 0 = auto (instrument text height)
@@ -204,6 +205,7 @@ class LayoutRecipe:
             offset_x_mm=float(d.get("offset_x", 0.0)),
             offset_y_mm=float(d.get("offset_y", 0.0)),
             bit16=bool(d.get("bit16", False)), compression=d.get("compression", "lzw"),
+            export_pdf=bool(d.get("export_pdf", False)),
             show_strip_indicators=bool(d.get("draw_indicators", True)),
             indicator_font=d.get("indicator_font", "JetBrains Mono"),
             indicator_size_mm=float(d.get("indicator_size_mm") or 0.0),
@@ -313,6 +315,7 @@ class LayoutRecipe:
             "offset_y": self.offset_y_mm,
             "bit16": self.bit16,
             "compression": self.compression,
+            "export_pdf": self.export_pdf,
             "draw_indicators": self.show_strip_indicators,
             "indicator_font": self.indicator_font,
             "indicator_size_mm": self.indicator_size_mm,

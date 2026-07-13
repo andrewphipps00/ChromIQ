@@ -26,6 +26,7 @@ class ChartResult:
     strip_rects: list[dict] | None = None
     low_contrast_passes: list[int] | None = None
     cht_paths: list[Path] | None = None
+    pdf_path: Path | None = None
 
 
 def build_ti2_from_ti1(
@@ -120,6 +121,7 @@ def build_chart(
     offset_y: float = 0.0,
     bit16: bool = False,
     compression: str = "lzw",
+    export_pdf: bool = False,
     draw_indicators: bool = True,
     indicator_font: str = "JetBrains Mono",
     indicator_size_mm: float = 0.0,
@@ -289,7 +291,8 @@ def build_chart(
         # CMYK / CMYK+N targets get a device-native separated TIFF (Tier D, #72);
         # RGB/CMY/Gray keep the exact display-RGB raster. n>=4 ⇒ the display path
         # would only approximate the ink values, so collect the real device grid.
-        collect_device_geom=(target.n_channels >= 4),
+        # A vector-PDF export also needs the collected display list (#72).
+        collect_device_geom=(target.n_channels >= 4 or export_pdf),
     )
     if target.n_channels >= 4:
         device_pages = raster.build_device_pages(render, target, bit16=bit16)
@@ -300,6 +303,12 @@ def build_chart(
     else:
         tiff_paths = raster.save_tiffs(render.images, stem.with_suffix(".tif"),
                                        dpi=dpi, bit16=bit16, compression=compression)
+    pdf_path: Path | None = None
+    if export_pdf:
+        from . import vector_pdf
+        pdf_path = vector_pdf.save_vector_pdf(
+            render, target, stem.with_suffix(".pdf"),
+            paper_w_mm=w_mm, paper_h_mm=h_mm, dpi=dpi)
 
     rects = geometry.strip_rects_px(geom, w_mm, h_mm, layout, dpi)
     patch_rects = geometry.patch_rects_px(geom, w_mm, h_mm, layout, dpi,
@@ -341,7 +350,7 @@ def build_chart(
         color_rep=target.color_rep, layout=layout,
         tiff_paths=tiff_paths, strip_rects=rects,
         low_contrast_passes=render.low_contrast_passes,
-        cht_paths=cht_paths,
+        cht_paths=cht_paths, pdf_path=pdf_path,
     )
 
 
