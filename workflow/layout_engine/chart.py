@@ -73,6 +73,7 @@ def build_ti2_from_ti1(
         color_rep=target.color_rep, seed=seed, randomize=randomize,
         strip_pattern=strip_pattern, patch_pattern=patch_pattern,
         paper_w_mm=w_mm, paper_h_mm=h_mm, media=media, white_point=white_point,
+        ink_limit=target.ink_limit,
     )
     return ChartResult(
         ti2_path=Path(ti2_path), seed=seed, randomize=randomize,
@@ -231,6 +232,7 @@ def build_chart(
         color_rep=target.color_rep, seed=seed, randomize=randomize,
         strip_pattern=strip_pattern, patch_pattern=patch_pattern,
         paper_w_mm=w_mm, paper_h_mm=h_mm, media=media, white_point=white_point,
+        ink_limit=target.ink_limit,
     )
     if cal is not None:  # embed the calibration table (-K and -I both embed)
         from . import calibration

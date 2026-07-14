@@ -42,7 +42,8 @@ from ui.tab_header import SpectrumStripe as _SpectrumStripe, TabHeader
 from ui.tooltip_button import TooltipButton
 from ui.widgets import (
     NoScrollComboBox, NoScrollDoubleSpinBox, NoScrollSpinBox,
-    PrefixLockedLineEdit, open_dir_dialog, open_file_dialog, save_file_dialog,
+    PrefixLockedLineEdit, load_magenta_folder_icon, open_dir_dialog,
+    open_file_dialog, save_file_dialog,
 )
 
 
@@ -1007,6 +1008,186 @@ class _NewChartDialog(QDialog):
         # placeholder spec — Create Chart applies the real layout on apply.
         chart_box.setVisible(False)
 
+        # --- Device (multi-ink patch data, #72) -------------------------------
+        # Which inks the chart's device values address. Print RGB (default)
+        # keeps the dialog exactly as it always was; CMYK / CMYK + extra inks
+        # reveal the ink limit + optional preconditioning profile and re-gate
+        # the colour sets (the three-state model). This is a patch-data
+        # concern, so it lives here — layout stays with the Create Chart tab.
+        dev_box = QGroupBox(tr("Device"), self)
+        dvg = QGridLayout(dev_box)
+        dvg.addWidget(QLabel(tr("Device type:")), 0, 0)
+        self._device_type = NoScrollComboBox(dev_box)
+        self._device_type.addItem(tr("Print RGB"), "rgb")
+        self._device_type.addItem(tr("CMYK"), "cmyk")
+        self._device_type.addItem(tr("CMYK + extra inks"), "cmykplus")
+        _as_compact(self._device_type)
+        dvg.addWidget(self._device_type, 0, 1)
+        dvg.addWidget(_magenta_tip(
+            tr("Device type"),
+            tr("Tells the chart which inks your printer actually uses, so "
+               "every patch is a colour your printer can really put on "
+               "paper.\n\n"
+               "  • Print RGB — standard photo inkjets driven as RGB (the "
+               "usual choice). Everything works with no extra setup, exactly "
+               "as before.\n"
+               "  • CMYK — four-ink printers and presses driven through a "
+               "RIP.\n"
+               "  • CMYK + extra inks — wide-gamut devices with orange, "
+               "green, violet or light inks. Add each extra ink below; the "
+               "chart then carries one value per ink, per patch.\n\n"
+               "Two things appear for anything other than RGB:\n"
+               "  • Ink limit — stops patches from laying down more total ink "
+               "than the paper can take (see its own ⓘ).\n"
+               "  • Preconditioning profile — optional; unlocks the "
+               "look-based colour sets. Its tooltip walks you through the "
+               "whole two-pass workflow.\n\n"
+               "Heads-up: multi-ink charts are saved as press-ready files for "
+               "your RIP — ChromIQ's own Print button is for RGB charts.")), 0, 2)
+        dvg.setColumnStretch(1, 1)
+
+        # Extra-ink slots — inline progressive reveal like the Manual tab's -D
+        # stacking: pick an ink to add it as a removable chip, no pop-ups.
+        self._nch_inks_row = QWidget(dev_box)
+        self._nch_inks_row.setObjectName("nch_inks_row")
+        irow = QHBoxLayout(self._nch_inks_row)
+        irow.setContentsMargins(0, 0, 0, 0)
+        irow.setSpacing(6)
+        irow.addWidget(QLabel(tr("Extra inks:")))
+        self._nch_chip_bar = QHBoxLayout()
+        self._nch_chip_bar.setSpacing(4)
+        irow.addLayout(self._nch_chip_bar)
+        self._nch_add_ink = NoScrollComboBox(self._nch_inks_row)
+        self._nch_add_ink.addItem(tr("Add ink…"), "")
+        for code, label in self._extra_ink_labels().items():
+            self._nch_add_ink.addItem(label, code)
+        _as_compact(self._nch_add_ink)
+        self._nch_add_ink.activated.connect(self._on_add_ink)
+        irow.addWidget(self._nch_add_ink)
+        self._nch_inkset_lbl = QLabel("", self._nch_inks_row)
+        self._nch_inkset_lbl.setStyleSheet(
+            "color: palette(text); font-style: italic;")
+        irow.addWidget(self._nch_inkset_lbl)
+        irow.addStretch(1)
+        dvg.addWidget(self._nch_inks_row, 1, 0, 1, 3)
+
+        # Ink limit — first-class and always visible for multi-ink devices.
+        self._nch_limit_row = QWidget(dev_box)
+        self._nch_limit_row.setObjectName("nch_limit_row")
+        lrow = QHBoxLayout(self._nch_limit_row)
+        lrow.setContentsMargins(0, 0, 0, 0)
+        lrow.setSpacing(6)
+        lrow.addWidget(QLabel(tr("Ink limit:")))
+        self._ink_limit = NoScrollSpinBox(self._nch_limit_row)
+        self._ink_limit.setRange(40, 400)
+        self._ink_limit.setValue(300)
+        self._ink_limit.setSuffix(" %")
+        self._ink_limit.setObjectName("compact_input")
+        _as_compact(self._ink_limit)
+        lrow.addWidget(self._ink_limit)
+        lrow.addWidget(_magenta_tip(
+            tr("Ink limit"),
+            tr("The most total ink one patch may lay down, as a percentage. "
+               "100 % per ink — so a four-ink printer could in theory reach "
+               "400 %, but real paper can't hold that: it soaks, warps and "
+               "dries slowly, and the measurement gets unreliable.\n\n"
+               "A safe starting point is 300 % for coated inkjet papers (many "
+               "presses use 260–330 %). Your RIP or paper vendor often states "
+               "the right value — if so, use theirs.\n\n"
+               "Why it matters twice:\n"
+               "  • Chart time (here): patches over the limit are never "
+               "printed, so the chart only contains colours your paper can "
+               "actually hold.\n"
+               "  • Profile time: the same limit is passed to the profile "
+               "builder, so the finished profile never asks the printer for "
+               "more ink than the chart tested. ChromIQ keeps the two in "
+               "sync for you.")))
+        lrow.addStretch(1)
+        dvg.addWidget(self._nch_limit_row, 2, 0, 1, 3)
+
+        # Preconditioning profile — optional; unlocks the look-based sets.
+        self._nch_prof_row = QWidget(dev_box)
+        self._nch_prof_row.setObjectName("nch_prof_row")
+        prow = QGridLayout(self._nch_prof_row)
+        prow.setContentsMargins(0, 0, 0, 0)
+        prow.setHorizontalSpacing(6)
+        _prof_lbl = QLabel(tr("Preconditioning profile (optional):"),
+                           self._nch_prof_row)
+        prow.addWidget(_prof_lbl, 0, 0, 1, 4)
+        prow.addWidget(_magenta_tip(
+            tr("Preconditioning profile (optional)"),
+            tr("A profile here turns on the \"look-based\" colour sets — skin "
+               "tones, blues, greens, sunrises, pastels and From image — for "
+               "multi-ink printers (CMYK and CMYK + extra inks). You don't "
+               "need one to make a chart; it only adds these extra sets. "
+               "Here's the full picture, and why each step makes a better "
+               "profile.\n\n"
+               "The catch with multi-ink printers: a colour like \"skin\" or "
+               "\"sky blue\" can be mixed from many different ink "
+               "combinations, and the app can't know which inks make which "
+               "colour until it has measured your printer at least once. So "
+               "the recommended path is a two-pass loop:\n\n"
+               "  Pass 1 — Even coverage (no profile yet)\n"
+               "    • Leave this box empty and build the chart from \"Even "
+               "coverage\".\n"
+               "    • This spreads patches evenly across all your inks, so "
+               "the first profile learns the whole printer, not just one "
+               "area.\n"
+               "    • Print it with colour management OFF, measure it, and "
+               "build your first profile. It won't be perfect — that's "
+               "expected.\n\n"
+               "  Pass 2 — Refine where it matters (with this profile)\n"
+               "    • Come back here and choose that first profile (or any "
+               "profile built for this exact printer and ink set).\n"
+               "    • The app now knows, roughly, which ink mix makes which "
+               "colour — so the look-based sets light up. Tick the ones you "
+               "care about: skin tones for portraits, blues and greens for "
+               "landscapes, pastels for soft photo tones, or From image to "
+               "match a specific picture.\n"
+               "    • The app places extra patches exactly in those colours, "
+               "plus wherever the first profile was weakest. Print, measure "
+               "and rebuild.\n"
+               "    • The second profile is sharpened where your eyes are "
+               "most critical — without wasting patches on colours you "
+               "rarely print.\n\n"
+               "Good to know:\n"
+               "  • The profile must match the device type you picked (same "
+               "inks, same number of channels). A mismatch is flagged right "
+               "here, before you build.\n"
+               "  • The look-based patches are best guesses from your first "
+               "profile about where each colour sits. The real measurement "
+               "is what defines the final profile, so a slightly-off guess "
+               "still gives a solid result.\n"
+               "  • Prefer a profile built on the same paper and settings "
+               "you'll profile with.")), 0, 4)
+        self._nch_prof_edit = QLineEdit(self._nch_prof_row)
+        self._nch_prof_edit.setReadOnly(True)
+        self._nch_prof_edit.setPlaceholderText(
+            tr("(none — look-based sets need one)"))
+        prow.addWidget(self._nch_prof_edit, 1, 0)
+        self._nch_prof_browse = QPushButton(self._nch_prof_row)
+        self._nch_prof_browse.setIcon(load_magenta_folder_icon())
+        self._nch_prof_browse.setToolTip(tr("Choose an ICC profile…"))
+        self._nch_prof_browse.setObjectName("compact_input")
+        self._nch_prof_browse.clicked.connect(self._browse_precond)
+        prow.addWidget(self._nch_prof_browse, 1, 1)
+        self._nch_prof_clear = QPushButton("×", self._nch_prof_row)
+        self._nch_prof_clear.setToolTip(tr("Clear the profile"))
+        self._nch_prof_clear.setObjectName("compact_input")
+        self._nch_prof_clear.setFixedWidth(28)
+        self._nch_prof_clear.clicked.connect(self._clear_precond)
+        prow.addWidget(self._nch_prof_clear, 1, 2)
+        self._nch_prof_status = QLabel("", self._nch_prof_row)
+        self._nch_prof_status.setWordWrap(True)
+        prow.addWidget(self._nch_prof_status, 2, 0, 1, 5)
+        prow.setColumnStretch(0, 1)
+        dvg.addWidget(self._nch_prof_row, 3, 0, 1, 3)
+
+        self._precond_path: str = ""
+        self._extra_inks: list[str] = []
+        self._device_type.currentIndexChanged.connect(self._refresh_nch_state)
+        lay.addWidget(dev_box)
+
         # --- Source ---------------------------------------------------------
         src_box = QGroupBox(tr("Patches"), self)
         sl = QVBoxLayout(src_box)
@@ -1202,6 +1383,10 @@ class _NewChartDialog(QDialog):
         # Height fits common laptop screens; width follows the fold state.
         self._init_fold_state(760)
 
+        # Initial device state (#72): default Print RGB hides the multi-ink
+        # rows; a restored state below may re-reveal them.
+        self._refresh_nch_state()
+
         # Prefer the chart's own creation recipe (reopened to tweak/recreate it);
         # otherwise restore the app-wide last-used state so creating another chart
         # doesn't start from scratch.
@@ -1218,6 +1403,196 @@ class _NewChartDialog(QDialog):
                    "sunrises", "flamingos", "neutral", "nearneutral", "edges",
                    "hs", "pastel", "image", "whiteblack", "fill", "unique",
                    "fill_unit_pages")
+
+    # Extra inks a CMYK device can add (#72) — ChromIQ ink codes (the
+    # ui.tiff_preview convention); labels follow targen's own colorant list
+    # and are translated at build time (literal tr() calls so the extractor
+    # sees them). Order = Argyll's canonical colorant order.
+    @staticmethod
+    def _extra_ink_labels() -> dict[str, str]:
+        return {
+            "o": tr("Orange"), "r": tr("Red"), "g": tr("Green"),
+            "b": tr("Blue"), "v": tr("Violet"), "w": tr("White"),
+            "lc": tr("Light cyan"), "lm": tr("Light magenta"),
+            "ly": tr("Light yellow"), "lk": tr("Light black"),
+            "mc": tr("Medium cyan"), "mm": tr("Medium magenta"),
+            "my": tr("Medium yellow"), "mk": tr("Medium black"),
+            "llk": tr("Light-light black"),
+        }
+
+    _INK_DFLAG: dict[str, int] = {
+        "c": 1, "m": 2, "y": 3, "k": 4, "o": 5, "r": 6, "g": 7, "b": 8,
+        "v": 9, "w": 10, "lc": 11, "lm": 12, "ly": 13, "lk": 14,
+        "mc": 15, "mm": 16, "my": 17, "mk": 18, "llk": 19,
+    }
+
+    # ---- Device / three-state model (#72) --------------------------------
+
+    def _nch_device_type(self) -> str:
+        """targen ``-d`` value for the chosen device type ("2" RGB, "4" CMYK…)."""
+        return "2" if (self._device_type.currentData() in (None, "rgb")) else "4"
+
+    def _nch_ink_codes(self) -> list[str]:
+        """The effective ink set as ChromIQ ink codes (RGB → r/g/b)."""
+        if self._nch_device_type() == "2":
+            return ["r", "g", "b"]
+        codes = ["c", "m", "y", "k"]
+        if self._device_type.currentData() == "cmykplus":
+            codes += [c for c in self._extra_inks if c not in codes]
+        return codes
+
+    def _nch_state(self) -> int:
+        """1 = RGB (everything as today), 2 = multi-ink without a usable
+        profile, 3 = multi-ink + channel-matching preconditioning profile."""
+        if self._nch_device_type() == "2":
+            return 1
+        return 3 if (self._precond_path
+                     and self._validate_precond(quiet=True)) else 2
+
+    def _on_add_ink(self, index: int) -> None:
+        code = self._nch_add_ink.itemData(index)
+        self._nch_add_ink.setCurrentIndex(0)
+        if not code or code in self._extra_inks:
+            return
+        self._extra_inks.append(code)
+        self._refresh_nch_state()
+
+    def _remove_ink(self, code: str) -> None:
+        if code in self._extra_inks:
+            self._extra_inks.remove(code)
+            self._refresh_nch_state()
+
+    def _rebuild_ink_chips(self) -> None:
+        while self._nch_chip_bar.count():
+            it = self._nch_chip_bar.takeAt(0)
+            if it.widget() is not None:
+                it.widget().deleteLater()
+        labels = self._extra_ink_labels()
+        for code in self._extra_inks:
+            chip = QPushButton(f"{labels.get(code, code)} ×",
+                               self._nch_inks_row)
+            chip.setObjectName("compact_input")
+            chip.setToolTip(tr("Remove this ink"))
+            chip.clicked.connect(lambda _=False, c=code: self._remove_ink(c))
+            self._nch_chip_bar.addWidget(chip)
+        try:
+            rep, _fields = R.color_rep_for_inks(self._nch_ink_codes())
+            self._nch_inkset_lbl.setText(
+                tr("→ ink set: {rep}").format(rep=rep)
+                if self._nch_device_type() != "2" else "")
+        except ValueError:
+            self._nch_inkset_lbl.setText("")
+
+    def _browse_precond(self) -> None:
+        from ui.widgets import icc_profile_paths
+        start = (self._settings.get("custom_output_path", "")
+                 if self._settings else "") or str(Path.home() / "ChromIQ")
+        path = open_file_dialog(
+            self, tr("Choose preconditioning profile"),
+            "ICC profiles (*.icc *.icm)", start_dir=start,
+            extra_paths=icc_profile_paths())
+        if not path:
+            return
+        self._precond_path = path
+        self._refresh_nch_state()
+
+    def _clear_precond(self) -> None:
+        self._precond_path = ""
+        self._refresh_nch_state()
+
+    @staticmethod
+    def _icc_channel_count(color_space: str) -> int | None:
+        """Channel count for an ICC colour-space signature ('CMYK', '6CLR'…)."""
+        cs = color_space.strip().upper()
+        fixed = {"GRAY": 1, "RGB": 3, "CMY": 3, "CMYK": 4, "LAB": 3, "XYZ": 3}
+        if cs in fixed:
+            return fixed[cs]
+        if cs.endswith("CLR") and len(cs) == 4:
+            try:
+                return int(cs[0], 16)
+            except ValueError:
+                return None
+        return None
+
+    def _validate_precond(self, quiet: bool = False) -> bool:
+        """Inline profile-matches-device check (#72): the profile's colour
+        space must carry exactly the chart's channel count. Updates the status
+        label unless *quiet*."""
+        if not self._precond_path:
+            if not quiet:
+                self._nch_prof_status.setText("")
+            return False
+        n_chart = len(self._nch_ink_codes())
+        try:
+            from workflow.icc_info import read_icc
+            info = read_icc(self._precond_path)
+        except Exception as exc:  # noqa: BLE001 — unreadable/foreign file
+            if not quiet:
+                self._nch_prof_status.setText(
+                    tr("✗ Not a readable ICC profile: {err}").format(err=exc))
+                self._nch_prof_status.setStyleSheet("color: #d9534f;")
+            return False
+        n_prof = self._icc_channel_count(info.color_space)
+        rep, _ = R.color_rep_for_inks(self._nch_ink_codes())
+        if n_prof != n_chart:
+            if not quiet:
+                self._nch_prof_status.setText(
+                    tr("✗ Profile is {cs} ({np} channels) — this chart uses "
+                       "{rep} ({nc} channels). Pick a profile made for this "
+                       "exact printer and ink set.").format(
+                        cs=info.color_space.strip(), np=n_prof or "?",
+                        rep=rep, nc=n_chart))
+                self._nch_prof_status.setStyleSheet("color: #d9534f;")
+            return False
+        if not quiet:
+            desc = info.description or Path(self._precond_path).name
+            self._nch_prof_status.setText(
+                tr("✓ {desc} — {cs}, {n} channels — matches").format(
+                    desc=desc, cs=info.color_space.strip(), n=n_chart))
+            self._nch_prof_status.setStyleSheet("color: #5cb85c;")
+        return True
+
+    def _refresh_nch_state(self) -> None:
+        """Show/hide the multi-ink rows and re-gate the source modes for the
+        current state (1 RGB / 2 no-profile / 3 profile) — #72."""
+        dt = self._device_type.currentData() or "rgb"
+        multi = dt != "rgb"
+        self._nch_inks_row.setVisible(dt == "cmykplus")
+        self._nch_limit_row.setVisible(multi)
+        self._nch_prof_row.setVisible(multi)
+        self._rebuild_ink_chips()
+        self._nch_prof_edit.setText(self._precond_path)
+        if multi:
+            self._validate_precond()
+        self._apply_gen_state_gating(self._nch_state())
+        self._update_gen_counts()
+        self._do_push_live_preview()
+
+    def _apply_gen_state_gating(self, state: int) -> None:
+        """Gate the source modes + generator panel for the three-state model.
+
+        State 1 (RGB): everything enabled, exactly as before #72. States 2/3:
+        hex/RGB pasting is meaningless and the colour-set generators are RGB
+        constructs until the N-native/perceptual engines unlock them (Tier C
+        re-gates per row); targen seeding covers multi-ink coverage today. The
+        3D cube preview is an RGB-cube projection — hidden for multi-ink.
+        """
+        rgb = state == 1
+        self._mode_paste.setEnabled(rgb)
+        self._mode_generate.setEnabled(rgb)
+        if not rgb and (self._mode_paste.isChecked()
+                        or self._mode_generate.isChecked()):
+            self._mode_seed.setChecked(True)
+        # The fold button lives next to the cube; hide both for multi-ink.
+        # Only act on a real transition so state-1 refreshes don't resize
+        # the window through _on_fold_toggled.
+        if getattr(self, "_cube_panel", None) is not None:
+            if rgb and not self._fold_btn.isVisible():
+                self._fold_btn.setVisible(True)
+                self._on_fold_toggled(self._cube_shown)
+            elif not rgb and self._fold_btn.isVisible():
+                self._cube_panel.setVisible(False)
+                self._fold_btn.setVisible(False)
     _GEN_SPINS = ("cube_n", "corners_edge", "spirals_end", "spirals_reach",
                   "skin_n", "skin_ranges", "blues_n", "blues_layers",
                   "greens_n", "greens_layers", "sunrises_n", "sunrises_layers",
@@ -1373,8 +1748,21 @@ class _NewChartDialog(QDialog):
     def _collect_gen_state(self) -> dict:
         mode = ("generate" if self._mode_generate.isChecked() else
                 "paste" if self._mode_paste.isChecked() else "seed")
+        # Multi-ink device settings (#72) ride along ONLY when a non-RGB
+        # device type is chosen — the RGB state dict stays byte-identical to
+        # pre-#72 (state-1 identity: old versions + old presets keep
+        # round-tripping; see tests/test_gen_state1_identity.py).
+        device = {}
+        if self._nch_device_type() != "2":
+            device = {"device": {
+                "type": self._device_type.currentData(),
+                "extra_inks": list(self._extra_inks),
+                "ink_limit": int(self._ink_limit.value()),
+                "precond": self._precond_path,
+            }}
         return {
             "mode": mode,
+            **device,
             **self._collect_gen_sets(),
             "instr": self._instr.currentData(),
             "paper": self._paper.currentData(),
@@ -1452,13 +1840,31 @@ class _NewChartDialog(QDialog):
         if "bit16" in lo:
             (self._bd_16 if lo["bit16"] else self._bd_8).setChecked(True)
 
+        # Multi-ink device settings (#72): absent key = RGB, matching every
+        # pre-#72 saved state/preset (get()-with-default, R1 rule).
+        dev = st.get("device") or {}
+        dt = dev.get("type", "rgb")
+        ix = self._device_type.findData(dt)
+        self._device_type.setCurrentIndex(ix if ix >= 0 else 0)
+        self._extra_inks = [c for c in dev.get("extra_inks", [])
+                            if c in self._INK_DFLAG]
+        try:
+            self._ink_limit.setValue(int(dev.get("ink_limit", 300)))
+        except (TypeError, ValueError):
+            pass
+        self._precond_path = str(dev.get("precond", "") or "")
+        self._refresh_nch_state()
+
         self._apply_gen_sets(st)
         # "blank" (the removed Blank-canvas mode) is deliberately absent: a
         # saved state or preset that carries it keeps the current selection.
         radio = {"generate": self._mode_generate, "paste": self._mode_paste,
                  "seed": self._mode_seed}.get(
                      st.get("mode"))
-        if radio is not None:
+        if radio is not None and radio.isEnabled():
+            # A disabled radio means the current device state gates that mode
+            # (#72: paste/generate are RGB-only until Tier C) — keep the
+            # gating's choice instead of re-checking it programmatically.
             radio.setChecked(True)
         self._refresh_source_widgets()
 
@@ -2800,7 +3206,13 @@ class _NewChartDialog(QDialog):
         paper_code = self._paper.currentData() or self._paper.currentText()
         if paper_code == "custom":
             paper_code = f"{self._paper_w.value()}x{self._paper_h.value()}"
-        spec = R.ChartSpec.new(self._instr.currentData(), paper_code)
+        dt = self._nch_device_type()
+        extras = (tuple(self._extra_inks)
+                  if self._device_type.currentData() == "cmykplus" else ())
+        spec = R.ChartSpec.new(self._instr.currentData(), paper_code,
+                               device_type=dt, extra_inks=extras)
+        if dt != "2":
+            spec.ink_limit = float(self._ink_limit.value())
         # ChartSpec.new only knows the named-paper inverse map; patch
         # paper_mm explicitly for custom sizes so the editor knows the
         # canvas dimensions for downstream code (preview scaling etc.).
@@ -2809,8 +3221,17 @@ class _NewChartDialog(QDialog):
                               float(self._paper_h.value()))
         program: list[tuple] = []
         if self._mode_seed.isChecked():
+            # Multi-ink seeding rides targen natively (#72): -D per extra ink,
+            # -l ink limit, -c preconditioning profile (state 3 — also
+            # improves the OFPS distribution).
+            extra_args = [f"-D{self._INK_DFLAG[c]}" for c in extras]
+            if dt != "2":
+                extra_args.append(f"-l{int(self._ink_limit.value())}")
+                if self._precond_path and self._validate_precond(quiet=True):
+                    extra_args += ["-c", self._precond_path]
             try:
-                program = R.seed_from_targen(self._bin_dir, self._count.value())
+                program = R.seed_from_targen(self._bin_dir, self._count.value(),
+                                             device=dt, extra_args=extra_args)
             except Exception as exc:
                 QMessageBox.warning(self, tr("targen failed"), str(exc))
                 return

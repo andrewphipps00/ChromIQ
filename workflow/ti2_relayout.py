@@ -115,6 +115,10 @@ class ChartSpec:
     # restores the original spacer palette on load so the preview matches the
     # source chart instead of resetting to printtarg's defaults.
     density_extremes: tuple[tuple[float, float, float], ...] | None = None
+    # TOTAL_INK_LIMIT (percent) for multi-ink charts (#72): read back from the
+    # .ti2 on load, stamped into re-saved .ti1s, threaded to targen -l /
+    # colprof -l. None = no limit recorded (all RGB charts).
+    ink_limit: float | None = None
 
     @property
     def n_channels(self) -> int:
@@ -186,12 +190,19 @@ class ChartSpec:
         if any(p.loc for p in patches):
             patches.sort(key=_loc_sort_key)
 
+        limit_s = _kw("TOTAL_INK_LIMIT")
+        try:
+            ink_limit = float(limit_s) if limit_s else None
+        except ValueError:
+            ink_limit = None
+
         return cls(
             patches=patches, dev_fields=dev_fields, has_xyz=has_xyz,
             color_rep=color_rep, white_point=white_point,
             instrument_flag=instrument_to_flag(instrument),
             paper_flag=paper_to_flag(*paper_mm), paper_mm=paper_mm,
             density_extremes=_read_sibling_density_extremes(Path(path)),
+            ink_limit=ink_limit,
         )
 
     # -- from scratch ------------------------------------------------------
@@ -857,7 +868,7 @@ def write_ti1(
         rows = [(tuple(dev), xyz_by_dev.get(tuple(dev))) for dev in dev_values]
         return write_ti1_nchannel(
             spec.color_rep, list(spec.dev_fields), rows, Path(out_path),
-            ink_limit=ink_limit,
+            ink_limit=ink_limit if ink_limit is not None else spec.ink_limit,
         )
     from workflow.i1profiler_import import RgbPatch, write_ti1 as _write_ti1
 

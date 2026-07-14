@@ -105,6 +105,24 @@ def test_nchannel_writer_stamps_ink_limit(tmp_path):
     assert 'TOTAL_INK_LIMIT "300.0"' in out.read_text(encoding="utf-8")
 
 
+def test_ink_limit_rides_ti1_to_ti2_to_spec(tmp_path):
+    # The full #72 chain: .ti1 TOTAL_INK_LIMIT → engine .ti2 → ChartSpec →
+    # re-saved .ti1 (exactly what printtarg does on its own path).
+    ti1 = R.write_ti1_nchannel("CMYK", CMYK_FIELDS, CMYK_ROWS,
+                               tmp_path / "c.ti1", ink_limit=280.0)
+    assert ti1_reader.read_ti1(ti1).ink_limit == 280.0
+    res = eng_chart.build_ti2_from_ti1(ti1, tmp_path / "c.ti2",
+                                       seed=1, randomize=False)
+    assert 'TOTAL_INK_LIMIT "280.0"' in res.ti2_path.read_text(encoding="utf-8")
+    spec = R.ChartSpec.from_ti2(res.ti2_path)
+    assert spec.ink_limit == 280.0
+    resave = R.write_ti1(spec, [p.dev for p in spec.patches],
+                         tmp_path / "resave.ti1")
+    assert 'TOTAL_INK_LIMIT "280.0"' in resave.read_text(encoding="utf-8")
+    # RGB charts record no limit.
+    assert R.ChartSpec.new("i1", "A4").ink_limit is None
+
+
 def test_nchannel_writer_rejects_bad_shape(tmp_path):
     with pytest.raises(ValueError, match="length mismatch"):
         R.write_ti1_nchannel(

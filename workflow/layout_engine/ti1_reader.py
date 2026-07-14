@@ -37,6 +37,9 @@ class ColorTarget:
     device_fields: list[str]            # e.g. ["CMYK_C","CMYK_M","CMYK_Y","CMYK_K"]
     patches: list[tuple[tuple[float, ...], tuple[float, float, float]]]
     # each patch = (device values, (X, Y, Z)); XYZ is (0,0,0) if absent
+    # targen's TOTAL_INK_LIMIT (percent), carried .ti1 → .ti2 → .ti3 so the
+    # profile build can read the chart's ink limit from the measurement (#72).
+    ink_limit: float | None = None
 
     @property
     def n_channels(self) -> int:
@@ -60,6 +63,9 @@ def read_ti1(path: str | Path) -> ColorTarget:
 
     m = re.search(r'^COLOR_REP\s+"([^"]+)"', text, re.MULTILINE)
     color_rep = m.group(1) if m else "iRGB"
+
+    m = re.search(r'^TOTAL_INK_LIMIT\s+"([\d.]+)"', text, re.MULTILINE)
+    ink_limit = float(m.group(1)) if m else None
 
     fmt_m = re.search(r"BEGIN_DATA_FORMAT\s*\n(.*?)\nEND_DATA_FORMAT", text, re.DOTALL)
     if not fmt_m:
@@ -89,4 +95,5 @@ def read_ti1(path: str | Path) -> ColorTarget:
 
     if not patches:
         raise ValueError("no data rows in .ti1")
-    return ColorTarget(color_rep=color_rep, device_fields=device_fields, patches=patches)
+    return ColorTarget(color_rep=color_rep, device_fields=device_fields,
+                       patches=patches, ink_limit=ink_limit)

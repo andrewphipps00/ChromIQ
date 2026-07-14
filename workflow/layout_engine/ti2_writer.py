@@ -43,6 +43,7 @@ def build_ti2_text(
     media: Patch | None = None,
     white_point: tuple[float, float, float] = DEFAULT_WHITE_POINT,
     created: str | None = None,
+    ink_limit: float | None = None,
 ) -> str:
     """Return the full ``.ti2`` text.
 
@@ -79,6 +80,10 @@ def build_ti2_text(
     add(f'TARGET_INSTRUMENT "{geom.target_name}"')
     add('APPROX_WHITE_POINT "%s"' % " ".join(f"{c:.6f}" for c in white_point))
     add(f'COLOR_REP "{color_rep}"')
+    if ink_limit is not None:
+        # Carried from the .ti1 exactly as printtarg does, so the limit rides
+        # the .ti2 → .ti3 chain and the profile build can prefill it (#72).
+        add(f'TOTAL_INK_LIMIT "{ink_limit:.1f}"')
     add(f'PAPER_SIZE "{paper_w_mm:.1f}x{paper_h_mm:.1f}"')
     add(f'{seed_kw[0]} "{seed_kw[1]}"')
     for kw, val in geom.extra_keywords:
