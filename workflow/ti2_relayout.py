@@ -29,6 +29,7 @@ import subprocess
 import tempfile
 from collections import deque
 from dataclasses import asdict, dataclass, field, fields
+from datetime import datetime
 from pathlib import Path
 
 import numpy as np
@@ -195,20 +196,53 @@ class ChartSpec:
 
     # -- from scratch ------------------------------------------------------
     @classmethod
-    def new(cls, instrument_flag: str = "i1", paper_flag: str = "A4") -> "ChartSpec":
-        """An empty RGB chart spec for building a layout from scratch.
+    def new(
+        cls,
+        instrument_flag: str = "i1",
+        paper_flag: str = "A4",
+        *,
+        device_type: str = "2",
+        extra_inks: tuple[str, ...] | list[str] = (),
+    ) -> "ChartSpec":
+        """An empty chart spec for building a layout from scratch.
 
         Same downstream path as a parsed chart — the caller supplies the patch
         list via :func:`default_program`-style edits (add patches, set colours),
-        then :func:`regenerate`. instrument/paper are chosen by the user rather
-        than read from a source file.
+        then regenerates. instrument/paper are chosen by the user rather than
+        read from a source file.
+
+        ``device_type`` is the targen ``-d`` value as a string (the Manual
+        tab's ``ChartParams.device_type`` convention); ``extra_inks`` are
+        additional ink codes (targen ``-D``, e.g. ``("o", "g")``) using the
+        same codes as :func:`ui.tiff_preview.resolve_ink_channels`. The
+        default ``"2"`` (Print RGB) — and its Video-RGB twin ``"3"`` — build
+        the exact spec this method always built; anything else derives the
+        canonical Argyll ``COLOR_REP``/device fields via
+        :func:`color_rep_for_inks` (#72).
         """
-        from workflow.i1profiler_import import WHITE_XYZ
         inv = {v: k for k, v in _NAMED_PAPERS.items()}
+        dt = str(device_type)
+        if dt in ("2", "3") and not extra_inks:
+            from workflow.i1profiler_import import WHITE_XYZ
+            dev_fields, color_rep = ["RGB_R", "RGB_G", "RGB_B"], "iRGB"
+            white_point = " ".join(f"{v:.6f}" for v in WHITE_XYZ)
+        elif dt in ("0", "1") and not extra_inks:
+            # targen -d0 (print grey) -> COLOR_REP "K" / GRAY_K;
+            # -d1 (video grey) -> "W" / GRAY_W (verified, ArgyllCMS 3.5.0).
+            color_rep = "K" if dt == "0" else "W"
+            dev_fields = ["GRAY_K" if dt == "0" else "GRAY_W"]
+            wx, wy, wz = _WHITE_XYZ_D50
+            white_point = f"{wx:.6f} {wy:.6f} {wz:.6f}"
+        else:
+            from ui.tiff_preview import resolve_ink_channels
+            codes = list(resolve_ink_channels(dt))
+            codes += [c for c in extra_inks if c not in codes]
+            color_rep, dev_fields = color_rep_for_inks(codes)
+            wx, wy, wz = _WHITE_XYZ_D50
+            white_point = f"{wx:.6f} {wy:.6f} {wz:.6f}"
         return cls(
-            patches=[], dev_fields=["RGB_R", "RGB_G", "RGB_B"], has_xyz=True,
-            color_rep="iRGB",
-            white_point=" ".join(f"{v:.6f}" for v in WHITE_XYZ),
+            patches=[], dev_fields=dev_fields, has_xyz=True,
+            color_rep=color_rep, white_point=white_point,
             instrument_flag=instrument_flag, paper_flag=paper_flag,
             paper_mm=inv.get(paper_flag, (210.0, 297.0)),
         )
@@ -582,6 +616,12 @@ def load_colour_file(path: Path) -> list[tuple[float, float, float]]:
         prog = load_rgb_program(path)
         if prog:
             return prog
+    except ValueError:
+        # A .ti2 is never a plain hex/RGB list, so falling through would only
+        # bury the informative error (e.g. "chart is CMYK, not RGB" — #72 R6)
+        # under a generic "no usable colour values found".
+        if path.suffix.lower() == ".ti2":
+            raise
     except Exception:  # noqa: BLE001 — fall through to the plain value list
         pass
     text = path.read_text(errors="ignore")
@@ -604,12 +644,17 @@ def seed_from_targen(
     grey_steps: int = 0,
     good_mode: bool = True,
     extra_args: list[str] | None = None,
-) -> list[tuple[float, float, float]]:
-    """Generate an optimised RGB patch set via targen, returned as a program.
+) -> list[tuple[float, ...]]:
+    """Generate an optimised patch set via targen, returned as a program.
 
     The "seed from targen" path for new-from-scratch mode: targen spreads
     patches well across the gamut (OFPS), giving a good base the user can then
     drag-arrange and recolour. Blank-canvas mode just skips this (empty program).
+
+    Channel-generic since #72: ``device`` is any targen ``-d`` value (plus
+    ``-D`` colorants via ``extra_args``) and the returned tuples carry however
+    many channels targen emitted — 3-tuples for the RGB default, N-tuples for
+    multi-ink device types.
     """
     targen = Path(bin_dir) / "targen"
     args = [f"-d{device}", f"-f{n_patches}"]
@@ -625,35 +670,152 @@ def seed_from_targen(
                            stdin=subprocess.DEVNULL)
         if r.returncode != 0:
             raise RuntimeError(f"targen failed ({r.returncode}): {r.stderr.strip()}")
-        return _first_table_rgb(work / "seed.ti1")
+        from workflow.layout_engine.ti1_reader import read_ti1 as _read_ti1
+        return [dev for dev, _xyz in _read_ti1(work / "seed.ti1").patches]
 
 
-def _first_table_rgb(ti1_path: Path) -> list[tuple[float, float, float]]:
-    """Parse RGB device values from a CTI1 file's **first** table only.
+# Canonical Argyll colorant order and COLOR_REP letters (#72 hard problem 10).
+# Order = the inkmask bit order in Argyll xicc/xcolorants.h (ICX_CYAN 0x1 …
+# ICX_LIGHT_LIGHT_BLACK 0x1000000); letters = the ICX_C_* strings. Both were
+# additionally verified against real `targen -d…/-D…` runs (ArgyllCMS 3.5.0):
+# targen canonicalises user-supplied -D order into this bit order, so deriving
+# COLOR_REP this way matches what every downstream Argyll tool expects.
+# Ink codes follow ui.tiff_preview's convention (resolve_ink_channels).
+_INK_BIT_ORDER: tuple[str, ...] = (
+    "c", "m", "y", "k", "o", "r", "g", "b", "v", "w",
+    "lc", "lm", "ly", "lk", "mc", "mm", "my", "mk", "llk",
+)
+_INK_REP_LETTER: dict[str, str] = {
+    "c": "C", "m": "M", "y": "Y", "k": "K", "o": "O", "r": "R", "g": "G",
+    "b": "B", "v": "V", "w": "W",
+    "lc": "c", "lm": "m", "ly": "y", "lk": "k",
+    "mc": "2c", "mm": "2m", "my": "2y", "mk": "2k",
+    "llk": "1k",
+}
 
-    A targen .ti1 holds three tables (patch list + density extremes + device
-    combinations); we want only the patch list, so we stop at the first
-    ``END_DATA`` rather than concatenating all three.
+
+def color_rep_for_inks(ink_codes: list[str] | tuple[str, ...]) -> tuple[str, list[str]]:
+    """Derive the canonical ``(COLOR_REP, dev_fields)`` for a set of ink codes.
+
+    ``ink_codes`` uses ChromIQ's ink-code convention (``"c" "m" "y" "k" "o"
+    "lc" …``, see ``ui.tiff_preview``); order and duplicates are irrelevant —
+    the result is always in Argyll's canonical colorant order, exactly as a
+    ``targen -d…/-D…`` run would stamp it (e.g. ``("g", "o", "c", "m", "y",
+    "k")`` → ``("CMYKOG", ["CMYKOG_C", …, "CMYKOG_G"])``).
     """
-    text = Path(ti1_path).read_text(encoding="utf-8", errors="ignore")
-    fm = re.search(r"BEGIN_DATA_FORMAT(.*?)END_DATA_FORMAT", text, re.DOTALL)
-    if not fm:
-        raise ValueError(f"{ti1_path}: no data format block")
-    fields = fm.group(1).split()
-    idx = {f: i for i, f in enumerate(fields)}
-    try:
-        ri, gi, bi = idx["RGB_R"], idx["RGB_G"], idx["RGB_B"]
-    except KeyError as exc:
-        raise ValueError(f"{ti1_path}: no RGB columns") from exc
-    dm = re.search(r"BEGIN_DATA(?!_FORMAT)(.*?)END_DATA", text, re.DOTALL)
-    if not dm:
-        raise ValueError(f"{ti1_path}: no data block")
-    out: list[tuple[float, float, float]] = []
-    for line in dm.group(1).splitlines():
-        toks = _split_cgats(line)
-        if len(toks) > max(ri, gi, bi):
-            out.append((float(toks[ri]), float(toks[gi]), float(toks[bi])))
-    return out
+    wanted = set(ink_codes)
+    unknown = wanted - set(_INK_BIT_ORDER)
+    if unknown:
+        raise ValueError(
+            f"unknown ink code(s) {sorted(unknown)!r}; expected codes from "
+            f"{list(_INK_BIT_ORDER)!r}"
+        )
+    letters = [_INK_REP_LETTER[c] for c in _INK_BIT_ORDER if c in wanted]
+    bident = "".join(letters)
+    return bident, [f"{bident}_{letter}" for letter in letters]
+
+
+# Bradford-adapted sRGB -> XYZ(D50) matrix (#72 appendix C). Used only for the
+# naive-XYZ fallback of hand-added N-channel patches: measured against profile
+# truth it gives median |dY| 1.35 with lightness rank-order 0.974 — plausible
+# with margin for its two consumers (spacer-colour choice, chartread strip-ID).
+_SRGB_TO_XYZ_D50 = (
+    (0.4360747, 0.3850649, 0.1430804),
+    (0.2225045, 0.7168786, 0.0606169),
+    (0.0139322, 0.0971045, 0.7141733),
+)
+# targen's D50 white point as stamped in its own multi-ink .ti1 headers.
+_WHITE_XYZ_D50 = (96.42, 100.0, 82.49)
+# Same 1% viewing-flare-toward-white targen applies (see i1profiler_import's
+# _TARGEN_FLARE): keeps solid black off exact (0,0,0), which chartread's
+# strip-ID logic and the engine's media-patch pick both dislike (#72 HP 12).
+_NCH_FLARE = 0.01
+
+
+def _naive_xyz_nchannel(
+    dev: tuple[float, ...], color_rep: str
+) -> tuple[float, float, float]:
+    """Approximate XYZ(D50) for an N-channel device tuple (#72 appendix C).
+
+    Display-RGB approximation of the ink values -> sRGB linearisation -> D50
+    matrix, scaled to Y=100, with a 1% flare toward white. Only ever used for
+    patches with no better source: targen patches carry targen's own model and
+    profile-inverted patches get exact ``xicclu -ff`` values.
+    """
+    from workflow.layout_engine.colorants import to_display_rgb
+
+    rgb = to_display_rgb(dev, color_rep)
+
+    def lin(c8: int) -> float:
+        c = c8 / 255.0
+        return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
+
+    r, g, b = lin(rgb[0]), lin(rgb[1]), lin(rgb[2])
+    x, y, z = (100.0 * (m[0] * r + m[1] * g + m[2] * b) for m in _SRGB_TO_XYZ_D50)
+    wx, wy, wz = _WHITE_XYZ_D50
+    f = _NCH_FLARE
+    return (x + f * (wx - x), y + f * (wy - y), z + f * (wz - z))
+
+
+def write_ti1_nchannel(
+    color_rep: str,
+    dev_fields: list[str],
+    rows: list[tuple[tuple[float, ...], tuple[float, float, float] | None]],
+    out_path: Path,
+    *,
+    ink_limit: float | None = None,
+) -> Path:
+    """Write a **single-table** N-channel ``.ti1`` for the layout engine (#72).
+
+    ``rows`` are ``(device_tuple, xyz_or_None)`` pairs on the TI1 0..100 scale;
+    a ``None`` XYZ gets the naive D50 estimate (:func:`_naive_xyz_nchannel`).
+    ``ink_limit`` (percent) is stamped as ``TOTAL_INK_LIMIT``, the keyword
+    targen writes and colprof reads back from the measurement chain.
+
+    This is the engine-format sidecar: :mod:`workflow.layout_engine.ti1_reader`
+    reads only the first table, so one table is all the engine path needs.
+    printtarg would reject this file ("doesn't contain two or three tables") —
+    N-channel relayout is engine-only by design (#72 decision 0); the
+    printtarg path keeps the 3-table RGB emitter untouched.
+    """
+    if not rows:
+        raise ValueError("write_ti1_nchannel: no patches to write")
+    n = len(dev_fields)
+    if any(len(dev) != n for dev, _ in rows):
+        raise ValueError(
+            f"write_ti1_nchannel: device tuple length mismatch "
+            f"(expected {n} channels for {color_rep!r})"
+        )
+    wx, wy, wz = _WHITE_XYZ_D50
+    fmt = "{:.4f}".format
+    lines = [
+        "CTI1   ",
+        "",
+        'DESCRIPTOR "Argyll Calibration Target chart information 1"',
+        'ORIGINATOR "ChromIQ"',
+        f'APPROX_WHITE_POINT "{wx:.6f} {wy:.6f} {wz:.6f}"',
+        f'COLOR_REP "{color_rep}"',
+        *([f'TOTAL_INK_LIMIT "{ink_limit:.1f}"'] if ink_limit is not None else []),
+        f'CREATED "{datetime.now().strftime("%a %b %d %H:%M:%S %Y")}"',
+        "",
+        f"NUMBER_OF_FIELDS {1 + n + 3}",
+        "BEGIN_DATA_FORMAT",
+        f"SAMPLE_ID {' '.join(dev_fields)} XYZ_X XYZ_Y XYZ_Z",
+        "END_DATA_FORMAT",
+        "",
+        f"NUMBER_OF_SETS {len(rows)}",
+        "BEGIN_DATA",
+    ]
+    for i, (dev, xyz) in enumerate(rows, start=1):
+        if xyz is None:
+            xyz = _naive_xyz_nchannel(dev, color_rep)
+        lines.append(
+            f"{i} {' '.join(fmt(v) for v in dev)} {' '.join(fmt(v) for v in xyz)}"
+        )
+    lines.append("END_DATA")
+    out_path = Path(out_path)
+    out_path.write_text("\n".join([*lines, ""]), encoding="utf-8")
+    return out_path
 
 
 def write_ti1(
@@ -662,31 +824,40 @@ def write_ti1(
     out_path: Path,
     *,
     spacer_palette: tuple[tuple[float, float, float], ...] | None = None,
+    ink_limit: float | None = None,
 ) -> Path:
-    """Write a printtarg-ready ``.ti1`` whose patches are exactly ``dev_values``.
+    """Write a ``.ti1`` whose patches are exactly ``dev_values``.
 
-    ``dev_values`` is the final ordered list of device tuples (0..100 RGB) — the
+    ``dev_values`` is the final ordered list of device tuples (0..100) — the
     edited chart program. Reordering, recolouring a patch (a changed entry), and
-    add/remove are all just transforms of this list; printtarg places each value
-    *and* writes it into the .ti2, so a recoloured patch's pixel and its .ti2
-    device value stay coupled by construction.
+    add/remove are all just transforms of this list; the renderer places each
+    value *and* writes it into the .ti2, so a recoloured patch's pixel and its
+    .ti2 device value stay coupled by construction.
 
-    printtarg rejects a single-table file ("doesn't contain two or three
-    tables") — it needs the patch list **plus** the density-extremes table
-    (which doubles as the spacer-colour palette; see printtarg.c ~L3576) and
-    the device-combinations table. We delegate to the battle-tested 3-table
-    emitter in :mod:`workflow.i1profiler_import`. RGB only for now (matching
-    that emitter and ChromIQ's RGB workflow); CMYK relayout is out of scope.
+    **RGB** charts delegate to the battle-tested 3-table emitter in
+    :mod:`workflow.i1profiler_import` (byte-identical to before #72 — printtarg
+    needs the patch list **plus** the density-extremes table, which doubles as
+    the spacer-colour palette; see printtarg.c ~L3576, plus the
+    device-combinations table). ``spacer_palette`` (0..100 RGB triples) is
+    forwarded as that density-extremes table so printtarg renders spacers in
+    those colours natively.
 
-    ``spacer_palette`` (0..100 RGB triples) is forwarded as the density-extremes
-    table so printtarg renders spacers in those colours natively — the "native
-    palette" half of the spacer feature. Keep entry 0 white and the last black.
+    **Non-RGB** charts get the single-table engine-format file from
+    :func:`write_ti1_nchannel` — N-channel is engine-only (#72 decision 0), and
+    the engine takes its spacer palette natively via ``build_chart`` kwargs, so
+    ``spacer_palette`` is ignored here. Each patch keeps the XYZ recorded in
+    ``spec`` when its device tuple is unchanged; recoloured/new patches fall
+    back to the naive D50 estimate.
     """
     rep = spec.color_rep.lstrip("i").upper()
     if rep != "RGB":
-        raise NotImplementedError(
-            f"TI2 relayout currently supports RGB charts only (got COLOR_REP "
-            f"{spec.color_rep!r})."
+        xyz_by_dev: dict[tuple[float, ...], tuple[float, float, float]] = {
+            tuple(p.dev): p.xyz for p in spec.patches if p.xyz is not None
+        }
+        rows = [(tuple(dev), xyz_by_dev.get(tuple(dev))) for dev in dev_values]
+        return write_ti1_nchannel(
+            spec.color_rep, list(spec.dev_fields), rows, Path(out_path),
+            ink_limit=ink_limit,
         )
     from workflow.i1profiler_import import RgbPatch, write_ti1 as _write_ti1
 
@@ -740,6 +911,16 @@ def regenerate(
     .ti2's TARGET_INSTRUMENT back to ColorMunki post-render (mirroring
     workflow/chart_creator.py's triple-density behaviour).
     """
+    # N-channel charts are engine-only (#72 decision 0): write_ti1 would emit
+    # the single-table engine format here, which printtarg rejects with an
+    # unhelpful "doesn't contain two or three tables". Fail loudly instead —
+    # the dialog routes non-RGB charts to the engine before ever calling this.
+    if spec.color_rep.lstrip("i").upper() != "RGB":
+        raise RuntimeError(
+            f"printtarg relayout supports RGB charts only (got COLOR_REP "
+            f"{spec.color_rep!r}); multi-ink charts re-render through the "
+            "ChromIQ layout engine."
+        )
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     bw_dir = out_dir / "_spacer_twin"
@@ -851,50 +1032,71 @@ _RANDOM_START_RE = re.compile(r"\bRANDOM_START\b")
 
 
 def _read_ti2_strips(ti2_path: Path) -> list["np.ndarray"]:
-    """Group a .ti2's patches into per-strip RGB sequences (by SAMPLE_LOC).
+    """Group a .ti2's patches into per-strip device-value sequences (by SAMPLE_LOC).
 
-    Returns one ``[n_patches, 3]`` float array per strip, patches ordered by the
-    numeric part of their SAMPLE_LOC (e.g. A1, A2, …). Strips are returned in
-    first-seen order. Empty list if the file can't be parsed.
+    Returns one ``[n_patches, n_channels]`` float array per strip, patches
+    ordered by the numeric part of their SAMPLE_LOC (e.g. A1, A2, …). Strips
+    are returned in first-seen order. Channel-generic since #72: the device
+    columns are identified from ``COLOR_REP`` exactly like
+    :meth:`ChartSpec.from_ti2` does, so CMYK/N charts are analysed for real
+    instead of silently skipping (the old RGB-only parse returned ``[]`` for
+    them — a silent bypass of the confusability gate).
+
+    Raises ``ValueError`` when the file cannot be parsed (unreadable, no
+    format/data block, no SAMPLE_LOC, no device columns) — callers must treat
+    that as "cannot analyse", never as "safe".
     """
     try:
         text = ti2_path.read_text(encoding="utf-8", errors="ignore")
-    except OSError:
-        return []
+    except OSError as exc:
+        raise ValueError(f"{ti2_path.name}: unreadable ({exc})") from exc
     lines = text.splitlines()
     try:
         fmt_i = next(i for i, l in enumerate(lines) if l.strip() == "BEGIN_DATA_FORMAT")
         fields = lines[fmt_i + 1].split()
         loc_ix = fields.index("SAMPLE_LOC")
-        r_ix, g_ix, b_ix = (fields.index(f) for f in ("RGB_R", "RGB_G", "RGB_B"))
         data_i = next(i for i, l in enumerate(lines) if l.strip() == "BEGIN_DATA")
-    except (StopIteration, ValueError):
-        return []
+    except (StopIteration, ValueError) as exc:
+        raise ValueError(
+            f"{ti2_path.name}: no parsable DATA_FORMAT/DATA/SAMPLE_LOC"
+        ) from exc
 
-    strips: dict[str, list[tuple[int, tuple[float, float, float]]]] = {}
+    # Device columns, COLOR_REP-first with the same fallback as from_ti2.
+    m_rep = re.search(r'^\s*COLOR_REP\s+"?([^"\n]*)"?\s*$', text, re.MULTILINE)
+    rep = (m_rep.group(1).strip() if m_rep else "iRGB").lstrip("i")
+    dev_ix = [i for i, f in enumerate(fields) if f.startswith(rep + "_")]
+    if not dev_ix:
+        dev_ix = [i for i, f in enumerate(fields)
+                  if "_" in f and not f.startswith(("XYZ", "LAB", "SPEC"))
+                  and f not in ("SAMPLE_ID", "SAMPLE_LOC", "SAMPLE_NAME")]
+    if not dev_ix:
+        raise ValueError(f"{ti2_path.name}: no device columns for COLOR_REP {rep!r}")
+
+    strips: dict[str, list[tuple[int, tuple[float, ...]]]] = {}
     order: list[str] = []
+    max_ix = max(loc_ix, *dev_ix)
     for l in lines[data_i + 1:]:
         if l.strip() == "END_DATA":
             break
         p = l.split()
-        if len(p) <= max(loc_ix, r_ix, g_ix, b_ix):
+        if len(p) <= max_ix:
             continue
         m = _LOC_RE.match(p[loc_ix].strip('"'))
         if not m:
             continue
         letter, num = m.group(1), int(m.group(2))
         try:
-            rgb = (float(p[r_ix]), float(p[g_ix]), float(p[b_ix]))
+            dev = tuple(float(p[i]) for i in dev_ix)
         except ValueError:
             continue
         if letter not in strips:
             strips[letter] = []
             order.append(letter)
-        strips[letter].append((num, rgb))
+        strips[letter].append((num, dev))
 
     out: list[np.ndarray] = []
     for letter in order:
-        seq = [rgb for _, rgb in sorted(strips[letter])]
+        seq = [dev for _, dev in sorted(strips[letter])]
         out.append(np.asarray(seq, dtype=float))
     return out
 
@@ -914,8 +1116,21 @@ def analyze_randomisation(ti2_path: Path) -> RandomisationReport:
     decidable) and every pair of strips to differ from each other in both
     orientations (the right strip is decidable), each by a calibrated margin.
     A chart with fewer than two multi-patch strips is trivially safe.
+
+    A chart that cannot be *parsed* is reported **unsafe** ("cannot analyse"),
+    never trivially safe — the pre-#72 RGB-only parse returned no strips for a
+    CMYK chart and thereby waved every N-channel chart through the gate
+    unchecked. The distance metric is Euclidean over all device channels
+    (absolute device-%, #72 appendix E), so N-channel strips are analysed with
+    the same calibrated thresholds as RGB.
     """
-    strips = _read_ti2_strips(ti2_path)
+    try:
+        strips = _read_ti2_strips(ti2_path)
+    except ValueError as exc:
+        return RandomisationReport(
+            False, 0, float("nan"), float("nan"),
+            f"The chart layout could not be analysed ({exc}) — leaving it "
+            "untagged, so it will be measured one direction only.")
     multi = [s for s in strips if len(s) >= 2]
     n = len(strips)
 
