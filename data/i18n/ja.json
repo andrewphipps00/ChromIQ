@@ -2695,6 +2695,7 @@
   "{n} patches  ·  {src}": "{n} パッチ  ·  {src}",
   "{n} patches selected.": "{n}個のパッチを選択中。",
   "{n} patches total": "合計{n}パッチ",
+  "{n} patches · Lab positions via the preconditioning profile": "{n} patches · Lab positions via the preconditioning profile",
   "{n} reversal(s) — possible misread": "{n} 件の逆転 — 読み取りミスの可能性",
   "{n} s — still working": "{n} 秒 — 処理中",
   "{n} spacers on this page{extra}.": "このページに{n}個のスペーサー{extra}。",

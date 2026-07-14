@@ -1678,20 +1678,22 @@ class _NewChartDialog(QDialog):
             self._gen_orig_tooltips["nearneutral"] if rgb else tip_rings_nch)
         for w in self._nch_gen_widgets:
             w.setVisible(not rgb)
-        # The fold button lives next to the cube; hide both for multi-ink.
-        # Track the intent with an explicit flag — widget isVisible() is
-        # always False before the window is shown, so guarding on it made a
-        # RESTORED multi-ink state (reopen after creating a CMYK set) keep
-        # the cube visible (Basti's live review). The flag only acts on real
-        # transitions, so state-1 refreshes still don't resize the window
-        # through _on_fold_toggled.
+        # The fold button lives next to the cube; hide both in state 2 (no
+        # colour model — nothing honest to draw). State 3 keeps the panel:
+        # it shows the Lab-space scatter via the profile (#72). Track the
+        # intent with an explicit flag — widget isVisible() is always False
+        # before the window is shown, so guarding on it made a RESTORED
+        # multi-ink state keep the cube visible (Basti's live review). The
+        # flag only acts on real transitions, so refreshes don't resize the
+        # window through _on_fold_toggled.
         if getattr(self, "_cube_panel", None) is not None:
             hidden = getattr(self, "_nch_cube_hidden", False)
-            if rgb and hidden:
+            want_hidden = state == 2
+            if not want_hidden and hidden:
                 self._nch_cube_hidden = False
                 self._fold_btn.setVisible(True)
                 self._on_fold_toggled(self._cube_shown)
-            elif not rgb and not hidden:
+            elif want_hidden and not hidden:
                 self._nch_cube_hidden = True
                 self._cube_panel.setVisible(False)
                 self._fold_btn.setVisible(False)
@@ -3206,6 +3208,10 @@ class _NewChartDialog(QDialog):
 
     def _on_fold_toggled(self, shown: bool) -> None:
         self._cube_shown = shown
+        # Unfolding in state 3 renders the Lab cloud on demand (#72) — it is
+        # only computed while the panel is actually visible.
+        if shown and self._nch_state() == 3:
+            self._push_live_preview()
         # Capture the centre *first*: when unfolding, raising the minimum width
         # below makes Qt resize the window immediately (and rightward, top-left
         # fixed), so a centre read after that already reflects the grown, shifted
@@ -3302,11 +3308,14 @@ class _NewChartDialog(QDialog):
     def _do_push_live_preview(self) -> None:
         if getattr(self, "_gen_total", None) is None:
             return
-        if self._nch_state() != 1:
-            # Multi-ink: building the real program shells targen (and, in
-            # state 3, xicclu) — far too heavy for a live keystroke path
-            # (#72 R5). The per-row estimates from _update_gen_counts stand,
-            # and the cube preview is hidden for multi-ink anyway.
+        state = self._nch_state()
+        if state == 2:
+            # No colour model: building the real program shells targen — too
+            # heavy for a live keystroke path (#72 R5), and the cube is
+            # hidden in state 2 anyway. The per-row estimates stand.
+            return
+        if state == 3:
+            self._push_lab_cloud()
             return
         # The generated additions for the current set selection. Built even when
         # the master Generate toggle is off, so the Total previews them like the
@@ -3327,6 +3336,49 @@ class _NewChartDialog(QDialog):
         program = self._live_preview_program(additions)
         if getattr(self, "_cube_panel", None) is not None and self._cube_shown:
             self._cube_panel.set_program(program, self._existing_patches)
+
+    def _push_lab_cloud(self) -> None:
+        """State-3 3D preview (#72): the generated ink patches as a Lab-space
+        scatter, positions from the preconditioning profile (``xicclu -ff``),
+        each point painted its display-approximation colour.
+
+        Heavy (targen + xicclu subprocesses), so it only runs when the cube
+        is actually unfolded, sits behind the existing debounce, and caches
+        by the full generator state — spinbox bursts reuse the cache (R5).
+        """
+        if (getattr(self, "_cube_panel", None) is None or not self._cube_shown
+                or getattr(self, "_nch_cube_hidden", False)):
+            return
+        if not self._gen_sets_active():
+            return
+        import json as _json
+        key = _json.dumps(self._collect_gen_state(), sort_keys=True,
+                          default=str)
+        cached = getattr(self, "_lab_cloud_cache", None)
+        if cached is not None and cached[0] == key:
+            labs, colors = cached[1], cached[2]
+        else:
+            try:
+                from workflow.xicclu_runner import forward_lab
+                program = self._build_generated_program()
+                if not program:
+                    return
+                bin_dir = self._bin_dir
+                labs = forward_lab(program, self._precond_path, bin_dir)
+                rep = ("CMYK" if not self._extra_inks
+                       else R.color_rep_for_inks(self._nch_ink_codes())[0])
+                colors = []
+                for dev in program:
+                    r, g, b = _display100(dev, rep)
+                    colors.append((round(r * 2.55), round(g * 2.55),
+                                   round(b * 2.55)))
+                self._lab_cloud_cache = (key, labs, colors)
+            except Exception as exc:  # noqa: BLE001 — preview is best-effort
+                log.warning("Lab cloud preview failed: %s", exc)
+                return
+        self._cube_panel.set_lab_cloud(labs, colors)
+        self._gen_total.setText(tr("Total: {label}").format(
+            label=_patches_label(len(labs))))
 
     def _live_preview_program(self, additions: list) -> list:
         """The colours the current source mode would add, for the live 3D cube.

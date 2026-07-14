@@ -2695,6 +2695,7 @@
   "{n} patches  ·  {src}": "{n} Felder  ·  {src}",
   "{n} patches selected.": "{n} Messfelder ausgewählt.",
   "{n} patches total": "{n} Messfelder gesamt",
+  "{n} patches · Lab positions via the preconditioning profile": "{n} Messfelder · Lab-Positionen über das Vorkonditionierungs-Profil",
   "{n} reversal(s) — possible misread": "{n} Umkehrung(en) — möglicher Lesefehler",
   "{n} s — still working": "{n} s — arbeitet noch",
   "{n} spacers on this page{extra}.": "{n} Trennfelder auf dieser Seite{extra}.",

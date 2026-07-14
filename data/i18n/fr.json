@@ -2695,6 +2695,7 @@
   "{n} patches  ·  {src}": "{n} plages  ·  {src}",
   "{n} patches selected.": "{n} plages sélectionnées.",
   "{n} patches total": "{n} plages au total",
+  "{n} patches · Lab positions via the preconditioning profile": "{n} patches · Lab positions via the preconditioning profile",
   "{n} reversal(s) — possible misread": "{n} inversion(s) — lecture possiblement erronée",
   "{n} s — still working": "{n} s — toujours en cours",
   "{n} spacers on this page{extra}.": "{n} séparateurs sur cette page{extra}.",

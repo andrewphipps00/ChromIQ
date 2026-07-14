@@ -209,6 +209,66 @@ def cube_payload(
     }
 
 
+def _lab_layout(bg: str, fg: str, grid: str) -> dict:
+    """Plotly layout for the Lab-space scatter (#72 state 3): a*/b* on the
+    floor, L* vertical — the standard way a gamut cloud is shown."""
+    def _axis(title: str, rng: list) -> dict:
+        return {"title": title, "range": rng, "color": fg,
+                "gridcolor": grid, "zerolinecolor": grid,
+                "backgroundcolor": bg, "showbackground": True}
+    return {
+        "paper_bgcolor": bg, "plot_bgcolor": bg,
+        "margin": {"l": 0, "r": 0, "t": 0, "b": 0},
+        "showlegend": False,
+        "scene": {
+            "xaxis": _axis("a*", [-110, 110]),
+            "yaxis": _axis("b*", [-110, 110]),
+            "zaxis": _axis("L*", [0, 100]),
+            "aspectmode": "cube",
+            "camera": {"eye": {"x": 1.5, "y": 1.5, "z": 1.3}},
+        },
+    }
+
+
+def lab_payload(
+    labs: list[tuple[float, float, float]],
+    colors_rgb255: list[tuple[int, int, int]],
+    *,
+    bg: str = "#111111",
+    fg: str = "#cccccc",
+    grid: str = "#444444",
+) -> dict:
+    """``{"data", "stats", "layout"}`` for the state-3 Lab scatter (#72).
+
+    Each multi-ink patch is plotted at its **measured-model position** —
+    the Lab the preconditioning profile predicts (``xicclu -ff``) — painted
+    in its display-approximation colour. The dotted neutral axis (a=b=0)
+    anchors the eye the same way the RGB cube's diagonal does.
+    """
+    neutral = {
+        "type": "scatter3d", "mode": "lines", "name": "neutral axis",
+        "x": [0, 0], "y": [0, 0], "z": [0, 100],
+        "line": {"color": fg, "width": 2, "dash": "dot"}, "hoverinfo": "skip",
+        "showlegend": False,
+    }
+    colors = [f"rgb({r},{g},{b})" for r, g, b in colors_rgb255]
+    hover = [f"L {L:.1f} · a {a:.1f} · b {b:.1f}" for L, a, b in labs]
+    points = {
+        "type": "scatter3d", "mode": "markers", "name": "patches",
+        "x": [a for _L, a, _b in labs],
+        "y": [b for _L, _a, b in labs],
+        "z": [L for L, _a, _b in labs],
+        "marker": {"size": 3.6, "color": colors,
+                   "line": {"width": 0}, "opacity": 1.0},
+        "text": hover, "hoverinfo": "text", "showlegend": False,
+    }
+    from core.i18n import tr
+    stats = tr("{n} patches · Lab positions via the preconditioning profile"
+               ).format(n=len(labs))
+    return {"data": [neutral, points], "stats": stats,
+            "layout": _lab_layout(bg, fg, grid)}
+
+
 def _controls_hint() -> str:
     """One-line, visible mouse+keyboard help for the 3D cube (#66). Full detail
     lives in the dialog's ⓘ tooltip."""
@@ -394,7 +454,9 @@ def build_cube_html(
     // cube redraws via Plotly.react without reloading the page or the WebGL
     // context (see workflow.patch_cube.cube_payload).
     window.cqUpdateCube = function(payload) {{
-      Plotly.react("plot", payload.data, CQ_LAYOUT, CQ_CONFIG);
+      // A payload may carry its own layout (the Lab-space view for multi-ink
+      // charts, #72); without one the RGB-cube layout stays in force.
+      Plotly.react("plot", payload.data, payload.layout || CQ_LAYOUT, CQ_CONFIG);
       var s = document.getElementById("stats");
       if (s) {{ s.textContent = payload.stats; }}
     }};

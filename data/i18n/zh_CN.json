@@ -2695,6 +2695,7 @@
   "{n} patches  ·  {src}": "{n} 色块  ·  {src}",
   "{n} patches selected.": "已选中{n}个色块。",
   "{n} patches total": "共 {n} 个色块",
+  "{n} patches · Lab positions via the preconditioning profile": "{n} patches · Lab positions via the preconditioning profile",
   "{n} reversal(s) — possible misread": "{n} 处反转 — 可能读错",
   "{n} s — still working": "{n} 秒 — 仍在处理",
   "{n} spacers on this page{extra}.": "本页有{n}个间隔条{extra}。",

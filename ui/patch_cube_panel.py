@@ -205,6 +205,27 @@ class PatchCubePanel(QWidget):
         else:
             self._pending_payload = payload  # replay once the page is ready
 
+    def set_lab_cloud(self, labs: list[tuple[float, float, float]],
+                      colors_rgb255: list[tuple[int, int, int]]) -> None:
+        """Show a multi-ink patch set as a Lab-space scatter (#72 state 3).
+
+        Same in-place update path as :meth:`set_program`; the payload carries
+        its own Lab layout, so switching back to an RGB program restores the
+        cube axes automatically.
+        """
+        self._program = []          # not an RGB program — cube stats don't apply
+        self._existing = []
+        if self._web_view is None:
+            return
+        payload = patch_cube.lab_payload(
+            labs, colors_rgb255,
+            bg=self._theme["bg"], fg=self._theme["fg"],
+            grid=self._theme["grid"])
+        if self._loaded:
+            self._push(payload)
+        else:
+            self._pending_payload = payload
+
     def _push(self, payload: dict) -> None:
         if self._web_view is None:
             return

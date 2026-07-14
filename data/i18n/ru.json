@@ -2695,6 +2695,7 @@
   "{n} patches  ·  {src}": "{n} полей  ·  {src}",
   "{n} patches selected.": "Выбрано {n} патчей.",
   "{n} patches total": "всего патчей: {n}",
+  "{n} patches · Lab positions via the preconditioning profile": "{n} patches · Lab positions via the preconditioning profile",
   "{n} reversal(s) — possible misread": "{n} инверсия(-и) — возможен сбой чтения",
   "{n} s — still working": "{n} с — всё ещё работаю",
   "{n} spacers on this page{extra}.": "{n} разделителей на этой странице{extra}.",
