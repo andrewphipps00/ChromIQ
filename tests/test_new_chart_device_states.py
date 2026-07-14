@@ -127,15 +127,44 @@ def test_device_state_persists_and_round_trips(dlg, qapp, tmp_path):
     _pick_device(dlg, "cmykplus")
     dlg._on_add_ink(dlg._nch_add_ink.findData("o"))
     dlg._ink_limit.setValue(280)
+    # The device-gated generator rows persist too (Basti's report — the
+    # generator-requirements checklist applies to the new rows).
+    dlg._nch_targen.setChecked(False)
+    dlg._nch_targen_n.setValue(1200)
+    dlg._nch_perink_n.setValue(12)
+    dlg._nch_pairs.setChecked(False)
     st = dlg._collect_gen_state()
-    assert st["device"] == {"type": "cmykplus", "extra_inks": ["o"],
-                            "ink_limit": 280, "precond": ""}
+    assert st["device"]["type"] == "cmykplus"
+    assert st["device"]["extra_inks"] == ["o"]
+    assert st["device"]["ink_limit"] == 280
+    assert st["device"]["gen"] == {"targen": False, "targen_n": 1200,
+                                   "perink": True, "perink_n": 12,
+                                   "pairs": False, "pairs_n": 4}
     fresh = _NewChartDialog(tmp_path, _FakeSettings())
     fresh._apply_gen_state(st)
     assert fresh._device_type.currentData() == "cmykplus"
     assert fresh._extra_inks == ["o"]
     assert fresh._ink_limit.value() == 280
+    assert not fresh._nch_targen.isChecked()
+    assert fresh._nch_targen_n.value() == 1200
+    assert fresh._nch_perink_n.value() == 12
+    assert not fresh._nch_pairs.isChecked()
+    # A pre-#72 state (no device key at all) resets the rows to factory —
+    # the checklist's default-when-absent rule.
+    fresh._apply_gen_state({"mode": "seed"})
+    assert fresh._nch_targen.isChecked() and fresh._nch_targen_n.value() == 800
+    assert fresh._nch_perink_n.value() == 8 and fresh._nch_pairs_n.value() == 4
     fresh.deleteLater()
+
+
+def test_restore_defaults_resets_device_rows(dlg):
+    _pick_device(dlg, "cmyk")
+    dlg._nch_targen_n.setValue(2000)
+    dlg._nch_perink.setChecked(False)
+    dlg._restore_factory_defaults()
+    assert dlg._device_type.currentData() == "rgb"      # back to state 1
+    assert dlg._nch_targen_n.value() == 800
+    assert dlg._nch_perink.isChecked()
 
 
 def test_full_cycle_returns_to_golden_rgb_state(dlg):

@@ -1861,6 +1861,18 @@ class _NewChartDialog(QDialog):
                 "extra_inks": list(self._extra_inks),
                 "ink_limit": int(self._ink_limit.value()),
                 "precond": self._precond_path,
+                # The device-gated generator rows persist WITH the device
+                # (generator-requirements checklist: every row must survive
+                # save/load, presets and the editor recipe) — inside this
+                # sub-dict so the RGB state dict stays byte-identical (R1).
+                "gen": {
+                    "targen": self._nch_targen.isChecked(),
+                    "targen_n": self._nch_targen_n.value(),
+                    "perink": self._nch_perink.isChecked(),
+                    "perink_n": self._nch_perink_n.value(),
+                    "pairs": self._nch_pairs.isChecked(),
+                    "pairs_n": self._nch_pairs_n.value(),
+                },
             }}
         return {
             "mode": mode,
@@ -1955,6 +1967,20 @@ class _NewChartDialog(QDialog):
         except (TypeError, ValueError):
             pass
         self._precond_path = str(dev.get("precond", "") or "")
+        # Device-gated generator rows: restore with get()-defaults, and reset
+        # to the factory baseline when no device state rides along (RGB state
+        # or Restore-defaults) — the checklist's default-when-absent rule.
+        gen = dev.get("gen") or {}
+        self._nch_targen.setChecked(bool(gen.get("targen", True)))
+        self._nch_perink.setChecked(bool(gen.get("perink", True)))
+        self._nch_pairs.setChecked(bool(gen.get("pairs", True)))
+        for key, spin, default in (("targen_n", self._nch_targen_n, 800),
+                                   ("perink_n", self._nch_perink_n, 8),
+                                   ("pairs_n", self._nch_pairs_n, 4)):
+            try:
+                spin.setValue(int(gen.get(key, default)))
+            except (TypeError, ValueError):
+                spin.setValue(default)
         self._refresh_nch_state()
 
         self._apply_gen_sets(st)
