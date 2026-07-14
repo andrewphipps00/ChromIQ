@@ -506,6 +506,48 @@ class SettingsDialog(QDialog):
             min_width=660,
         )
 
+        self._profile_engine_check = QCheckBox(
+            tr("ChromIQ profile engine (beta)"), self
+        )
+        engine_tip = TooltipButton(
+            tr("ChromIQ Profile Engine (beta)"),
+            tr("Adds a second way to turn a measured chart into an ICC profile: "
+            "a profile builder that lives inside ChromIQ itself, next to the "
+            "proven Argyll colprof.\n\n"
+            "Why would you want that? One reason above all: printers with EXTRA "
+            "INKS. colprof can build profiles for RGB and CMYK printers, but not "
+            "for a CMYK printer with orange, green or violet channels. The "
+            "ChromIQ engine can. Together with the multi-ink charts from Create "
+            "Chart, this closes the loop: print a multi-ink chart, measure it, "
+            "and build a working profile for that printer — entirely inside "
+            "ChromIQ.\n\n"
+            "What changes when this option is ON:\n\n"
+            "  • The Build Profile tab gets a small \"Profile engine\" choice "
+            "above the Build button: Argyll colprof (still the default) or "
+            "ChromIQ engine (beta).\n\n"
+            "  • Measurements from multi-ink charts are built with the ChromIQ "
+            "engine automatically — colprof cannot process them at all.\n\n"
+            "  • For RGB and CMYK measurements you can pick either engine and "
+            "compare: same measurement, one profile from each, nothing is "
+            "overwritten unless the file names collide.\n\n"
+            "The engine only takes a build it can do without losing anything: "
+            "options it doesn't cover yet (spectral illuminants, FWA, custom "
+            "smoothing, extra command-line flags…) keep the build on colprof, "
+            "and ChromIQ tells you why.\n\n"
+            "Honest expectations while this is beta: for RGB papers the "
+            "engine's colour accuracy measures at the same level as colprof on "
+            "our test data. Its perceptual and saturation renderings are "
+            "approximate — the colorimetric intents are the reliable reference. "
+            "For multi-ink printers the profiles are made for chart design, "
+            "previews and proofing; for a final production profile of such a "
+            "printer, a dedicated tool (e.g. i1Profiler with i1Publish, or your "
+            "RIP's profiler) is still the safer choice.\n\n"
+            "When this option is OFF (the default), ChromIQ behaves exactly as "
+            "it always has — every profile is built by Argyll colprof."),
+            self,
+            min_width=680,
+        )
+
         self._native_print_check = QCheckBox(tr("Use default macOS printer dialog"), self)
         native_tip = TooltipButton(
             tr("Use default macOS printer dialog"),
@@ -593,6 +635,7 @@ class SettingsDialog(QDialog):
             _bh_cell(self._cal_mode_check, cal_tip),
             _bh_cell(self._chromiq_refine_check, refine_tip),
             _bh_cell(self._averaging_check, averaging_tip),
+            _bh_cell(self._profile_engine_check, engine_tip),
         ]
         if native_print_supported():
             bh_cells.append(_bh_cell(self._native_print_check, native_tip))
@@ -1432,6 +1475,7 @@ class SettingsDialog(QDialog):
             .findData(int(s.get("scanner_flank_min_cells", 8)))))
         self._chromiq_refine_check.setChecked(bool(s.get("chromiq_refinement", False)))
         self._averaging_check.setChecked(bool(s.get("averaging_enabled", False)))
+        self._profile_engine_check.setChecked(bool(s.get("profile_engine_beta", False)))
         self._native_print_check.setChecked(bool(s.get("use_native_print_dialog", False)))
         self._pdf_fallback_check.setChecked(bool(s.get("pdf_print_fallback", False)))
         self._confirm_print_check.setChecked(bool(s.get("confirm_before_printing", True)))
@@ -2059,6 +2103,7 @@ class SettingsDialog(QDialog):
         s.set("calibration_mode",          self._cal_mode_check.isChecked())
         s.set("chromiq_refinement",        self._chromiq_refine_check.isChecked())
         s.set("averaging_enabled",         self._averaging_check.isChecked())
+        s.set("profile_engine_beta",       self._profile_engine_check.isChecked())
         s.set("use_native_print_dialog",   self._native_print_check.isChecked())
         s.set("pdf_print_fallback",        self._pdf_fallback_check.isChecked())
         s.set("confirm_before_printing",   self._confirm_print_check.isChecked())

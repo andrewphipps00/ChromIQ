@@ -719,6 +719,9 @@ class MainWindow(QMainWindow):
         for tab in (self._tab_chart, self._tab_measure, self._tab_profile, self._tab_check):
             if hasattr(tab, "set_calibration_mode"):
                 tab.set_calibration_mode(enabled)
+        # Same refresh moment for the profile-engine beta selector (#122).
+        if hasattr(self._tab_profile, "refresh_profile_engine_option"):
+            self._tab_profile.refresh_profile_engine_option()
         profile_idx = self._tabs.indexOf(self._tab_profile)
         self._tabs.setTabText(
             profile_idx,
