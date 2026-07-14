@@ -1517,6 +1517,11 @@ class _NewChartDialog(QDialog):
             self, tr("Choose preconditioning profile"),
             "ICC profiles (*.icc *.icm)", start_dir=start,
             extra_paths=icc_profile_paths())
+        # macOS can hand focus to the editor window underneath when the file
+        # dialog closes over two stacked modals — bring this window back on
+        # top either way (picked or cancelled) (#72, Basti's live review).
+        self.raise_()
+        self.activateWindow()
         if not path:
             return
         self._precond_path = path

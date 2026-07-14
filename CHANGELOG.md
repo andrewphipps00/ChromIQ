@@ -1,5 +1,28 @@
 # Changelog
 
+## v3.13.7-beta.1
+
+The other half of multi-ink profiling (#72): CMYK / CMYK+N **patch sets** can
+now be designed, generated and edited — not just rendered. German is fully
+translated; the other languages follow before the final release.
+
+- **New patch set → Device**: choose Print RGB (unchanged default), CMYK, or
+  CMYK + extra inks (orange, green, violet, light inks… as removable chips),
+  with a first-class **ink limit** and an optional **preconditioning profile**
+  (validated inline against the chart's ink set).
+- **Multi-ink colour sets**: Even coverage (targen), per-ink ramps, ink-pair
+  overprints (always inside the ink limit), the near-neutral rings as a true
+  grey-balance set, white/black ink anchors — and with a preconditioning
+  profile, all the look-based sets (skin tones, blues, greens…) translate into
+  ink values, with an honest note when colours sit outside the printer's gamut.
+- **Editor**: multi-ink charts load, reorder, re-render and save through the
+  ChromIQ engine (press-ready separated TIFF + i1Profiler files included);
+  per-ink patch tooltips; RGB-only actions are cleanly gated.
+- **Profile build**: colprof's ink limit (-l) is prefilled from the chart's
+  own limit, carried through .ti1 → .ti2 → .ti3 automatically.
+- Generator rows whose set is off (or not available for the current device)
+  now show their count struck through, so the total is easier to follow.
+
 ## v3.13.6
 
 Stable. Multi-ink profiling in the layout engine (device-native CMYK/N TIFFs +
