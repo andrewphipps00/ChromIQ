@@ -6,13 +6,16 @@ the whole batch — measured in the spike: in-gamut nodes converge to median
 ΔE ≈ 0.007).
 
 For more device channels than the 3 PCS dimensions the inversion is
-underdetermined; the *ink policy* pins the surplus channels before GN solves
-the remainder:
+underdetermined; the *ink policy* resolves the surplus degrees of freedom as
+soft least-squares priors inside GN (a hard policy measurably shrinks the
+reachable gamut — colour accuracy always dominates):
 
-* channel 4 (K) follows a GCR-style locus ``K(L*)`` — full black only in the
-  shadows, fading out by the midtones (the shape colprof's ``-k`` exposes);
-* channels beyond 4 (O/G/V/…) are hue-gated: an ink participates only in the
-  hue sector around its own Lab anchor hue (``max(0, cos(h − h_ink))^p``).
+* channel 4 (K) is pulled toward a GCR-style locus ``K(L*)`` — full black
+  only in the shadows, fading out by the midtones (the shape colprof's
+  ``-k`` exposes);
+* channels beyond 4 (O/G/V/…) are pulled toward hue gates: an ink
+  participates in the hue sector around its own Lab anchor hue
+  (``max(0, cos(h − h_ink))^p``), and never on neutrals.
 
 Out-of-gamut nodes clamp to the nearest printable colour; their residual ΔE
 doubles as the ``gamt`` gamut-distance table (ColorSync requires that tag).
