@@ -1,5 +1,26 @@
 # Changelog
 
+## v3.13.7-beta.2
+
+The multi-ink preview round (#72 Tier D), plus fixes from live testing.
+
+- **True-colour chart preview**: when a multi-ink chart's preconditioning
+  profile is known, the preview renders the actual colours through it
+  (cctiff), with a badge saying so; without one, the approximate composite
+  is clearly labelled — and its extra-ink blending is now done in linear
+  light with absorption from real ink measurements.
+- **Per-ink inspector**: device-native charts get an "Inks:" row — hide any
+  ink to see what the others lay down, and read the exact ink values under
+  the cursor. Resets the moment a new chart is generated.
+- **Lab-space 3D views**: with a preconditioning profile, the New-patch-set
+  3D panel and the Tools "Show patch distribution (3D)" window plot multi-ink
+  patches where the profile predicts them in Lab — the honest distribution
+  picture (the RGB projection remains, clearly named, when no profile is set).
+- Generator options for multi-ink devices are remembered between sessions;
+  3D preview stays hidden when a remembered multi-ink setup reopens; compact
+  profile-row buttons; ink-limit ⓘ aligned; the patch-set window stays on
+  top after choosing a profile.
+
 ## v3.13.7-beta.1
 
 The other half of multi-ink profiling (#72): CMYK / CMYK+N **patch sets** can
