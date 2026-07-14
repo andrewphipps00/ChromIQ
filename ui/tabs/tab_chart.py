@@ -7016,6 +7016,10 @@ class TabChart(QWidget):
         if self._runner.is_running:
             log.warning("A process is already running")
             return
+        # The per-ink inspector describes the PREVIOUS chart — drop it the
+        # moment a new build starts; load_tiff rebuilds it for the new chart's
+        # ink set when the build lands (#72, Basti).
+        self._preview.reset_ink_inspector()
         # Chart reflected from the Print/Measure tab — read-only. While nothing
         # is unlocked there is nothing to generate (the chart lives in its own
         # folder already); say so and stop. Unlocking a panel means the user

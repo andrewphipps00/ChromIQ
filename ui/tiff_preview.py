@@ -620,7 +620,19 @@ class TiffPreview(QWidget):
             self._schedule_refresh()
             self.page_changed.emit(self._current)
 
+    def reset_ink_inspector(self) -> None:
+        """Hide the per-ink row + badge immediately (#72, Basti): called when
+        a chart build starts, so options from the previous chart never linger
+        while the new one is generated; load_tiff rebuilds them for the new
+        chart's ink set."""
+        self._ink_row.setVisible(False)
+        self._ink_readout.setText("")
+        self._ink_badge.setVisible(False)
+        if getattr(self, "_badge_lbl", None) is not None:
+            self._badge_lbl.setVisible(False)
+
     def clear(self) -> None:
+        self.reset_ink_inspector()
         self._pages = []
         self._current = 0
         self._active_stripe = -1
@@ -737,6 +749,15 @@ class TiffPreview(QWidget):
         self._ink_readout.setStyleSheet(
             "QLabel { color: #808080; font-family: 'Menlo'; }")
         _ink_l.addWidget(self._ink_readout)
+        # The honesty badge shares this line whenever the ink row is shown
+        # (Basti) — the floating overlay is only the fallback for
+        # device-native pages without a known ink set.
+        self._ink_badge = QLabel("", self._ink_row)
+        self._ink_badge.setStyleSheet(
+            "QLabel { background: rgba(30, 30, 30, 185); color: #f4f2ef;"
+            " border-radius: 4px; padding: 2px 8px; font-size: 11px; }")
+        self._ink_badge.setVisible(False)
+        _ink_l.addWidget(self._ink_badge)
         self._ink_row.setVisible(False)
         layout.addWidget(self._ink_row)
         # Cursor readout needs move events without a button held.
@@ -951,6 +972,17 @@ class TiffPreview(QWidget):
         clear note that the colours are approximate while the ink values in
         the file are exact. Hidden for ordinary RGB pages."""
         mode = last_render_mode()
+        text = ("" if not mode else
+                tr("True colours — via the chart's profile") if mode == "profile"
+                else tr("Approximate colours — the ink values in the file are exact"))
+        if self._ink_row.isVisible():
+            # Share the ink-options line (Basti) — no floating overlay then.
+            self._ink_badge.setText(text)
+            self._ink_badge.setVisible(bool(text))
+            if getattr(self, "_badge_lbl", None) is not None:
+                self._badge_lbl.setVisible(False)
+            return
+        self._ink_badge.setVisible(False)
         if getattr(self, "_badge_lbl", None) is None:
             if not mode:
                 return
@@ -962,9 +994,7 @@ class TiffPreview(QWidget):
         if not mode:
             self._badge_lbl.setVisible(False)
             return
-        self._badge_lbl.setText(
-            tr("True colours — via the chart's profile") if mode == "profile"
-            else tr("Approximate colours — the ink values in the file are exact"))
+        self._badge_lbl.setText(text)
         self._badge_lbl.adjustSize()
         self._badge_lbl.move(self.width() - self._badge_lbl.width() - 12,
                              self.height() - self._badge_lbl.height() - 12)
