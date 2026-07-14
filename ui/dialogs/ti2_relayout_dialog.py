@@ -4725,6 +4725,20 @@ class Ti2RelayoutDialog(QDialog):
         # A loaded chart with no engine recipe is a printtarg chart → stay
         # printtarg even if the engine setting is on (preserve its real layout).
         self._loaded_printtarg_chart = self._engine_recipe is None
+        # …except multi-ink charts, which are engine-only (#72 decision 0):
+        # a non-RGB .ti2 without a recipe (e.g. a foreign CMYK chart) gets a
+        # fresh engine recipe seeded from its instrument/paper — friendly
+        # note, not an error.
+        if (self._engine_recipe is None
+                and spec.color_rep.lstrip("i").upper() != "RGB"):
+            from workflow.chart_creator import ENGINE_INSTRUMENTS
+            self._engine_recipe = LayoutRecipe(
+                instrument=(spec.instrument_flag
+                            if spec.instrument_flag in ENGINE_INSTRUMENTS
+                            else "i1"),
+                paper=spec.paper_flag)
+            self._loaded_printtarg_chart = False
+            note += tr(" — multi-ink chart, laid out by the ChromIQ engine")
         if self._engine_recipe is not None and self._engine_panel is not None:
             # The grid is loaded in the chart's final SHEET order (ChartSpec.
             # from_ti2 sorts by SAMPLE_LOC), i.e. it already IS the randomised
@@ -5147,6 +5161,16 @@ class Ti2RelayoutDialog(QDialog):
         """Open the Add dialog — a single chosen colour, or one or more
         generated colour sets (3D cube, skin tones, blues, greens, greys, …) —
         and splice the result into the chart."""
+        if (self._spec is not None
+                and self._spec.color_rep.lstrip("i").upper() != "RGB"):
+            # The Add dialog's sources (colour picker, RGB colour sets, hex
+            # files) all produce RGB triples — splicing them into a multi-ink
+            # program would corrupt it (#72; the multi-ink generators arrive
+            # with the even-coverage / grey-balance sets).
+            self._status.setText(
+                tr("Adding patches to a multi-ink chart isn't available yet — "
+                   "the colour sets here are RGB-only."))
+            return
         dlg = _AddPatchesDialog(self._settings, self,
                                 existing_patches=self._program_from_grid(),
                                 initial_recipe=self._chart_recipe)
@@ -5960,6 +5984,15 @@ class Ti2RelayoutDialog(QDialog):
             return
         if self._worker is not None and self._worker.isRunning():
             return
+        # Multi-ink charts never touch printtarg (#72 decision 0): its
+        # relayout path is RGB-only and would fail loudly. RGB engine charts
+        # still run the printtarg pass first (it seeds page nav / geometry;
+        # _on_regen_done then swaps in the engine render), but for non-RGB the
+        # engine render IS the preview, directly.
+        if (self._spec is not None
+                and self._spec.color_rep.lstrip("i").upper() != "RGB"):
+            self._do_engine_preview()
+            return
         out_dir = save_to or Path(self._preview_tmp.name)
         # fresh dir for each preview render
         if save_to is None:
@@ -6146,6 +6179,14 @@ class Ti2RelayoutDialog(QDialog):
         # to render. The .ti1 is derived from the grid, so _engine_ti1 isn't
         # required. A loaded printtarg chart keeps printtarg (handled in
         # _refresh_engine_panel_visible) so its real no-clip layout shows.
+        #
+        # Multi-ink charts are engine-only, ALWAYS (#72 decision 0): printtarg
+        # relayout is RGB-only by design (R.regenerate hard-fails), so a
+        # non-RGB chart forces the engine path regardless of the Manual toggle
+        # or where the chart came from.
+        if (self._spec is not None
+                and self._spec.color_rep.lstrip("i").upper() != "RGB"):
+            return True
         return (self._engine_panel_grp is not None
                 and not self._engine_panel_grp.isHidden()
                 and self._spec is not None)
