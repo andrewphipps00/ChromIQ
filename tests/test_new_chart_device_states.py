@@ -233,6 +233,27 @@ def test_nch_program_builds_device_tuples(dlg, monkeypatch):
     assert (0.0, 0.0, 0.0, 100.0) in prog
 
 
+def test_cube_hidden_on_restored_multiink_state(qapp, tmp_path):
+    # Basti's repro: create a CMYK patch set, reopen the dialog — the device
+    # state is remembered, and the 3D preview must be hidden from the start
+    # (the old isVisible() guard never fired before the window was shown).
+    settings = _FakeSettings()
+    first = _NewChartDialog(tmp_path, settings)
+    _pick_device(first, "cmyk")
+    settings.set("new_chart_gen", first._collect_gen_state())
+    first.deleteLater()
+    reopened = _NewChartDialog(tmp_path, settings)
+    assert reopened._device_type.currentData() == "cmyk"   # remembered
+    assert reopened._nch_cube_hidden is True
+    assert reopened._cube_panel.isHidden()
+    assert reopened._fold_btn.isHidden()
+    # Switching back to RGB brings the preview affordance back.
+    _pick_device(reopened, "rgb")
+    assert reopened._nch_cube_hidden is False
+    assert not reopened._fold_btn.isHidden()
+    reopened.deleteLater()
+
+
 def test_on_ok_rgb_unchanged(dlg, monkeypatch):
     calls = {}
 

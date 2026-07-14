@@ -1674,13 +1674,20 @@ class _NewChartDialog(QDialog):
         for w in self._nch_gen_widgets:
             w.setVisible(not rgb)
         # The fold button lives next to the cube; hide both for multi-ink.
-        # Only act on a real transition so state-1 refreshes don't resize
-        # the window through _on_fold_toggled.
+        # Track the intent with an explicit flag — widget isVisible() is
+        # always False before the window is shown, so guarding on it made a
+        # RESTORED multi-ink state (reopen after creating a CMYK set) keep
+        # the cube visible (Basti's live review). The flag only acts on real
+        # transitions, so state-1 refreshes still don't resize the window
+        # through _on_fold_toggled.
         if getattr(self, "_cube_panel", None) is not None:
-            if rgb and not self._fold_btn.isVisible():
+            hidden = getattr(self, "_nch_cube_hidden", False)
+            if rgb and hidden:
+                self._nch_cube_hidden = False
                 self._fold_btn.setVisible(True)
                 self._on_fold_toggled(self._cube_shown)
-            elif not rgb and self._fold_btn.isVisible():
+            elif not rgb and not hidden:
+                self._nch_cube_hidden = True
                 self._cube_panel.setVisible(False)
                 self._fold_btn.setVisible(False)
     _GEN_SPINS = ("cube_n", "corners_edge", "spirals_end", "spirals_reach",
