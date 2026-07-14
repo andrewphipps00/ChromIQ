@@ -70,7 +70,17 @@ def test_state2_reveals_rows_and_gates_modes(dlg):
     assert not dlg._gen_skin.isEnabled() and not dlg._gen_blues.isEnabled()
     assert dlg._gen_neutral.isEnabled() and dlg._gen_nearneutral.isEnabled()
     assert dlg._gen_whiteblack.isEnabled()
-    assert not dlg._nch_gen_box.isHidden()
+    assert not dlg._nch_targen.isHidden()          # multi-ink rows revealed
+    assert not dlg._nch_perink.isHidden() and not dlg._nch_pairs.isHidden()
+    # Inactive rows keep their count visible but struck through (Basti's
+    # visual hint): a disabled cube row's count is struck, an active
+    # multi-ink row's is not.
+    assert dlg._gen_cube_count.font().strikeOut()
+    assert not dlg._nch_targen_count.font().strikeOut()
+    dlg._nch_targen.setChecked(False)
+    dlg._update_gen_counts()
+    assert dlg._nch_targen_count.font().strikeOut()
+    dlg._nch_targen.setChecked(True)
     assert "grey balance" in dlg._gen_nearneutral.toolTip()
 
 

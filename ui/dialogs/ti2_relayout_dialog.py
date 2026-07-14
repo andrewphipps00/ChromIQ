@@ -219,6 +219,17 @@ def _uniform_button_width(buttons, *, pad: int = 0) -> None:
         b.setMinimumWidth(w)
 
 
+def _hint_count_inactive(label: QLabel, active: bool) -> None:
+    """Strike through a generator row's count when the row won't contribute
+    (unticked, or gated off by the device state) — the number stays readable
+    for planning, but it's visually 'not counted' (#72, Basti). Works in both
+    light and dark mode (the strike inherits the label's own colour)."""
+    f = label.font()
+    if f.strikeOut() != (not active):
+        f.setStrikeOut(not active)
+        label.setFont(f)
+
+
 def _as_compact(*widgets) -> None:
     """Mark inputs as ``#compact_input`` so the app-wide stylesheets
     (ui/styles.py + ui/light_styles.py) apply the short / small-arrow
@@ -1168,17 +1179,21 @@ class _NewChartDialog(QDialog):
         self._nch_prof_edit.setReadOnly(True)
         self._nch_prof_edit.setPlaceholderText(
             tr("(none — look-based sets need one)"))
+        _as_compact(self._nch_prof_edit)
         prow.addWidget(self._nch_prof_edit, 1, 0)
+        # Square icon-sized buttons matching the compact field height —
+        # QPushButton otherwise pads to a wide default (Basti's live review).
         self._nch_prof_browse = QPushButton(self._nch_prof_row)
         self._nch_prof_browse.setIcon(load_magenta_folder_icon())
         self._nch_prof_browse.setToolTip(tr("Choose an ICC profile…"))
         self._nch_prof_browse.setObjectName("compact_input")
+        self._nch_prof_browse.setFixedWidth(30)   # height: the QSS 22px cap
         self._nch_prof_browse.clicked.connect(self._browse_precond)
         prow.addWidget(self._nch_prof_browse, 1, 1)
         self._nch_prof_clear = QPushButton("×", self._nch_prof_row)
         self._nch_prof_clear.setToolTip(tr("Clear the profile"))
         self._nch_prof_clear.setObjectName("compact_input")
-        self._nch_prof_clear.setFixedWidth(28)
+        self._nch_prof_clear.setFixedWidth(30)
         self._nch_prof_clear.clicked.connect(self._clear_precond)
         prow.addWidget(self._nch_prof_clear, 1, 2)
         self._nch_prof_status = QLabel("", self._nch_prof_row)
@@ -1651,7 +1666,8 @@ class _NewChartDialog(QDialog):
                            self._gen_orig_tooltips[name]))
         self._gen_nearneutral.setToolTip(
             self._gen_orig_tooltips["nearneutral"] if rgb else tip_rings_nch)
-        self._nch_gen_box.setVisible(not rgb)
+        for w in self._nch_gen_widgets:
+            w.setVisible(not rgb)
         # The fold button lives next to the cube; hide both for multi-ink.
         # Only act on a real transition so state-1 refreshes don't resize
         # the window through _on_fold_toggled.
@@ -2038,10 +2054,10 @@ class _NewChartDialog(QDialog):
                                   "range. N is the steps per axis."))
         self._gen_cube_n = _spin(2, 30, 8)
         self._gen_cube_count = _count_label()
-        gg.addWidget(self._gen_cube, 0, 0)
-        gg.addWidget(QLabel(tr("per axis:")), 0, 1)
-        gg.addWidget(self._gen_cube_n, 0, 2)
-        gg.addWidget(self._gen_cube_count, 0, 7)
+        gg.addWidget(self._gen_cube, 3, 0)
+        gg.addWidget(QLabel(tr("per axis:")), 3, 1)
+        gg.addWidget(self._gen_cube_n, 3, 2)
+        gg.addWidget(self._gen_cube_count, 3, 7)
 
         # Gamut-corner emphasis — extra patches ON the gamut edge lines near each
         # corner tip (TC9.18/TC9.24 style), slotted into the gaps the cube /
@@ -2060,10 +2076,10 @@ class _NewChartDialog(QDialog):
                                      "is never missing."))
         self._gen_corners_edge = _spin(1, 8, 2)
         self._gen_corners_count = _count_label()
-        gg.addWidget(self._gen_corners, 2, 0)
-        gg.addWidget(QLabel(tr("edge:")), 2, 1)
-        gg.addWidget(self._gen_corners_edge, 2, 2)
-        gg.addWidget(self._gen_corners_count, 2, 7)
+        gg.addWidget(self._gen_corners, 5, 0)
+        gg.addWidget(QLabel(tr("edge:")), 5, 1)
+        gg.addWidget(self._gen_corners_edge, 5, 2)
+        gg.addWidget(self._gen_corners_count, 5, 7)
 
         # Colour extremes — Highlights-&-shadows-style spiral cones just inside the
         # six chromatic corners. Placed directly above Highlights & shadows (grid
@@ -2084,12 +2100,12 @@ class _NewChartDialog(QDialog):
         self._gen_spirals_end = _spin(1, 200, 8)   # max matches Pastels/H&S (Knut)
         self._gen_spirals_reach = _spin(2, 45, 16)
         self._gen_spirals_count = _count_label()
-        gg.addWidget(self._gen_spirals, 10, 0)
-        gg.addWidget(QLabel(tr("per end:")), 10, 1)
-        gg.addWidget(self._gen_spirals_end, 10, 2)
-        gg.addWidget(QLabel(tr("reach:")), 10, 3)
-        gg.addWidget(self._gen_spirals_reach, 10, 4)
-        gg.addWidget(self._gen_spirals_count, 10, 7)
+        gg.addWidget(self._gen_spirals, 13, 0)
+        gg.addWidget(QLabel(tr("per end:")), 13, 1)
+        gg.addWidget(self._gen_spirals_end, 13, 2)
+        gg.addWidget(QLabel(tr("reach:")), 13, 3)
+        gg.addWidget(self._gen_spirals_reach, 13, 4)
+        gg.addWidget(self._gen_spirals_count, 13, 7)
 
         # Fitzpatrick skin tones — per-type ramp × parallel hue ranges.
         self._gen_skin = QCheckBox(tr("Skin tones (Fitzpatrick)"), self._gen_panel)
@@ -2101,12 +2117,12 @@ class _NewChartDialog(QDialog):
         self._gen_skin_n = _spin(1, 36, 8)
         self._gen_skin_ranges = _spin(1, 5, 3)
         self._gen_skin_count = _count_label()
-        gg.addWidget(self._gen_skin, 3, 0)
-        gg.addWidget(QLabel(tr("per type:")), 3, 1)
-        gg.addWidget(self._gen_skin_n, 3, 2)
-        gg.addWidget(QLabel(tr("ranges:")), 3, 3)
-        gg.addWidget(self._gen_skin_ranges, 3, 4)
-        gg.addWidget(self._gen_skin_count, 3, 7)
+        gg.addWidget(self._gen_skin, 6, 0)
+        gg.addWidget(QLabel(tr("per type:")), 6, 1)
+        gg.addWidget(self._gen_skin_n, 6, 2)
+        gg.addWidget(QLabel(tr("ranges:")), 6, 3)
+        gg.addWidget(self._gen_skin_ranges, 6, 4)
+        gg.addWidget(self._gen_skin_count, 6, 7)
 
         # Enhanced blues / turquoise.
         self._gen_blues = QCheckBox(tr("Oceans (blues)"), self._gen_panel)
@@ -2118,12 +2134,12 @@ class _NewChartDialog(QDialog):
         self._gen_blues_n = _spin(1, 200, 64)
         self._gen_blues_layers = _spin(1, 10, 3)
         self._gen_blues_count = _count_label()
-        gg.addWidget(self._gen_blues, 4, 0)
-        gg.addWidget(QLabel(tr("per layer:")), 4, 1)
-        gg.addWidget(self._gen_blues_n, 4, 2)
-        gg.addWidget(QLabel(tr("layers:")), 4, 3)
-        gg.addWidget(self._gen_blues_layers, 4, 4)
-        gg.addWidget(self._gen_blues_count, 4, 7)
+        gg.addWidget(self._gen_blues, 7, 0)
+        gg.addWidget(QLabel(tr("per layer:")), 7, 1)
+        gg.addWidget(self._gen_blues_n, 7, 2)
+        gg.addWidget(QLabel(tr("layers:")), 7, 3)
+        gg.addWidget(self._gen_blues_layers, 7, 4)
+        gg.addWidget(self._gen_blues_count, 7, 7)
 
         # Enhanced greens (foliage).
         self._gen_greens = QCheckBox(tr("Foliage (greens)"), self._gen_panel)
@@ -2135,12 +2151,12 @@ class _NewChartDialog(QDialog):
         self._gen_greens_n = _spin(1, 200, 64)
         self._gen_greens_layers = _spin(1, 10, 3)
         self._gen_greens_count = _count_label()
-        gg.addWidget(self._gen_greens, 5, 0)
-        gg.addWidget(QLabel(tr("per layer:")), 5, 1)
-        gg.addWidget(self._gen_greens_n, 5, 2)
-        gg.addWidget(QLabel(tr("layers:")), 5, 3)
-        gg.addWidget(self._gen_greens_layers, 5, 4)
-        gg.addWidget(self._gen_greens_count, 5, 7)
+        gg.addWidget(self._gen_greens, 8, 0)
+        gg.addWidget(QLabel(tr("per layer:")), 8, 1)
+        gg.addWidget(self._gen_greens_n, 8, 2)
+        gg.addWidget(QLabel(tr("layers:")), 8, 3)
+        gg.addWidget(self._gen_greens_layers, 8, 4)
+        gg.addWidget(self._gen_greens_count, 8, 7)
 
         # Sunrises — the warm band (yellows, oranges, reds, pinks).
         self._gen_sunrises = QCheckBox(tr("Sunrises (warm)"), self._gen_panel)
@@ -2154,12 +2170,12 @@ class _NewChartDialog(QDialog):
         self._gen_sunrises_n = _spin(1, 200, 64)
         self._gen_sunrises_layers = _spin(1, 10, 3)
         self._gen_sunrises_count = _count_label()
-        gg.addWidget(self._gen_sunrises, 6, 0)
-        gg.addWidget(QLabel(tr("per layer:")), 6, 1)
-        gg.addWidget(self._gen_sunrises_n, 6, 2)
-        gg.addWidget(QLabel(tr("layers:")), 6, 3)
-        gg.addWidget(self._gen_sunrises_layers, 6, 4)
-        gg.addWidget(self._gen_sunrises_count, 6, 7)
+        gg.addWidget(self._gen_sunrises, 9, 0)
+        gg.addWidget(QLabel(tr("per layer:")), 9, 1)
+        gg.addWidget(self._gen_sunrises_n, 9, 2)
+        gg.addWidget(QLabel(tr("layers:")), 9, 3)
+        gg.addWidget(self._gen_sunrises_layers, 9, 4)
+        gg.addWidget(self._gen_sunrises_count, 9, 7)
 
         # Flamingos — the pink / magenta / indigo band the other bands leave out.
         self._gen_flamingos = QCheckBox(tr("Flamingos (pinks)"), self._gen_panel)
@@ -2174,12 +2190,12 @@ class _NewChartDialog(QDialog):
         self._gen_flamingos_n = _spin(1, 200, 64)
         self._gen_flamingos_layers = _spin(1, 10, 3)
         self._gen_flamingos_count = _count_label()
-        gg.addWidget(self._gen_flamingos, 7, 0)
-        gg.addWidget(QLabel(tr("per layer:")), 7, 1)
-        gg.addWidget(self._gen_flamingos_n, 7, 2)
-        gg.addWidget(QLabel(tr("layers:")), 7, 3)
-        gg.addWidget(self._gen_flamingos_layers, 7, 4)
-        gg.addWidget(self._gen_flamingos_count, 7, 7)
+        gg.addWidget(self._gen_flamingos, 10, 0)
+        gg.addWidget(QLabel(tr("per layer:")), 10, 1)
+        gg.addWidget(self._gen_flamingos_n, 10, 2)
+        gg.addWidget(QLabel(tr("layers:")), 10, 3)
+        gg.addWidget(self._gen_flamingos_layers, 10, 4)
+        gg.addWidget(self._gen_flamingos_count, 10, 7)
 
         # Neutral grey ramp — pure greys black→white, no tints (a B&W wedge).
         # Independent of Near-neutral greys below, so the count of pure neutrals
@@ -2198,10 +2214,10 @@ class _NewChartDialog(QDialog):
                                      "ones, or either on its own."))
         self._gen_neutral_n = _spin(1, 64, 16)
         self._gen_neutral_count = _count_label()
-        gg.addWidget(self._gen_neutral, 8, 0)
-        gg.addWidget(QLabel(tr("steps:")), 8, 1)
-        gg.addWidget(self._gen_neutral_n, 8, 2)
-        gg.addWidget(self._gen_neutral_count, 8, 7)
+        gg.addWidget(self._gen_neutral, 11, 0)
+        gg.addWidget(QLabel(tr("steps:")), 11, 1)
+        gg.addWidget(self._gen_neutral_n, 11, 2)
+        gg.addWidget(self._gen_neutral_count, 11, 7)
 
         # Near-neutral greys — ONLY the rings of gentle hue tints around each
         # neutral level (no pure centre — that's the ramp's job above).
@@ -2224,14 +2240,14 @@ class _NewChartDialog(QDialog):
         self._gen_nearneutral_off = _spin(1, 50, 4)
         self._gen_nearneutral_count = _count_label()
         self._gen_nearneutral_off_label = QLabel(tr("offset:"))
-        gg.addWidget(self._gen_nearneutral, 9, 0)
-        gg.addWidget(QLabel(tr("steps:")), 9, 1)
-        gg.addWidget(self._gen_nearneutral_n, 9, 2)
-        gg.addWidget(QLabel(tr("rings:")), 9, 3)
-        gg.addWidget(self._gen_nearneutral_rings, 9, 4)
-        gg.addWidget(self._gen_nearneutral_off_label, 9, 5)
-        gg.addWidget(self._gen_nearneutral_off, 9, 6)
-        gg.addWidget(self._gen_nearneutral_count, 9, 7)
+        gg.addWidget(self._gen_nearneutral, 12, 0)
+        gg.addWidget(QLabel(tr("steps:")), 12, 1)
+        gg.addWidget(self._gen_nearneutral_n, 12, 2)
+        gg.addWidget(QLabel(tr("rings:")), 12, 3)
+        gg.addWidget(self._gen_nearneutral_rings, 12, 4)
+        gg.addWidget(self._gen_nearneutral_off_label, 12, 5)
+        gg.addWidget(self._gen_nearneutral_off, 12, 6)
+        gg.addWidget(self._gen_nearneutral_count, 12, 7)
 
         # Saturated edges — the gamut boundary, locked to the 3D cube's grid so
         # the infill stays even at any density (Knut, #78). Placed directly under
@@ -2252,12 +2268,12 @@ class _NewChartDialog(QDialog):
         self._gen_edges_n = _spin(0, 5, 1)
         self._gen_edges_faces = _spin(0, 5, 0)
         self._gen_edges_count = _count_label()
-        gg.addWidget(self._gen_edges, 1, 0)
-        gg.addWidget(QLabel(tr("between:")), 1, 1)
-        gg.addWidget(self._gen_edges_n, 1, 2)
-        gg.addWidget(QLabel(tr("faces:")), 1, 3)
-        gg.addWidget(self._gen_edges_faces, 1, 4)
-        gg.addWidget(self._gen_edges_count, 1, 7)
+        gg.addWidget(self._gen_edges, 4, 0)
+        gg.addWidget(QLabel(tr("between:")), 4, 1)
+        gg.addWidget(self._gen_edges_n, 4, 2)
+        gg.addWidget(QLabel(tr("faces:")), 4, 3)
+        gg.addWidget(self._gen_edges_faces, 4, 4)
+        gg.addWidget(self._gen_edges_count, 4, 7)
 
         # Highlights & shadows — detail at the two tonal ends. The label's "&"
         # is doubled so Qt shows it literally instead of eating it as a mnemonic;
@@ -2280,12 +2296,12 @@ class _NewChartDialog(QDialog):
         self._gen_hs_n = _spin(1, 200, 24)
         self._gen_hs_reach = _spin(2, 45, 16)
         self._gen_hs_count = _count_label()
-        gg.addWidget(self._gen_hs, 11, 0)
-        gg.addWidget(QLabel(tr("per end:")), 11, 1)
-        gg.addWidget(self._gen_hs_n, 11, 2)
-        gg.addWidget(QLabel(tr("depth:")), 11, 3)
-        gg.addWidget(self._gen_hs_reach, 11, 4)
-        gg.addWidget(self._gen_hs_count, 11, 7)
+        gg.addWidget(self._gen_hs, 14, 0)
+        gg.addWidget(QLabel(tr("per end:")), 14, 1)
+        gg.addWidget(self._gen_hs_n, 14, 2)
+        gg.addWidget(QLabel(tr("depth:")), 14, 3)
+        gg.addWidget(self._gen_hs_reach, 14, 4)
+        gg.addWidget(self._gen_hs_count, 14, 7)
 
         # Pastels — low-chroma midtones.
         self._gen_pastel = QCheckBox(tr("Pastels"), self._gen_panel)
@@ -2298,12 +2314,12 @@ class _NewChartDialog(QDialog):
         self._gen_pastel_n = _spin(1, 200, 24)
         self._gen_pastel_layers = _spin(1, 4, 2)
         self._gen_pastel_count = _count_label()
-        gg.addWidget(self._gen_pastel, 12, 0)
-        gg.addWidget(QLabel(tr("per layer:")), 12, 1)
-        gg.addWidget(self._gen_pastel_n, 12, 2)
-        gg.addWidget(QLabel(tr("layers:")), 12, 3)
-        gg.addWidget(self._gen_pastel_layers, 12, 4)
-        gg.addWidget(self._gen_pastel_count, 12, 7)
+        gg.addWidget(self._gen_pastel, 15, 0)
+        gg.addWidget(QLabel(tr("per layer:")), 15, 1)
+        gg.addWidget(self._gen_pastel_n, 15, 2)
+        gg.addWidget(QLabel(tr("layers:")), 15, 3)
+        gg.addWidget(self._gen_pastel_layers, 15, 4)
+        gg.addWidget(self._gen_pastel_count, 15, 7)
 
         # From image — the most representative colours of a chosen photo.
         self._gen_image = QCheckBox(tr("From image"), self._gen_panel)
@@ -2319,11 +2335,11 @@ class _NewChartDialog(QDialog):
         self._gen_image_btn.clicked.connect(self._load_gen_image)
         self._gen_image_n = _spin(1, 500, 24)
         self._gen_image_count = _count_label()
-        gg.addWidget(self._gen_image, 13, 0)
-        gg.addWidget(self._gen_image_btn, 13, 1, 1, 2)
-        gg.addWidget(QLabel(tr("colours:")), 13, 3)
-        gg.addWidget(self._gen_image_n, 13, 4)
-        gg.addWidget(self._gen_image_count, 13, 7)
+        gg.addWidget(self._gen_image, 16, 0)
+        gg.addWidget(self._gen_image_btn, 16, 1, 1, 2)
+        gg.addWidget(QLabel(tr("colours:")), 16, 3)
+        gg.addWidget(self._gen_image_n, 16, 4)
+        gg.addWidget(self._gen_image_count, 16, 7)
 
         # Pure white & black — the two tonal anchors, N of each, kept verbatim.
         self._gen_whiteblack = QCheckBox(
@@ -2340,10 +2356,10 @@ class _NewChartDialog(QDialog):
                                         "toward your number."))
         self._gen_whiteblack_n = _spin(1, 50, 1)
         self._gen_whiteblack_count = _count_label()
-        gg.addWidget(self._gen_whiteblack, 14, 0)
-        gg.addWidget(QLabel(tr("each:")), 14, 1)
-        gg.addWidget(self._gen_whiteblack_n, 14, 2)
-        gg.addWidget(self._gen_whiteblack_count, 14, 7)
+        gg.addWidget(self._gen_whiteblack, 17, 0)
+        gg.addWidget(QLabel(tr("each:")), 17, 1)
+        gg.addWidget(self._gen_whiteblack_n, 17, 2)
+        gg.addWidget(self._gen_whiteblack_count, 17, 7)
 
         # Fill remaining gaps — blue-noise top-up of whatever's left sparse.
         # Special: its count depends on the combined total of the sets above.
@@ -2392,10 +2408,10 @@ class _NewChartDialog(QDialog):
         _fill_row.addStretch()
         _fill_w = QWidget(self._gen_panel); _fill_w.setLayout(_fill_row)
         self._gen_fill_count = _count_label()
-        gg.addWidget(self._gen_fill, 15, 0)
-        gg.addWidget(QLabel(tr("fill to:")), 15, 1)
-        gg.addWidget(_fill_w, 15, 2, 1, 5)
-        gg.addWidget(self._gen_fill_count, 15, 7)
+        gg.addWidget(self._gen_fill, 18, 0)
+        gg.addWidget(QLabel(tr("fill to:")), 18, 1)
+        gg.addWidget(_fill_w, 18, 2, 1, 5)
+        gg.addWidget(self._gen_fill_count, 18, 7)
 
         # A per-set ⓘ icon (col 8) opens the set's explanation in its own little
         # window — more discoverable than a hover tooltip. The body reuses each
@@ -2403,22 +2419,22 @@ class _NewChartDialog(QDialog):
         # name, so this adds no new strings. Titles use the plain name (the "&"
         # in "Highlights & shadows" is fine here — the icon has no mnemonic).
         row_tips = (
-            (0, self._gen_cube,   tr("3D RGB cube")),
-            (1, self._gen_edges,  tr("Saturated edges")),
-            (2, self._gen_corners, tr("Gamut-corner emphasis")),
-            (3, self._gen_skin,   tr("Skin tones (Fitzpatrick)")),
-            (4, self._gen_blues,  tr("Oceans (blues)")),
-            (5, self._gen_greens, tr("Foliage (greens)")),
-            (6, self._gen_sunrises, tr("Sunrises (warm)")),
-            (7, self._gen_flamingos, tr("Flamingos (pinks)")),
-            (8, self._gen_neutral, tr("Neutral grey ramp")),
-            (9, self._gen_nearneutral, tr("Near-neutral greys")),
-            (10, self._gen_spirals, tr("Colour extremes")),
-            (11, self._gen_hs,     tr("Highlights & shadows")),
-            (12, self._gen_pastel, tr("Pastels")),
-            (13, self._gen_image,  tr("From image")),
-            (14, self._gen_whiteblack, tr("Pure white & black")),
-            (15, self._gen_fill,  tr("Fill remaining gaps")),
+            (3, self._gen_cube,   tr("3D RGB cube")),
+            (4, self._gen_edges,  tr("Saturated edges")),
+            (5, self._gen_corners, tr("Gamut-corner emphasis")),
+            (6, self._gen_skin,   tr("Skin tones (Fitzpatrick)")),
+            (7, self._gen_blues,  tr("Oceans (blues)")),
+            (8, self._gen_greens, tr("Foliage (greens)")),
+            (9, self._gen_sunrises, tr("Sunrises (warm)")),
+            (10, self._gen_flamingos, tr("Flamingos (pinks)")),
+            (11, self._gen_neutral, tr("Neutral grey ramp")),
+            (12, self._gen_nearneutral, tr("Near-neutral greys")),
+            (13, self._gen_spirals, tr("Colour extremes")),
+            (14, self._gen_hs,     tr("Highlights & shadows")),
+            (15, self._gen_pastel, tr("Pastels")),
+            (16, self._gen_image,  tr("From image")),
+            (17, self._gen_whiteblack, tr("Pure white & black")),
+            (18, self._gen_fill,  tr("Fill remaining gaps")),
         )
         for row, cb, title in row_tips:
             # Top-align the ⓘ so every set's icon lines up on the first row even
@@ -2443,11 +2459,11 @@ class _NewChartDialog(QDialog):
                                     "repeated colours apart by a small offset "
                                     "so no patch is printed twice."))
         self._gen_unique.toggled.connect(self._update_gen_counts)
-        gg.addWidget(self._gen_unique, 16, 0, 1, 8)
+        gg.addWidget(self._gen_unique, 19, 0, 1, 8)
 
         self._gen_total = QLabel("", self._gen_panel)
         self._gen_total.setStyleSheet("font-weight: bold;")
-        gg.addWidget(self._gen_total, 17, 0, 1, 8)
+        gg.addWidget(self._gen_total, 20, 0, 1, 8)
 
         # In the Add dialog (a chart already has patches), also show the chart's
         # resulting size — existing patches + the additions — since this is the
@@ -2456,7 +2472,7 @@ class _NewChartDialog(QDialog):
         self._gen_after_total = QLabel("", self._gen_panel)
         self._gen_after_total.setStyleSheet("color: #909090;")
         self._gen_after_total.setVisible(bool(self._existing_patches))
-        gg.addWidget(self._gen_after_total, 18, 0, 1, 8)
+        gg.addWidget(self._gen_after_total, 21, 0, 1, 8)
 
         for cb in (self._gen_cube, self._gen_corners, self._gen_spirals,
                    self._gen_skin, self._gen_blues, self._gen_greens,
@@ -2472,65 +2488,99 @@ class _NewChartDialog(QDialog):
         # at any setting (Knut, #78). The old edges↔cube auto-sync is gone (the
         # cube spin already refreshes the counts, which now drive the edges total).
         # --- Multi-ink rows (#72 Tier C) — shown only in states 2/3 ---------
-        # A separate widget above the RGB grid so the state-1 panel stays
-        # pixel-identical. Even coverage replaces the RGB-cube constructs;
-        # per-ink ramps + ink-pair overprints are the N-native staples.
-        self._nch_gen_box = QWidget(parent)
-        self._nch_gen_box.setObjectName("nch_gen_box")
-        ng = QGridLayout(self._nch_gen_box)
-        ng.setContentsMargins(0, 0, 0, 4)
-        ng.setHorizontalSpacing(8)
-        ng.setVerticalSpacing(4)
+        # Grid rows 0–2 of the SAME grid as the RGB sets (which start at row
+        # 3), so counts and ⓘ icons share one column geometry; every widget
+        # here starts hidden and _apply_gen_state_gating reveals them for
+        # multi-ink devices. State-1 stays pixel-identical (hidden grid rows
+        # collapse to zero height).
+        self._nch_gen_widgets: list = []   # every widget of the 3 rows
+
+        def _nch_add(w, row: int, col: int):
+            gg.addWidget(w, row, col)
+            self._nch_gen_widgets.append(w)
+
         self._nch_targen = QCheckBox(tr("Even coverage (targen)"),
-                                     self._nch_gen_box)
+                                     self._gen_panel)
         self._nch_targen.setChecked(True)
         self._nch_targen.setToolTip(
             tr("Spreads patches evenly across every ink combination your "
-               "printer can mix — targen's optimised distribution, the "
-               "backbone of a first multi-ink profile. With a preconditioning "
-               "profile set, the spread follows the printer's real response "
-               "instead of the theoretical ink space."))
+               "printer can mix — the backbone of a good multi-ink profile, "
+               "and the multi-ink replacement for the RGB cube sets.\n\n"
+               "Argyll's targen places each patch so the whole ink space is "
+               "covered without wasteful clumps, always staying inside the "
+               "ink limit above. \"Patches\" is simply how many you want — "
+               "more patches, finer coverage, longer measuring.\n\n"
+               "With a preconditioning profile set, the spread follows your "
+               "printer's real response instead of the theoretical ink "
+               "space, so patches land where the printer actually needs "
+               "them. For a first-ever chart (no profile yet), this set plus "
+               "the ramps below is exactly the right starting point."))
         self._nch_targen.toggled.connect(self._update_gen_counts)
         self._nch_targen_n = _spin(8, 4000, 800)
         self._nch_targen_count = _count_label()
-        ng.addWidget(self._nch_targen, 0, 0)
-        ng.addWidget(QLabel(tr("patches:")), 0, 1)
-        ng.addWidget(self._nch_targen_n, 0, 2)
-        ng.addWidget(self._nch_targen_count, 0, 7)
-        self._nch_perink = QCheckBox(tr("Per-ink ramps"), self._nch_gen_box)
+        _nch_add(self._nch_targen, 0, 0)
+        _nch_add(QLabel(tr("patches:")), 0, 1)
+        _nch_add(self._nch_targen_n, 0, 2)
+        _nch_add(self._nch_targen_count, 0, 7)
+        self._nch_perink = QCheckBox(tr("Per-ink ramps"), self._gen_panel)
         self._nch_perink.setChecked(True)
         self._nch_perink.setToolTip(
-            tr("A tone ramp of every ink on its own, up to 100 % — how each "
-               "ink behaves alone, from highlight to full coverage. The "
-               "profile needs these to know each ink's own character."))
+            tr("A tone ramp of every ink on its own — from a light tint up "
+               "to 100 % coverage, in the number of steps you choose here.\n\n"
+               "This shows the profile how each ink behaves by itself: how "
+               "fast it darkens, where it saturates, what its pure colour "
+               "looks like on your paper. Without these single-ink patches "
+               "the profile only ever sees inks mixed together and has to "
+               "guess each one's own character.\n\n"
+               "\"Steps/ink\" is the number of tones per ink — 8 is a solid "
+               "default; use more for inks with strong tonal behaviour "
+               "(e.g. black on matte papers)."))
         self._nch_perink.toggled.connect(self._update_gen_counts)
         self._nch_perink_n = _spin(2, 64, 8)
         self._nch_perink_count = _count_label()
-        ng.addWidget(self._nch_perink, 1, 0)
-        ng.addWidget(QLabel(tr("steps/ink:")), 1, 1)
-        ng.addWidget(self._nch_perink_n, 1, 2)
-        ng.addWidget(self._nch_perink_count, 1, 7)
-        self._nch_pairs = QCheckBox(tr("Ink-pair overprints"), self._nch_gen_box)
+        _nch_add(self._nch_perink, 1, 0)
+        _nch_add(QLabel(tr("steps/ink:")), 1, 1)
+        _nch_add(self._nch_perink_n, 1, 2)
+        _nch_add(self._nch_perink_count, 1, 7)
+        self._nch_pairs = QCheckBox(tr("Ink-pair overprints"), self._gen_panel)
         self._nch_pairs.setChecked(True)
         self._nch_pairs.setToolTip(
-            tr("Two inks printed together, stepped up in tandem for every "
-               "ink pair — how the inks mix on paper. Kept inside the ink "
-               "limit by construction (each ink stays at or below half the "
-               "limit)."))
+            tr("Two inks printed on top of each other, stepped up together, "
+               "for every possible pair of your inks.\n\n"
+               "Mixing on paper is where printers surprise you: cyan over "
+               "yellow doesn't just add up — the inks bleed, trap and darken "
+               "differently on every paper. These patches show the profile "
+               "exactly how each pair really combines, which sharpens all "
+               "the mixed colours in between.\n\n"
+               "Safe by design: each ink in a pair stays at or below half "
+               "the ink limit, so no overprint patch can ever exceed it. "
+               "\"Steps/pair\" is the number of tones per pair — with many "
+               "inks the pair count grows quickly, so a small number of "
+               "steps is usually plenty."))
         self._nch_pairs.toggled.connect(self._update_gen_counts)
         self._nch_pairs_n = _spin(1, 32, 4)
         self._nch_pairs_count = _count_label()
-        ng.addWidget(self._nch_pairs, 2, 0)
-        ng.addWidget(QLabel(tr("steps/pair:")), 2, 1)
-        ng.addWidget(self._nch_pairs_n, 2, 2)
-        ng.addWidget(self._nch_pairs_count, 2, 7)
-        ng.setColumnStretch(6, 1)
-        self._nch_gen_box.setVisible(False)
+        _nch_add(self._nch_pairs, 2, 0)
+        _nch_add(QLabel(tr("steps/pair:")), 2, 1)
+        _nch_add(self._nch_pairs_n, 2, 2)
+        _nch_add(self._nch_pairs_count, 2, 7)
+        # ⓘ per row in col 8, counts in col 7 — shared grid, aligned for free.
+        for row, cb, title in (
+                (0, self._nch_targen, tr("Even coverage (targen)")),
+                (1, self._nch_perink, tr("Per-ink ramps")),
+                (2, self._nch_pairs, tr("Ink-pair overprints"))):
+            tip = _magenta_tip(title, cb.toolTip(), self._gen_panel,
+                               min_width=360)
+            gg.addWidget(tip, row, 8,
+                         Qt.AlignmentFlag.AlignTop
+                         | Qt.AlignmentFlag.AlignHCenter)
+            self._nch_gen_widgets.append(tip)
+        for w in self._nch_gen_widgets:
+            w.setVisible(False)
         # Original RGB tooltips, restored when the device returns to state 1
         # (the gating swaps in the greyed-explanation texts, #72).
         self._gen_orig_tooltips: dict = {}
 
-        indent.addWidget(self._nch_gen_box)
         indent.addWidget(self._gen_panel)
         return indent
 
@@ -2814,8 +2864,7 @@ class _NewChartDialog(QDialog):
         on = self._gen_sets_active()
         self._gen_panel.setEnabled(on)
         state = self._nch_state()
-        if getattr(self, "_nch_gen_box", None) is not None:
-            self._nch_gen_box.setEnabled(on)
+        if getattr(self, "_nch_targen", None) is not None:
             for cb, spin, lbl, count in (
                 (self._nch_targen, self._nch_targen_n, self._nch_targen_count,
                  lambda: self._nch_targen_n.value()),
@@ -2828,6 +2877,7 @@ class _NewChartDialog(QDialog):
             ):
                 spin.setEnabled(cb.isChecked())
                 lbl.setText(_patches_label(count()) if state != 1 else "")
+                _hint_count_inactive(lbl, cb.isChecked())
         # Grey each row's size control(s) when its set is unticked.
         for cb, spins in (
             (self._gen_cube, (self._gen_cube_n,)),
@@ -2861,8 +2911,11 @@ class _NewChartDialog(QDialog):
             n = count()
             label.setText(_patches_label(n))
             # Disabled rows never contribute (#72 states 2/3: a ticked but
-            # greyed RGB-cube/look-based row must not count or build).
-            if cb.isChecked() and cb.isEnabled():
+            # greyed RGB-cube/look-based row must not count or build); the
+            # strike-through marks any non-contributing row's count (Basti).
+            active = cb.isChecked() and cb.isEnabled()
+            _hint_count_inactive(label, active)
+            if active:
                 total += n
         if state != 1:
             for cb, count in (
@@ -2899,6 +2952,8 @@ class _NewChartDialog(QDialog):
         wb_n = G.white_black_count(self._gen_whiteblack_n.value(),
                                    sets_have, sets_have)
         self._gen_whiteblack_count.setText(_patches_label(wb_n))
+        _hint_count_inactive(self._gen_whiteblack_count,
+                             self._gen_whiteblack.isChecked())
         if self._gen_whiteblack.isChecked():
             total += wb_n
         # Fill remaining gaps tops the whole chart (existing + sets + white/black)
@@ -2907,6 +2962,7 @@ class _NewChartDialog(QDialog):
         fill_n = G.fill_gaps_count(total + len(self._existing_patches),
                                    self._effective_fill_target())
         self._gen_fill_count.setText(_patches_label(fill_n))
+        _hint_count_inactive(self._gen_fill_count, self._gen_fill.isChecked())
         if self._gen_fill.isChecked():
             total += fill_n
         # Total = the patches the current set selection produces (the additions:
