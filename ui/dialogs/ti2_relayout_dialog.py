@@ -1191,16 +1191,14 @@ class _NewChartDialog(QDialog):
         # setFixedWidth (stylesheet minimums win over widget constraints) —
         # relax it per-widget so these stay icon-sized square buttons.
         self._nch_prof_browse.setStyleSheet(
-            "min-width: 0px; padding: 1px 4px;")
-        self._nch_prof_browse.setFixedWidth(30)   # height: the QSS 22px cap
+            "min-width: 20px; max-width: 20px; padding: 1px 4px;")
         self._nch_prof_browse.clicked.connect(self._browse_precond)
         prow.addWidget(self._nch_prof_browse, 1, 1)
         self._nch_prof_clear = QPushButton("×", self._nch_prof_row)
         self._nch_prof_clear.setToolTip(tr("Clear the profile"))
         self._nch_prof_clear.setObjectName("compact_input")
         self._nch_prof_clear.setStyleSheet(
-            "min-width: 0px; padding: 1px 4px;")
-        self._nch_prof_clear.setFixedWidth(30)
+            "min-width: 20px; max-width: 20px; padding: 1px 4px;")
         self._nch_prof_clear.clicked.connect(self._clear_precond)
         prow.addWidget(self._nch_prof_clear, 1, 2)
         self._nch_prof_status = QLabel("", self._nch_prof_row)
