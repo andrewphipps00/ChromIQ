@@ -1187,12 +1187,19 @@ class _NewChartDialog(QDialog):
         self._nch_prof_browse.setIcon(load_magenta_folder_icon())
         self._nch_prof_browse.setToolTip(tr("Choose an ICC profile…"))
         self._nch_prof_browse.setObjectName("compact_input")
+        # The app-wide QPushButton QSS sets min-width: 72px, which overrides
+        # setFixedWidth (stylesheet minimums win over widget constraints) —
+        # relax it per-widget so these stay icon-sized square buttons.
+        self._nch_prof_browse.setStyleSheet(
+            "min-width: 0px; padding: 1px 4px;")
         self._nch_prof_browse.setFixedWidth(30)   # height: the QSS 22px cap
         self._nch_prof_browse.clicked.connect(self._browse_precond)
         prow.addWidget(self._nch_prof_browse, 1, 1)
         self._nch_prof_clear = QPushButton("×", self._nch_prof_row)
         self._nch_prof_clear.setToolTip(tr("Clear the profile"))
         self._nch_prof_clear.setObjectName("compact_input")
+        self._nch_prof_clear.setStyleSheet(
+            "min-width: 0px; padding: 1px 4px;")
         self._nch_prof_clear.setFixedWidth(30)
         self._nch_prof_clear.clicked.connect(self._clear_precond)
         prow.addWidget(self._nch_prof_clear, 1, 2)

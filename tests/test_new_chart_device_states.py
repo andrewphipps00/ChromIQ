@@ -233,6 +233,17 @@ def test_nch_program_builds_device_tuples(dlg, monkeypatch):
     assert (0.0, 0.0, 0.0, 100.0) in prog
 
 
+def test_profile_buttons_stay_icon_sized(dlg):
+    # The app-wide QPushButton QSS (min-width: 72px) must not widen these —
+    # stylesheet minimums override setFixedWidth, so the per-widget override
+    # has to hold (Basti's live review, twice).
+    _pick_device(dlg, "cmyk")
+    dlg.show()
+    for btn in (dlg._nch_prof_browse, dlg._nch_prof_clear):
+        assert btn.width() <= 34, f"{btn.toolTip()}: {btn.width()}px wide"
+    dlg.close()
+
+
 def test_cube_hidden_on_restored_multiink_state(qapp, tmp_path):
     # Basti's repro: create a CMYK patch set, reopen the dialog — the device
     # state is remembered, and the 3D preview must be hidden from the start
