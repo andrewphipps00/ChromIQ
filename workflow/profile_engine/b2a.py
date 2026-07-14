@@ -331,30 +331,3 @@ def inverse_curves(curves: np.ndarray, knots: int = 256) -> np.ndarray:
     for c in range(n):
         out[c] = np.interp(xs, curves[c], xp)   # swap axes = inverse
     return out
-
-
-def smooth_oog(device: np.ndarray, residual: np.ndarray, grid: int,
-               threshold: float = 1.0, rounds: int = 2) -> np.ndarray:
-    """Average out-of-gamut nodes with their 6-neighbourhood.
-
-    In-gamut nodes are authoritative (GN converged there); OOG clamps can land
-    on different cube faces from one node to the next, so a little diffusion
-    keeps the separations smooth where the data doesn't constrain them.
-    """
-    n = device.shape[1]
-    dev = device.reshape(grid, grid, grid, n).copy()
-    oog = (residual > threshold).reshape(grid, grid, grid)
-    pad_spec = [(1, 1)] * 3 + [(0, 0)]
-    for _ in range(rounds):
-        padded = np.pad(dev, pad_spec, mode="edge")
-        acc = np.zeros_like(dev)
-        for ax in range(3):
-            sl_lo = [slice(1, -1)] * 3 + [slice(None)]
-            sl_hi = [slice(1, -1)] * 3 + [slice(None)]
-            sl_lo[ax] = slice(0, -2)
-            sl_hi[ax] = slice(2, None)
-            acc += padded[tuple(sl_lo)] + padded[tuple(sl_hi)]
-        blur = acc / 6.0
-        dev[oog] = 0.5 * dev[oog] + 0.5 * blur[oog]
-    out = dev.reshape(-1, n)
-    return np.clip(out, 0.0, 1.0)
