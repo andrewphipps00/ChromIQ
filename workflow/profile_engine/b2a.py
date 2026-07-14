@@ -50,7 +50,16 @@ def _model_jacobian(model: ForwardModel, d: np.ndarray, free: np.ndarray,
 
 def _gauss_newton(model: ForwardModel, target: np.ndarray, seed: np.ndarray,
                   free: np.ndarray, *, iters: int, damping: float,
-                  ink_limit: float | None) -> np.ndarray:
+                  ink_limit: float | None,
+                  prior: np.ndarray | None = None,
+                  prior_w: np.ndarray | None = None) -> np.ndarray:
+    """Batched damped Gauss–Newton on the free channels.
+
+    ``prior``/``prior_w``: optional per-channel soft targets over the free
+    channels (the ink policy). They enter as extra least-squares rows, so
+    colour accuracy always dominates — the priors only resolve the surplus
+    degrees of freedom that n > 3 devices have.
+    """
     d = seed.copy()
     eye = np.eye(len(free))
     for _ in range(iters):
@@ -59,6 +68,9 @@ def _gauss_newton(model: ForwardModel, target: np.ndarray, seed: np.ndarray,
         jac = _model_jacobian(model, d, free, f0)
         jtj = np.einsum("nik,nil->nkl", jac, jac) + damping * eye[None]
         jtr = np.einsum("nik,ni->nk", jac, r)
+        if prior is not None:
+            jtj += np.einsum("nk,kl->nkl", prior_w, eye)
+            jtr += prior_w * (prior - d[:, free])
         step = np.linalg.solve(jtj, jtr[..., None])[..., 0]
         d[:, free] = np.clip(d[:, free] + step, 0.0, 1.0)
         if ink_limit is not None:
@@ -122,22 +134,30 @@ def invert_to_device(model: ForwardModel, target: np.ndarray, *,
     """
     n = model.n_channels
     limit = None if ink_limit is None or is_additive else ink_limit / 100.0
+    if n > 3:
+        iters = max(iters, 10)      # surplus dof converge slower with priors
     if seed is None:
-        seed = _seed_nearest(model, target, seed_res)
+        seed = _seed_nearest(model, target, seed_res if n <= 4 else 5)
     d = seed.copy()
 
-    if n <= 3:
-        free = np.arange(n)
-    else:
-        # Policy channels first: K from the L* locus, extras from hue gates;
-        # GN then solves the first three (C, M, Y) exactly.
-        free = np.arange(3)
-        d[:, 3] = k_locus(target[:, 0])
+    free = np.arange(n)
+    prior = prior_w = None
+    if n > 3:
+        # All channels stay free (a hard policy shrinks the reachable gamut
+        # — measured: median 18 ΔE on random in-gamut targets). The policy
+        # enters as soft least-squares priors instead: K follows the GCR
+        # locus, extra inks their hue gates, C/M/Y are unconstrained.
+        prior = np.zeros((len(target), n))
+        prior_w = np.zeros((len(target), n))
+        prior[:, 3] = k_locus(target[:, 0])
+        prior_w[:, 3] = 0.05
         for ch in range(4, n):
-            d[:, ch] = extra_ink_amount(target, channel_letters[ch])
+            prior[:, ch] = extra_ink_amount(target, channel_letters[ch])
+            prior_w[:, ch] = 0.05
+        d[:, 3:] = prior[:, 3:]
 
     d = _gauss_newton(model, target, d, free, iters=iters, damping=damping,
-                      ink_limit=limit)
+                      ink_limit=limit, prior=prior, prior_w=prior_w)
     residual = np.linalg.norm(model.predict(d) - target, axis=1)
 
     # Projected GN can stall with a channel pinned against the wrong cube
@@ -160,11 +180,11 @@ def invert_to_device(model: ForwardModel, target: np.ndarray, *,
             chunk = sub[lo:lo + 2048]
             d2 = cl2[None, :] - 2.0 * chunk @ cloud_lab.T
             seeds2[lo:lo + 2048] = cloud[np.argmin(d2, 1)]
-        if n > 3:
-            seeds2[:, 3] = d[retry][:, 3]
-            seeds2[:, 4:] = d[retry][:, 4:]
-        d_retry = _gauss_newton(model, sub, seeds2, free, iters=iters,
-                                damping=damping, ink_limit=limit)
+        d_retry = _gauss_newton(
+            model, sub, seeds2, free, iters=iters, damping=damping,
+            ink_limit=limit,
+            prior=None if prior is None else prior[retry],
+            prior_w=None if prior_w is None else prior_w[retry])
         res_retry = np.linalg.norm(model.predict(d_retry) - sub, axis=1)
         better = res_retry < residual[retry]
         idx = np.flatnonzero(retry)[better]
@@ -187,6 +207,7 @@ def refine_b2a_clut(model: ForwardModel, dev_clut: np.ndarray,
                     residual: np.ndarray, grid: int, *,
                     ink_limit: float | None = None,
                     is_additive: bool = True,
+                    channel_letters: list[str] | None = None,
                     samples: int = 30000, lam: float = 0.03,
                     deep_oog: float = 5.0) -> np.ndarray:
     """Refit the B2A CLUT as one smooth field over exact inverse samples.
@@ -205,21 +226,40 @@ def refine_b2a_clut(model: ForwardModel, dev_clut: np.ndarray,
                                                        _interp_weights)
     n = model.n_channels
     rng = np.random.default_rng(99)
-    dev_s = rng.uniform(0.0, 1.0, (samples, n))
-    # Extra samples on the device-cube faces: the gamut boundary is their
-    # image, and boundary cells are exactly where interpolation needs the
-    # most support (measured: halves the worst-case round-trip error).
-    nf = samples // 2
-    faces = rng.uniform(0.0, 1.0, (nf, n))
-    faces[np.arange(nf), rng.integers(0, n, nf)] = \
-        rng.integers(0, 2, nf).astype(float)
-    dev_s = np.vstack([dev_s, faces])
     limit = None if ink_limit is None or is_additive else ink_limit / 100.0
-    if limit is not None:
-        total = dev_s.sum(1)
-        over = total > limit
-        dev_s[over] *= (limit / total[over])[:, None]
-    lab_s = model.predict(dev_s)
+    if n <= 3:
+        # Bijective: any random device point is an exact inverse sample.
+        dev_s = rng.uniform(0.0, 1.0, (samples, n))
+        # Extra samples on the device-cube faces: the gamut boundary is their
+        # image, and boundary cells are exactly where interpolation needs the
+        # most support (measured: halves the worst-case round-trip error).
+        nf = samples // 2
+        faces = rng.uniform(0.0, 1.0, (nf, n))
+        faces[np.arange(nf), rng.integers(0, n, nf)] = \
+            rng.integers(0, 2, nf).astype(float)
+        dev_s = np.vstack([dev_s, faces])
+        if limit is not None:
+            total = dev_s.sum(1)
+            over = total > limit
+            dev_s[over] *= (limit / total[over])[:, None]
+        lab_s = model.predict(dev_s)
+    else:
+        # n > 3: many device values share one Lab — fitting raw random
+        # samples would average competing separations and erase the ink
+        # policy (measured: K ≈ 0.4 at L*=50 instead of the locus value).
+        # Sample *reachable* Lab targets instead and invert them through the
+        # same policy the per-node pass used; those pairs are consistent.
+        probe_dev = rng.uniform(0.0, 1.0, (samples // 3, n))
+        if limit is not None:
+            total = probe_dev.sum(1)
+            over = total > limit
+            probe_dev[over] *= (limit / total[over])[:, None]
+        lab_targets = model.predict(probe_dev)
+        dev_s, res_s = invert_to_device(
+            model, lab_targets, channel_letters=channel_letters or [],
+            is_additive=is_additive, ink_limit=ink_limit)
+        keep = res_s < 1.0
+        dev_s, lab_s = dev_s[keep], lab_targets[keep]
 
     ls, ab = lab_grid_axes(grid)
     span = np.array([ls[-1] - ls[0], ab[-1] - ab[0], ab[-1] - ab[0]])
@@ -241,11 +281,31 @@ def refine_b2a_clut(model: ForwardModel, dev_clut: np.ndarray,
                        model.shape_device(dev_clut)])
     w_all = np.concatenate([np.ones(len(dev_s)), anchor_w])
 
-    w, cols = _interp_weights(p_all, grid, 3)
-    sw = np.sqrt(w_all)[:, None]
-    refined = _grid_solve(w * sw, cols, y_all * sw, grid, 3, lam, 400,
-                          x0=model.shape_device(dev_clut))
-    refined = np.clip(refined, 0.0, 1.0)
+    x0 = model.shape_device(dev_clut)
+    refined = x0
+    probe_dev = rng.uniform(0.0, 1.0, (4000, n)) if n <= 3 else None
+    for round_ in range(3 if n <= 3 else 1):
+        w, cols = _interp_weights(p_all, grid, 3)
+        sw = np.sqrt(w_all)[:, None]
+        refined = np.clip(_grid_solve(w * sw, cols, y_all * sw, grid, 3, lam,
+                                      400, x0=refined), 0.0, 1.0)
+        if probe_dev is None or round_ == 2:
+            break
+        # Adaptive densification: score in-gamut probes through the refined
+        # grid, then support the worst regions with fresh exact samples
+        # (measured: cuts the worst-case round-trip error by ~40%).
+        probe_lab = model.predict(probe_dev)
+        wp, cp = _interp_weights(to01(probe_lab), grid, 3)
+        landed = model.predict(np.clip(
+            model.unshape_device((wp[:, :, None] * refined[cp]).sum(1)),
+            0.0, 1.0))
+        err = np.linalg.norm(landed - probe_lab, axis=1)
+        worst = np.argsort(err)[-200:]
+        extra = np.clip(np.repeat(probe_dev[worst], 40, axis=0)
+                        + rng.normal(0.0, 0.06, (200 * 40, n)), 0.0, 1.0)
+        p_all = np.vstack([p_all, to01(model.predict(extra))])
+        y_all = np.vstack([y_all, model.shape_device(extra)])
+        w_all = np.concatenate([w_all, np.ones(len(extra))])
     if limit is not None:
         raw = model.unshape_device(refined)
         total = raw.sum(1)

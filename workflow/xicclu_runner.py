@@ -57,7 +57,18 @@ def _run_xicclu(
     input_lines: Sequence[str],
     runner: Callable[..., subprocess.CompletedProcess],
 ) -> list[list[float]]:
-    """One xicclu process over all ``input_lines``; parsed per-line results."""
+    """One xicclu process over all ``input_lines``; parsed per-line results.
+
+    Falls back to ``icclu`` (a pure table walk) when xicclu's reverse
+    machinery rejects the profile — its rspl code is compiled for at most 4
+    device channels (``rev_set_lchw can't handle di = N``, ArgyllCMS 3.5.0),
+    so 5+ channel profiles (the engine's nCLR output, #122) need the fallback
+    for *both* directions. icclu understands ``-f``/``-i``/``-p`` but none of
+    the inversion options (``-k``/``-l``/``-fif``); those are dropped — for
+    engine profiles the ink limit is already baked into the B2A table.
+    Scale note (verified live): icclu ``-pX`` returns XYZ on the 0..1 scale
+    where xicclu returns ×100 — rescaled here so callers see one grammar.
+    """
     exe = Path(bin_dir) / argyll_binary("xicclu")
     if not exe.exists():
         raise XiccluError(f"xicclu not found in {bin_dir}")
@@ -67,6 +78,8 @@ def _run_xicclu(
                    capture_output=True, text=True, timeout=_TIMEOUT_S)
     except subprocess.TimeoutExpired as exc:
         raise XiccluError(f"xicclu timed out after {_TIMEOUT_S}s") from exc
+    if r.returncode != 0 and "can't handle di" in (r.stderr or r.stdout):
+        return _run_icclu_fallback(bin_dir, args, profile, input_lines, runner)
     if r.returncode != 0:
         raise XiccluError(
             f"xicclu failed ({r.returncode}): {(r.stderr or r.stdout).strip()}")
@@ -89,6 +102,59 @@ def _run_xicclu(
     if len(out) != len(input_lines):
         raise XiccluError(
             f"xicclu returned {len(out)} results for {len(input_lines)} queries")
+    return out
+
+
+def _run_icclu_fallback(
+    bin_dir: str | Path,
+    args: list[str],
+    profile: str | Path,
+    input_lines: Sequence[str],
+    runner: Callable[..., subprocess.CompletedProcess],
+) -> list[list[float]]:
+    """Re-run a >4-channel lookup through icclu (see :func:`_run_xicclu`)."""
+    exe = Path(bin_dir) / argyll_binary("icclu")
+    if not exe.exists():
+        raise XiccluError(f"icclu not found in {bin_dir}")
+    keep: list[str] = []
+    xyz_out = False
+    for a in args:
+        if a == "-fif":
+            keep.append("-fb")          # table walk instead of inversion
+        elif a.startswith(("-k", "-l")):
+            continue                    # baked into engine B2A tables
+        else:
+            keep.append(a)
+        if a == "-pX":
+            xyz_out = True
+    log.info("xicclu can't invert >4-channel profile — using icclu fallback")
+    cmd = [str(exe), *keep, str(profile)]
+    try:
+        r = runner(cmd, input="\n".join(input_lines) + "\n",
+                   capture_output=True, text=True, timeout=_TIMEOUT_S)
+    except subprocess.TimeoutExpired as exc:
+        raise XiccluError(f"icclu timed out after {_TIMEOUT_S}s") from exc
+    if r.returncode != 0:
+        raise XiccluError(
+            f"icclu failed ({r.returncode}): {(r.stderr or r.stdout).strip()}")
+    out: list[list[float]] = []
+    for line in r.stdout.splitlines():
+        if "->" not in line:
+            continue
+        vals: list[float] = []
+        for tok in line.rsplit("->", 1)[1].split():
+            try:
+                vals.append(float(tok))
+            except ValueError:
+                break
+        if not vals:
+            raise XiccluError(f"unparseable icclu line: {line!r}")
+        if xyz_out:
+            vals = [v * 100.0 for v in vals]     # icclu -pX is 0..1 scale
+        out.append(vals)
+    if len(out) != len(input_lines):
+        raise XiccluError(
+            f"icclu returned {len(out)} results for {len(input_lines)} queries")
     return out
 
 

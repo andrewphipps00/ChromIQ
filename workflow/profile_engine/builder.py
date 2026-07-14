@@ -131,7 +131,8 @@ def build_profile(ti3_path: Path | str, out_path: Path | str,
     # the CLUT, with the inverse shaper curves as B2A output tables.
     dev_clut_shaped = b2a_mod.refine_b2a_clut(
         model, dev_clut, residual, b2a_grid,
-        ink_limit=ink_limit, is_additive=meas.is_additive)
+        ink_limit=ink_limit, is_additive=meas.is_additive,
+        channel_letters=meas.channel_letters)
     in_gamut = residual <= 1.0
 
     _emit(settings, "Writing the profile…")
