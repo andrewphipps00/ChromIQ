@@ -1100,7 +1100,7 @@ class _NewChartDialog(QDialog):
         self._ink_limit.setObjectName("compact_input")
         _as_compact(self._ink_limit)
         lrow.addWidget(self._ink_limit)
-        lrow.addWidget(_magenta_tip(
+        _limit_tip = _magenta_tip(
             tr("Ink limit"),
             tr("The most total ink one patch may lay down, as a percentage. "
                "100 % per ink — so a four-ink printer could in theory reach "
@@ -1116,9 +1116,12 @@ class _NewChartDialog(QDialog):
                "  • Profile time: the same limit is passed to the profile "
                "builder, so the finished profile never asks the printer for "
                "more ink than the chart tested. ChromIQ keeps the two in "
-               "sync for you.")))
+               "sync for you."))
         lrow.addStretch(1)
-        dvg.addWidget(self._nch_limit_row, 2, 0, 1, 3)
+        # Limit row spans the content columns; its ⓘ sits in the shared
+        # right-edge icon column, aligned under the other ⓘs (Basti).
+        dvg.addWidget(self._nch_limit_row, 2, 0, 1, 2)
+        dvg.addWidget(_limit_tip, 2, 2)
 
         # Preconditioning profile — optional; unlocks the look-based sets.
         self._nch_prof_row = QWidget(dev_box)
