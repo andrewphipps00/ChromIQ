@@ -1,0 +1,192 @@
+"""COLOR_REP-agnostic ``.ti3`` reader for the profile engine (#122).
+
+Unlike :mod:`workflow.ti3_analysis` (RGB-only, feeds the measurement
+inspector), this reader accepts any device colour representation Argyll's
+chartread can produce — ``iRGB``, ``CMYK``, ``CMYKOG``, light-ink reps like
+``CMYKcm`` — and returns the device values as an (N, n) array plus the
+measured XYZ.
+
+Colour bases (the maths-A lesson, measured: the wrong basis costs ~7 ΔE
+median):
+
+* ``lab_absolute`` — Lab against D50 from the raw measured XYZ. This is what
+  ``xicclu -ia`` speaks; use it for gamut work and cross-checks.
+* ``lab_relative`` — media-relative Lab: measured XYZ Bradford-adapted from
+  the *media white* to D50, so paper → exactly L*=100. This is what the
+  profile's LUTs store (relative colorimetric); the ``wtpt`` tag plus the
+  ``arts`` (Bradford) tag let CMMs reconstruct absolute colorimetry.
+"""
+from __future__ import annotations
+
+import re
+from dataclasses import dataclass
+from functools import cached_property
+from pathlib import Path
+
+import numpy as np
+
+from workflow.profile_engine.icc_writer import BRADFORD
+
+D50_XYZ100 = np.array([96.42, 100.0, 82.49])
+
+# Channel letters as they appear in COLOR_REP / field suffixes, multi-char
+# tokens first (medium inks "2c…", light-light black "1k", light inks
+# lowercase). Order = greedy tokeniser preference, not colorant order.
+_LETTER_RE = re.compile(r"2c|2m|2y|2k|1k|[cmyk]|[A-Z]")
+
+
+class Ti3Error(ValueError):
+    """A .ti3 the profile engine cannot use (message is user-facing)."""
+
+
+def split_rep_letters(device_rep: str) -> list[str]:
+    """``"CMYKOG"`` → ``["C","M","Y","K","O","G"]``; handles ``cm``/``2c``/``1k``."""
+    letters = _LETTER_RE.findall(device_rep)
+    if "".join(letters) != device_rep:
+        raise Ti3Error(f"Unrecognised colour representation {device_rep!r}.")
+    return letters
+
+
+@dataclass
+class Ti3Measurement:
+    path: Path
+    color_rep: str                    # full token, e.g. "CMYK_XYZ"
+    device_rep: str                   # device part, e.g. "CMYK" / "RGB"
+    channel_letters: list[str]        # per-channel rep letters
+    device: np.ndarray                # (N, n) fractions 0..1
+    xyz: np.ndarray                   # (N, 3) absolute, Y=100 scale
+    keywords: dict[str, str]
+    text: str                         # full file text (embedded as 'targ')
+
+    @property
+    def n_channels(self) -> int:
+        return self.device.shape[1]
+
+    @property
+    def is_additive(self) -> bool:
+        """True when device 100% = white (RGB-like), False for ink counts."""
+        return self.device_rep in ("RGB", "W")
+
+    @property
+    def ink_limit(self) -> float | None:
+        """TOTAL_INK_LIMIT keyword in percent, if stamped."""
+        v = self.keywords.get("TOTAL_INK_LIMIT")
+        try:
+            return float(v) if v is not None else None
+        except ValueError:
+            return None
+
+    # ------------------------------------------------------------------
+    @cached_property
+    def white_index(self) -> int:
+        """Row index of the media-white patch (device white, brightest Y)."""
+        target = 1.0 if self.is_additive else 0.0
+        dist = np.abs(self.device - target).sum(1)
+        near = np.flatnonzero(dist <= dist.min() + 1e-9)
+        return int(near[np.argmax(self.xyz[near, 1])])
+
+    @cached_property
+    def media_white_xyz(self) -> np.ndarray:
+        return self.xyz[self.white_index].copy()
+
+    @cached_property
+    def black_index(self) -> int:
+        return int(np.argmin(self.xyz[:, 1]))
+
+    @cached_property
+    def xyz_relative(self) -> np.ndarray:
+        """Measured XYZ Bradford-adapted media-white → D50 (Y=100 scale)."""
+        cone = BRADFORD @ (self.xyz.T / 100.0)
+        cone_w = BRADFORD @ (self.media_white_xyz / 100.0)
+        cone_d50 = BRADFORD @ (D50_XYZ100 / 100.0)
+        adapted = np.linalg.inv(BRADFORD) @ (cone * (cone_d50 / cone_w)[:, None])
+        return adapted.T * 100.0
+
+    @cached_property
+    def lab_relative(self) -> np.ndarray:
+        return xyz_to_lab(self.xyz_relative)
+
+    @cached_property
+    def lab_absolute(self) -> np.ndarray:
+        return xyz_to_lab(self.xyz)
+
+
+def xyz_to_lab(xyz100: np.ndarray, white: np.ndarray = D50_XYZ100) -> np.ndarray:
+    f = xyz100 / white[None, :]
+    f = np.where(f > (6 / 29) ** 3, np.cbrt(f), f / (3 * (6 / 29) ** 2) + 4 / 29)
+    return np.stack([116 * f[:, 1] - 16,
+                     500 * (f[:, 0] - f[:, 1]),
+                     200 * (f[:, 1] - f[:, 2])], 1)
+
+
+def lab_to_xyz(lab: np.ndarray, white: np.ndarray = D50_XYZ100) -> np.ndarray:
+    fy = (lab[:, 0] + 16) / 116
+    fx = fy + lab[:, 1] / 500
+    fz = fy - lab[:, 2] / 200
+    f = np.stack([fx, fy, fz], 1)
+    v = np.where(f ** 3 > (6 / 29) ** 3, f ** 3, 3 * (6 / 29) ** 2 * (f - 4 / 29))
+    return v * white[None, :]
+
+
+_KW_RE = re.compile(r'^([A-Z0-9_]+)\s+"?([^"\n]*)"?\s*$')
+
+
+def read_ti3(path: Path | str) -> Ti3Measurement:
+    """Parse a ``.ti3`` into device n-D + XYZ arrays (Lab-only files accepted)."""
+    p = Path(path)
+    text = p.read_text(errors="replace")
+    fm = re.search(r"BEGIN_DATA_FORMAT\s*\n(.*?)\nEND_DATA_FORMAT", text, re.S)
+    dm = re.search(r"BEGIN_DATA\s*\n(.*?)\nEND_DATA", text, re.S)
+    if not fm or not dm:
+        raise Ti3Error(f"{p.name}: not a CGATS measurement file "
+                       "(missing DATA_FORMAT / DATA block).")
+    fields = fm.group(1).split()
+    rows = [ln.split() for ln in dm.group(1).splitlines() if ln.strip()]
+    if not rows:
+        raise Ti3Error(f"{p.name}: the measurement table is empty.")
+
+    keywords: dict[str, str] = {}
+    for ln in text[:dm.start()].splitlines():
+        m = _KW_RE.match(ln.strip())
+        if m and m.group(2) != "":
+            keywords.setdefault(m.group(1), m.group(2))
+
+    color_rep = keywords.get("COLOR_REP", "")
+    device_rep = color_rep.split("_")[0].lstrip("i")
+    if not device_rep:
+        raise Ti3Error(f"{p.name}: no COLOR_REP keyword — cannot identify "
+                       "the device channels.")
+    prefix = device_rep + "_"
+    dev_fields = [f for f in fields if f.startswith(prefix)]
+    letters = split_rep_letters(device_rep)
+    want = [prefix + letter for letter in letters]
+    if dev_fields != want:
+        # Order in the file is authoritative as long as the set matches.
+        if sorted(dev_fields) != sorted(want):
+            raise Ti3Error(
+                f"{p.name}: device columns {dev_fields} don't match the "
+                f"colour representation {device_rep!r}.")
+        letters = [f[len(prefix):] for f in dev_fields]
+
+    idx = {f: i for i, f in enumerate(fields)}
+    ncol = len(fields)
+    for r in rows:
+        if len(r) < ncol:
+            raise Ti3Error(f"{p.name}: malformed data row (expected {ncol} "
+                           f"values, got {len(r)}).")
+
+    def grab(names: list[str]) -> np.ndarray:
+        cols = [idx[n] for n in names]
+        return np.array([[float(r[i]) for i in cols] for r in rows], float)
+
+    device = grab(dev_fields) / 100.0
+    if all(c in idx for c in ("XYZ_X", "XYZ_Y", "XYZ_Z")):
+        xyz = grab(["XYZ_X", "XYZ_Y", "XYZ_Z"])
+    elif all(c in idx for c in ("LAB_L", "LAB_A", "LAB_B")):
+        xyz = lab_to_xyz(grab(["LAB_L", "LAB_A", "LAB_B"]))
+    else:
+        raise Ti3Error(f"{p.name}: no XYZ or Lab columns in the measurement.")
+
+    return Ti3Measurement(path=p, color_rep=color_rep, device_rep=device_rep,
+                          channel_letters=letters, device=device, xyz=xyz,
+                          keywords=keywords, text=text)

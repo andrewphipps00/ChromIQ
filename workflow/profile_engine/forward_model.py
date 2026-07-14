@@ -1,0 +1,203 @@
+"""Forward model: device (n-D) → Lab, fitted from real measurements (maths A).
+
+A regularised multilinear grid fit — structurally what Argyll's rspl does —
+with per-channel monotone *input shaper curves* fitted alternately with the
+grid (colprof xlut's "in & out optimising"; measured on the real fixtures:
+the curves are what removes the off-sample error tail that a bare grid
+leaves).
+
+The fitted curves and grid map 1:1 onto an ``mft2`` A2B tag: curves → the
+input shaper tables, grid nodes → the CLUT (same resolution, so the LUT
+reproduces the fit exactly, no resampling error).
+
+Numpy-only; conjugate-gradient normal equations. Grid solve cost is
+O(N·2ⁿ + Gⁿ) per iteration — a 6-channel grid-9 fit (531 441 nodes) stays in
+the seconds range.
+"""
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+import numpy as np
+
+
+@dataclass
+class ForwardModel:
+    grid: int                      # nodes per axis
+    n_channels: int
+    nodes: np.ndarray              # (grid**n, 3) Lab at grid nodes
+    curves: np.ndarray             # (n, K) monotone 0..1 → 0..1 input shapers
+
+    def shape_device(self, dev: np.ndarray) -> np.ndarray:
+        """Apply the input shaper curves: device 0..1 → grid coordinate 0..1."""
+        k = self.curves.shape[1]
+        xp = np.linspace(0.0, 1.0, k)
+        out = np.empty_like(dev)
+        for c in range(self.n_channels):
+            out[:, c] = np.interp(dev[:, c], xp, self.curves[c])
+        return out
+
+    def unshape_device(self, shaped: np.ndarray) -> np.ndarray:
+        """Inverse of :meth:`shape_device` (curves are monotone)."""
+        k = self.curves.shape[1]
+        xp = np.linspace(0.0, 1.0, k)
+        out = np.empty_like(shaped)
+        for c in range(self.n_channels):
+            out[:, c] = np.interp(shaped[:, c], self.curves[c], xp)
+        return out
+
+    def predict(self, dev: np.ndarray) -> np.ndarray:
+        """(N, n) device 0..1 → (N, 3) Lab."""
+        w, cols = _interp_weights(self.shape_device(dev), self.grid,
+                                  self.n_channels)
+        return (w[:, :, None] * self.nodes[cols]).sum(1)
+
+    def clut_lab(self) -> np.ndarray:
+        """The A2B CLUT contents (= the grid nodes, first axis slowest)."""
+        return self.nodes
+
+
+def _corners(n: int) -> np.ndarray:
+    return np.stack(np.meshgrid(*([[0, 1]] * n), indexing="ij"),
+                    -1).reshape(-1, n)
+
+
+def _interp_weights(p01: np.ndarray, grid: int, n: int
+                    ) -> tuple[np.ndarray, np.ndarray]:
+    """Multilinear weights: (N, 2ⁿ) weights + flat node columns."""
+    corners = _corners(n)
+    idxf = np.clip(p01, 0.0, 1.0) * (grid - 1)
+    i0 = np.clip(idxf.astype(int), 0, grid - 2)
+    fr = idxf - i0
+    npts = len(p01)
+    w = np.ones((npts, len(corners)))
+    cols = np.zeros((npts, len(corners)), dtype=np.int64)
+    for k, c in enumerate(corners):
+        wk = np.ones(npts)
+        flat = np.zeros(npts, dtype=np.int64)
+        for d in range(n):
+            wk *= fr[:, d] if c[d] else 1.0 - fr[:, d]
+            flat = flat * grid + (i0[:, d] + c[d])
+        w[:, k] = wk
+        cols[:, k] = flat
+    return w, cols
+
+
+def _grid_solve(w: np.ndarray, cols: np.ndarray, y: np.ndarray, grid: int,
+                n: int, lam: float, iters: int, x0: np.ndarray | None = None
+                ) -> np.ndarray:
+    """CG on (WᵀW + λ LᵀL + εI) x = Wᵀy — the maths-A normal equations."""
+    ng = grid ** n
+    shape = (grid,) * n + (-1,)
+
+    def wmul(x: np.ndarray) -> np.ndarray:
+        return (w[:, :, None] * x[cols]).sum(1)
+
+    def wtmul(r: np.ndarray) -> np.ndarray:
+        o = np.zeros((ng, r.shape[1]))
+        np.add.at(o, cols.reshape(-1),
+                  (w[:, :, None] * r[:, None, :]).reshape(-1, r.shape[1]))
+        return o
+
+    def curvature(x: np.ndarray) -> np.ndarray:
+        """Σ_axis D₂ᵀD₂ x — second-difference penalty, interior rows only.
+
+        Symmetric PSD by construction (required by CG); its null space is the
+        per-axis linear functions, so unmeasured regions fill by smooth
+        linear interpolation/extrapolation from the data instead of decaying
+        toward zero (a zero decay puts a fake Lab(0,0,0) "black" into empty
+        corners — measured: it captured every deep-shadow B2A inversion).
+        """
+        x3 = x.reshape(shape)
+        o = np.zeros_like(x3)
+        mid = [slice(None)] * (n + 1)
+        lo = [slice(None)] * (n + 1)
+        hi = [slice(None)] * (n + 1)
+        for ax in range(n):
+            mid[ax] = slice(1, -1)
+            lo[ax] = slice(0, -2)
+            hi[ax] = slice(2, None)
+            d2 = (x3[tuple(lo)] - 2 * x3[tuple(mid)] + x3[tuple(hi)])
+            o[tuple(lo)] += d2
+            o[tuple(mid)] -= 2 * d2
+            o[tuple(hi)] += d2
+            mid[ax] = lo[ax] = hi[ax] = slice(None)
+        return o.reshape(ng, -1)
+
+    def amul(x: np.ndarray) -> np.ndarray:
+        return wtmul(wmul(x)) + lam * curvature(x) + 1e-7 * x
+
+    b = wtmul(y)
+    x = np.zeros((ng, y.shape[1])) if x0 is None else x0.copy()
+    r = b - amul(x)
+    p = r.copy()
+    rs = (r * r).sum()
+    for _ in range(iters):
+        ap = amul(p)
+        alpha = rs / max((p * ap).sum(), 1e-12)
+        x += alpha * p
+        r -= alpha * ap
+        rs2 = (r * r).sum()
+        if rs2 < 1e-9:
+            break
+        p = r + (rs2 / rs) * p
+        rs = rs2
+    return x
+
+
+def fit_forward_model(device: np.ndarray, lab: np.ndarray, *, grid: int,
+                      lam: float = 0.01, cg_iters: int = 800,
+                      curve_knots: int = 21, curve_rounds: int = 2,
+                      ) -> ForwardModel:
+    """Alternating curves ⇄ grid fit of device → Lab.
+
+    ``curve_rounds = 0`` gives the bare grid fit (P1 baseline); each round
+    refits every channel's monotone shaper by coordinate descent against the
+    current grid, then re-solves the grid with the shaped inputs.
+    """
+    npts, n = device.shape
+    curves = np.tile(np.linspace(0.0, 1.0, curve_knots), (n, 1))
+    model = ForwardModel(grid=grid, n_channels=n,
+                         nodes=np.zeros((grid ** n, 3)), curves=curves)
+
+    def solve(x0: np.ndarray | None = None) -> None:
+        shaped = model.shape_device(device)
+        w, cols = _interp_weights(shaped, grid, n)
+        model.nodes = _grid_solve(w, cols, lab, grid, n, lam, cg_iters, x0)
+
+    solve()
+    xp = np.linspace(0.0, 1.0, curve_knots)
+    for _ in range(curve_rounds):
+        for c in range(n):
+            _refit_curve(model, device, lab, c, xp)
+        solve(model.nodes)
+    return model
+
+
+def _refit_curve(model: ForwardModel, device: np.ndarray, lab: np.ndarray,
+                 channel: int, xp: np.ndarray) -> None:
+    """Coordinate descent on one channel's shaper knots (monotone-projected)."""
+    knots = model.curves[channel].copy()
+    k = len(knots)
+
+    def err(kn: np.ndarray) -> float:
+        model.curves[channel] = kn
+        return float(((model.predict(device) - lab) ** 2).sum())
+
+    base = err(knots)
+    step = 1.0 / (k - 1) / 2.0
+    for _ in range(3):                      # a few sweeps, halving the step
+        improved = False
+        for j in range(1, k - 1):           # endpoints pinned at 0 and 1
+            for delta in (step, -step):
+                trial = knots.copy()
+                trial[j] = np.clip(trial[j] + delta,
+                                   trial[j - 1] + 1e-4, trial[j + 1] - 1e-4)
+                e = err(trial)
+                if e < base - 1e-9:
+                    knots, base, improved = trial, e, True
+                    break
+        step /= 2.0
+        if not improved and step < 1e-3:
+            break
+    model.curves[channel] = knots
