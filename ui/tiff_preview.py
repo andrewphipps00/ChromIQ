@@ -114,6 +114,88 @@ _D_FLAG_CODE: dict[int, str] = {
     19: "llk",
 }
 
+# --- #72 Tier D: honest preview plumbing -----------------------------------
+# How the LAST separated-TIFF frame was rendered: "profile" (true colours via
+# cctiff + the chart's device profile) or "approx" (absorption composite).
+# Read by the preview widget right after loading to badge the picture; "" for
+# ordinary RGB pages (no badge).
+_render_mode: dict[str, str] = {"mode": ""}
+
+
+def _set_render_mode(mode: str) -> None:
+    _render_mode["mode"] = mode
+
+
+def last_render_mode() -> str:
+    return _render_mode["mode"]
+
+
+def _srgb_to_linear(a):
+    """sRGB-encoded 0..1 array → linear light."""
+    import numpy as np
+    return np.where(a <= 0.04045, a / 12.92, ((a + 0.055) / 1.055) ** 2.4)
+
+
+def _linear_to_srgb(a):
+    """Linear-light 0..1 array → sRGB encoding."""
+    import numpy as np
+    return np.where(a <= 0.0031308, a * 12.92, 1.055 * a ** (1 / 2.4) - 0.055)
+
+
+def _ink_absorption_linear(code: str) -> tuple[float, float, float]:
+    """Per-channel LINEAR-light absorption for one extra ink.
+
+    Preferred source: the ink's real Lab anchor from the i1Profiler export
+    reference data (EXTRA_INK; placeholders excluded) — Lab → linear sRGB of
+    the full ink on paper, absorption = 1 − transmittance. Fallback: the
+    hand-calibrated gamma-space table, linearised (its values are full-ink
+    sRGB responses, so decoding the implied colour is exact).
+    Cached per code.
+    """
+    cached = _ABS_LIN_CACHE.get(code)
+    if cached is not None:
+        return cached
+    rgb_lin = None
+    try:
+        from workflow.i1profiler_export import EXTRA_INK, _PLACEHOLDER_LAB
+        key = {"o": "O", "g": "G", "v": "V", "b": "B"}.get(code)
+        if key and key in EXTRA_INK and key not in _PLACEHOLDER_LAB:
+            L, a_, b_ = (float(v) for v in EXTRA_INK[key][1].split("|"))
+            rgb_lin = _lab_to_linear_srgb(L, a_, b_)
+    except Exception:  # noqa: BLE001 — reference data is best-effort here
+        rgb_lin = None
+    if rgb_lin is None:
+        ar, ag, ab = _INK_ABSORPTION.get(code, (0.87, 0.87, 0.87))
+        import numpy as np
+        rgb_lin = tuple(float(v) for v in
+                        _srgb_to_linear(np.array([1 - ar, 1 - ag, 1 - ab])))
+    out = tuple(min(1.0, max(0.0, 1.0 - t)) for t in rgb_lin)
+    _ABS_LIN_CACHE[code] = out  # type: ignore[assignment]
+    return out  # type: ignore[return-value]
+
+
+_ABS_LIN_CACHE: dict[str, tuple[float, float, float]] = {}
+
+
+def _lab_to_linear_srgb(L: float, a: float, b: float) -> tuple[float, float, float]:
+    """CIELab (D50) → linear sRGB (D50-adapted matrix), clipped to 0..1."""
+    import numpy as np
+    fy = (L + 16.0) / 116.0
+    fx = fy + a / 500.0
+    fz = fy - b / 200.0
+
+    def finv(t: float) -> float:
+        return t ** 3 if t > 6.0 / 29.0 else 3 * (6.0 / 29.0) ** 2 * (t - 4.0 / 29.0)
+
+    wp = (0.9642, 1.0, 0.8249)  # D50
+    xyz = np.array([finv(fx) * wp[0], finv(fy) * wp[1], finv(fz) * wp[2]])
+    m = np.linalg.inv(np.array([[0.4360747, 0.3850649, 0.1430804],
+                                [0.2225045, 0.7168786, 0.0606169],
+                                [0.0139322, 0.0971045, 0.7141733]]))
+    rgb = m @ xyz
+    return tuple(float(min(1.0, max(0.0, v))) for v in rgb)
+
+
 # Channel count → most common ink layout (fallback when sidecar is absent)
 _N_CHANNELS_FALLBACK: dict[int, list[str]] = {
     1: ["k"],
@@ -729,7 +811,32 @@ class TiffPreview(QWidget):
             self._img_label.setText(tr("Preview error:\n{exc}").format(exc=exc))
             return
 
+        self._update_render_badge()
         self._repaint_label()
+
+    def _update_render_badge(self) -> None:
+        """Honesty badge for device-native (multi-ink) pages (#72 Tier D):
+        'via profile' when the preview is a true colorimetric render, or a
+        clear note that the colours are approximate while the ink values in
+        the file are exact. Hidden for ordinary RGB pages."""
+        mode = last_render_mode()
+        if getattr(self, "_badge_lbl", None) is None:
+            if not mode:
+                return
+            self._badge_lbl = QLabel(self)
+            self._badge_lbl.setStyleSheet(
+                "QLabel { background: rgba(30, 30, 30, 185); color: #f4f2ef;"
+                " border-radius: 4px; padding: 2px 8px; font-size: 11px; }")
+            self._badge_lbl.raise_()
+        if not mode:
+            self._badge_lbl.setVisible(False)
+            return
+        self._badge_lbl.setText(
+            tr("True colours — via the chart's profile") if mode == "profile"
+            else tr("Approximate colours — the ink values in the file are exact"))
+        self._badge_lbl.adjustSize()
+        self._badge_lbl.move(12, self.height() - self._badge_lbl.height() - 12)
+        self._badge_lbl.setVisible(True)
 
     def _repaint_label(self) -> None:
         if not self._pixmap:
@@ -989,6 +1096,10 @@ class TiffPreview(QWidget):
     def resizeEvent(self, event) -> None:  # type: ignore[override]
         super().resizeEvent(event)
         self._repaint_label()
+        if getattr(self, "_badge_lbl", None) is not None \
+                and self._badge_lbl.isVisible():
+            self._badge_lbl.move(
+                12, self.height() - self._badge_lbl.height() - 12)
 
     def showEvent(self, event) -> None:  # type: ignore[override]
         super().showEvent(event)
@@ -1019,6 +1130,7 @@ class TiffPreview(QWidget):
     @staticmethod
     def _load_frame(path: Path, frame: int, ink_channels: list[str] | None) -> Image.Image:
         """Load one TIFF frame as RGB, handling CMYK and multi-channel Separated."""
+        _set_render_mode("")   # plain RGB pages carry no badge
         # Bypass PIL for known multi-channel files: PIL may silently return only 4 channels
         # from a Separated TIFF, dropping any extra ink channels without raising an exception.
         known_codes = ink_channels or _find_sidecar_channels(path)
@@ -1035,6 +1147,13 @@ class TiffPreview(QWidget):
             if img.mode in ("RGB", "RGBA"):
                 return img.convert("RGB")
             if img.mode == "CMYK":
+                # Device-native CMYK chart: true colours via the chart's own
+                # profile when known (#72 Tier D), else the ICC approximation.
+                cimg = TiffPreview._colorimetric_frame(path, frame)
+                if cimg is not None:
+                    _set_render_mode("profile")
+                    return cimg
+                _set_render_mode("approx")
                 return TiffPreview._cmyk_pil_to_rgb(img)
             return img.convert("RGB")
         except Exception:
@@ -1072,6 +1191,41 @@ class TiffPreview(QWidget):
         return Image.merge("RGB", (r, g, b))
 
     @staticmethod
+    def _colorimetric_frame(path: Path, frame: int) -> "Image.Image | None":
+        """True-colour render of a separated chart page via cctiff (#72 Tier D).
+
+        Only possible when the chart's device profile is discoverable next to
+        the TIFF (run's preconditioning.icc / meta.json recipe) and Argyll is
+        installed; returns None otherwise — callers fall back to the
+        approximate composite. Conversion results are cached by mtime.
+        """
+        try:
+            from workflow.colorimetric_preview import (
+                colorimetric_rgb_tiff, find_device_profile,
+            )
+            profile = find_device_profile(path)
+            if profile is None:
+                return None
+            from core.platform_paths import argyll_candidate_dirs
+            from core.resource_path import argyll_binary
+            bin_dir = next((d for d in argyll_candidate_dirs()
+                            if (d / argyll_binary("cctiff")).exists()), None)
+            if bin_dir is None:
+                return None
+            conv = colorimetric_rgb_tiff(path, profile, bin_dir)
+            if conv is None:
+                return None
+            img = Image.open(conv)
+            if hasattr(img, "seek"):
+                try:
+                    img.seek(frame)
+                except EOFError:
+                    pass
+            return img.convert("RGB")
+        except Exception:  # noqa: BLE001 — preview upgrade is best-effort
+            return None
+
+    @staticmethod
     def _tifffile_load_frame(
         path: Path, frame: int, ink_channels: list[str] | None
     ) -> Image.Image:
@@ -1103,20 +1257,31 @@ class TiffPreview(QWidget):
             or (["c", "m", "y", "k"] + ["k"] * max(0, n_ch - 4))
         )
 
-        # n_ch >= 4: ICC-convert CMYK base, then composite extra channels on top
+        # n_ch >= 4: a device-native chart. When the chart's own profile is
+        # known, render the TRUE colours through cctiff (#72 Tier D) — the
+        # honest picture; otherwise composite an approximation and say so.
         if n_ch >= 4:
+            img = TiffPreview._colorimetric_frame(path, frame)
+            if img is not None:
+                _set_render_mode("profile")
+                return img
+            _set_render_mode("approx")
             cmyk_img = Image.fromarray(data[:, :, :4], "CMYK")
             base = TiffPreview._cmyk_pil_to_rgb(cmyk_img)
             if n_ch == 4:
                 return base
-            ref = np.array(base, dtype=np.float32) / 255.0
+            # Extra inks multiply the base's REFLECTANCE — physical light is
+            # linear, so decode the sRGB gamma first and re-encode after
+            # (#72 Tier D item 2: overprints get visibly more believable).
+            ref = _srgb_to_linear(np.array(base, dtype=np.float32) / 255.0)
             for i, code in enumerate(codes[4:n_ch], start=4):
                 ink_val = data[:, :, i].astype(np.float32) / 255.0
-                ar, ag, ab = _INK_ABSORPTION.get(code, (0.87, 0.87, 0.87))
+                ar, ag, ab = _ink_absorption_linear(code)
                 ref[:, :, 0] *= 1.0 - ink_val * ar
                 ref[:, :, 1] *= 1.0 - ink_val * ag
                 ref[:, :, 2] *= 1.0 - ink_val * ab
-            return Image.fromarray((ref.clip(0, 1) * 255).astype(np.uint8), "RGB")
+            out = _linear_to_srgb(ref.clip(0.0, 1.0))
+            return Image.fromarray((out * 255.0 + 0.5).astype(np.uint8), "RGB")
 
         # n_ch < 4 but > 1: pure absorption compositing (RGB/CMY devices)
         h, w = data.shape[:2]
