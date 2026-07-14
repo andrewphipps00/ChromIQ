@@ -1,5 +1,4 @@
 {
-  "@language_name": "简体中文",
   "  •  Overwrite — replace the chart currently loaded in the Create Chart tab with this layout. The patch recipe and page layout there are updated and locked; your printer profile name and any measurements you've already taken are kept.\n  •  Save As — export the full chart (the patch list, the layout and the printable pages, plus the i1Profiler files and a colour list) to a folder you pick, without leaving the editor.\n  •  Cancel — go back to the editor and change nothing.": "  •  覆盖 —— 用此布局替换“创建图表”中当前加载的图表。那里的色块配方和页面布局会被更新并锁定；您的打印机配置文件名称和已进行的任何测量都会保留。\n  •  另存为 —— 将完整图表（色块列表、布局和可打印页面，以及 i1Profiler 文件和颜色列表）导出到您选择的文件夹，而无需离开编辑器。\n  •  取消 —— 返回编辑器，不做任何更改。",
   "  •  {bullet_text}": "  •  {bullet_text}",
   " (monitor profile is ICC v4 — used approximate sRGB)": "（显示器配置文件为 ICC v4 — 使用了近似 sRGB）",
@@ -113,6 +112,7 @@
   "<i>Use as base for a new profile</i> — copy the files to a new subfolder so you can build a separate ICC profile without overwriting the original.": "<i>用作新配置文件的基础</i> — 把文件复制到新的子文件夹，这样你可以生成一个独立的ICC配置文件而不覆盖原文件。",
   "<i>Use as base for a new profile</i> — copy the measurement to a new subfolder so you can build a separate ICC profile without overwriting the original.": "<i>用作新配置文件的基础</i> — 把测量复制到新的子文件夹，这样你可以生成一个独立的ICC配置文件而不覆盖原文件。",
   "<span style='color:#606060; font-size:11px'>-K and -I are mutually exclusive — enable only one at a time.</span>": "<span style='color:#606060; font-size:11px'>-K 和 -I 互斥 — 同一时间只能启用一个。</span>",
+  "@language_name": "简体中文",
   "A chart I made in ChromIQ": "在 ChromIQ 中创建的色卡",
   "A compact profile type: one tone curve per channel plus a 3×3 matrix. Great for well-behaved devices (monitors, scanners); ChromIQ's recommended type for scanner profiles.": "紧凑的类型：每通道一条色调曲线加一个 3×3 矩阵。适合表现规矩的设备（显示器、扫描仪）；ChromIQ 推荐用于扫描仪配置文件。",
   "A covered by B: {pct:.1f}%": "A被B覆盖: {pct:.1f}%",
@@ -1488,6 +1488,7 @@
   "Patch added. Updating preview…": "色块已添加。正在更新预览…",
   "Patch area alignment": "色块区域对齐",
   "Patch area alignment:": "色块区域对齐:",
+  "Patch colours can only be edited on RGB charts — this chart stores multi-ink values.": "Patch colours can only be edited on RGB charts — this chart stores multi-ink values.",
   "Patch consistency tolerance (-T)": "色块一致性容差 (-T)",
   "Patch count (with “patches”)": "色块数（带「patches」）",
   "Patch distribution": "色块分布",

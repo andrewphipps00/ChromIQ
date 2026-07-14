@@ -1,5 +1,4 @@
 {
-  "@language_name": "Français",
   "  •  Overwrite — replace the chart currently loaded in the Create Chart tab with this layout. The patch recipe and page layout there are updated and locked; your printer profile name and any measurements you've already taken are kept.\n  •  Save As — export the full chart (the patch list, the layout and the printable pages, plus the i1Profiler files and a colour list) to a folder you pick, without leaving the editor.\n  •  Cancel — go back to the editor and change nothing.": "  •  Remplacer — remplace la mire actuellement chargée dans Créer une mire par cette disposition. La recette de patchs et la disposition de page y sont mises à jour et verrouillées ; le nom de ton profil d’imprimante et les mesures déjà prises sont conservés.\n  •  Enregistrer sous — exporte la mire complète (la liste des patchs, la disposition et les pages imprimables, plus les fichiers i1Profiler et une liste de couleurs) vers un dossier de ton choix, sans quitter l’éditeur.\n  •  Annuler — reviens à l’éditeur sans rien changer.",
   "  •  {bullet_text}": "  •  {bullet_text}",
   " (monitor profile is ICC v4 — used approximate sRGB)": " (le profil du moniteur est ICC v4 — sRGB approximatif utilisé)",
@@ -113,6 +112,7 @@
   "<i>Use as base for a new profile</i> — copy the files to a new subfolder so you can build a separate ICC profile without overwriting the original.": "<i>Utiliser comme base d'un nouveau profil</i> — copier les fichiers dans un nouveau sous-dossier pour créer un profil ICC distinct sans écraser l'original.",
   "<i>Use as base for a new profile</i> — copy the measurement to a new subfolder so you can build a separate ICC profile without overwriting the original.": "<i>Utiliser comme base d'un nouveau profil</i> — copier la mesure dans un nouveau sous-dossier pour créer un profil ICC distinct sans écraser l'original.",
   "<span style='color:#606060; font-size:11px'>-K and -I are mutually exclusive — enable only one at a time.</span>": "<span style='color:#606060; font-size:11px'>-K et -I s'excluent mutuellement — n'active qu'une option à la fois.</span>",
+  "@language_name": "Français",
   "A chart I made in ChromIQ": "Une charte créée dans ChromIQ",
   "A compact profile type: one tone curve per channel plus a 3×3 matrix. Great for well-behaved devices (monitors, scanners); ChromIQ's recommended type for scanner profiles.": "Un type compact : une courbe tonale par canal plus une matrice 3×3. Idéal pour les appareils réguliers (écrans, scanners) ; le type recommandé par ChromIQ pour les profils de scanner.",
   "A covered by B: {pct:.1f}%": "A couvert par B : {pct:.1f} %",
@@ -1488,6 +1488,7 @@
   "Patch added. Updating preview…": "Plage ajoutée. Actualisation de l'aperçu…",
   "Patch area alignment": "Alignement de la zone de plages",
   "Patch area alignment:": "Alignement de la zone de plages :",
+  "Patch colours can only be edited on RGB charts — this chart stores multi-ink values.": "Patch colours can only be edited on RGB charts — this chart stores multi-ink values.",
   "Patch consistency tolerance (-T)": "Tolérance de cohérence (-T)",
   "Patch count (with “patches”)": "Nombre de plages (avec « patches »)",
   "Patch distribution": "Répartition des plages",

@@ -1,5 +1,4 @@
 {
-  "@language_name": "Nederlands",
   "  •  Overwrite — replace the chart currently loaded in the Create Chart tab with this layout. The patch recipe and page layout there are updated and locked; your printer profile name and any measurements you've already taken are kept.\n  •  Save As — export the full chart (the patch list, the layout and the printable pages, plus the i1Profiler files and a colour list) to a folder you pick, without leaving the editor.\n  •  Cancel — go back to the editor and change nothing.": "  •  Overschrijven — vervang de grafiek die nu in Grafiek maken is geladen door deze lay-out. Het patchrecept en de paginalay-out daar worden bijgewerkt en vergrendeld; je printerprofielnaam en eventuele reeds gedane metingen blijven behouden.\n  •  Opslaan als — exporteer de volledige grafiek (de patchlijst, de lay-out en de afdrukbare pagina’s, plus de i1Profiler-bestanden en een kleurenlijst) naar een map naar keuze, zonder de editor te verlaten.\n  •  Annuleren — ga terug naar de editor en wijzig niets.",
   "  •  {bullet_text}": "  •  {bullet_text}",
   " (monitor profile is ICC v4 — used approximate sRGB)": " (monitorprofiel is ICC v4 — benaderend sRGB gebruikt)",
@@ -113,6 +112,7 @@
   "<i>Use as base for a new profile</i> — copy the files to a new subfolder so you can build a separate ICC profile without overwriting the original.": "<i>Als basis voor een nieuw profiel gebruiken</i> — de bestanden naar een nieuwe submap kopiëren zodat je een apart ICC-profiel kunt maken zonder het origineel te overschrijven.",
   "<i>Use as base for a new profile</i> — copy the measurement to a new subfolder so you can build a separate ICC profile without overwriting the original.": "<i>Als basis voor een nieuw profiel gebruiken</i> — de meting naar een nieuwe submap kopiëren zodat je een apart ICC-profiel kunt maken zonder het origineel te overschrijven.",
   "<span style='color:#606060; font-size:11px'>-K and -I are mutually exclusive — enable only one at a time.</span>": "<span style='color:#606060; font-size:11px'>-K en -I sluiten elkaar uit — schakel er maar één tegelijk in.</span>",
+  "@language_name": "Nederlands",
   "A chart I made in ChromIQ": "Een in ChromIQ gemaakte chart",
   "A compact profile type: one tone curve per channel plus a 3×3 matrix. Great for well-behaved devices (monitors, scanners); ChromIQ's recommended type for scanner profiles.": "Een compact type: één tooncurve per kanaal plus een 3×3-matrix. Ideaal voor brave apparaten (monitors, scanners); ChromIQ's aanbevolen type voor scannerprofielen.",
   "A covered by B: {pct:.1f}%": "A gedekt door B: {pct:.1f}%",
@@ -1488,6 +1488,7 @@
   "Patch added. Updating preview…": "Meetveld toegevoegd. Voorbeeld wordt bijgewerkt…",
   "Patch area alignment": "Uitlijning meetveldgebied",
   "Patch area alignment:": "Uitlijning meetveldgebied:",
+  "Patch colours can only be edited on RGB charts — this chart stores multi-ink values.": "Patch colours can only be edited on RGB charts — this chart stores multi-ink values.",
   "Patch consistency tolerance (-T)": "Consistentietolerantie (-T)",
   "Patch count (with “patches”)": "Aantal meetvelden (met „patches“)",
   "Patch distribution": "Meetveldverdeling",

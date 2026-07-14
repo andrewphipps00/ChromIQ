@@ -1488,6 +1488,7 @@
   "Patch added. Updating preview…": "Messfeld hinzugefügt. Vorschau wird aktualisiert…",
   "Patch area alignment": "Ausrichtung des Messfeldbereichs",
   "Patch area alignment:": "Ausrichtung des Messfeldbereichs:",
+  "Patch colours can only be edited on RGB charts — this chart stores multi-ink values.": "Messfeld-Farben lassen sich nur bei RGB-Charts bearbeiten — dieses Chart enthält Mehrfarb-Tintenwerte.",
   "Patch consistency tolerance (-T)": "Feld-Konsistenztoleranz (-T)",
   "Patch count (with “patches”)": "Messfeld-Anzahl (mit „patches“)",
   "Patch distribution": "Messfeld-Verteilung",

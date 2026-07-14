@@ -1,5 +1,4 @@
 {
-  "@language_name": "Русский",
   "  •  Overwrite — replace the chart currently loaded in the Create Chart tab with this layout. The patch recipe and page layout there are updated and locked; your printer profile name and any measurements you've already taken are kept.\n  •  Save As — export the full chart (the patch list, the layout and the printable pages, plus the i1Profiler files and a colour list) to a folder you pick, without leaving the editor.\n  •  Cancel — go back to the editor and change nothing.": "  •  Перезаписать — заменить мишень, загруженную сейчас во вкладке «Создать мишень», этой компоновкой. Рецепт полей и компоновка страницы там обновляются и блокируются; имя вашего профиля принтера и уже сделанные измерения сохраняются.\n  •  Сохранить как — экспортировать всю мишень (список полей, компоновку и печатные страницы, а также файлы i1Profiler и список цветов) в выбранную папку, не выходя из редактора.\n  •  Отмена — вернуться в редактор, ничего не меняя.",
   "  •  {bullet_text}": "  •  {bullet_text}",
   " (monitor profile is ICC v4 — used approximate sRGB)": " (профиль монитора — ICC v4 — использован прибл. sRGB)",
@@ -113,6 +112,7 @@
   "<i>Use as base for a new profile</i> — copy the files to a new subfolder so you can build a separate ICC profile without overwriting the original.": "<i>Использовать как основу нового профиля</i> — скопировать файлы в новую подпапку, чтобы собрать отдельный ICC-профиль, не перезаписывая оригинал.",
   "<i>Use as base for a new profile</i> — copy the measurement to a new subfolder so you can build a separate ICC profile without overwriting the original.": "<i>Использовать как основу нового профиля</i> — скопировать измерение в новую подпапку, чтобы собрать отдельный ICC-профиль, не перезаписывая оригинал.",
   "<span style='color:#606060; font-size:11px'>-K and -I are mutually exclusive — enable only one at a time.</span>": "<span style='color:#606060; font-size:11px'>-K и -I взаимоисключающие — включайте только один.</span>",
+  "@language_name": "Русский",
   "A chart I made in ChromIQ": "Шкала, созданная в ChromIQ",
   "A compact profile type: one tone curve per channel plus a 3×3 matrix. Great for well-behaved devices (monitors, scanners); ChromIQ's recommended type for scanner profiles.": "Компактный тип: одна тоновая кривая на канал плюс матрица 3×3. Отличен для «послушных» устройств (мониторы, сканеры); рекомендуемый ChromIQ тип для профилей сканера.",
   "A covered by B: {pct:.1f}%": "A покрыт B: {pct:.1f}%",
@@ -1488,6 +1488,7 @@
   "Patch added. Updating preview…": "Патч добавлен. Обновление предпросмотра…",
   "Patch area alignment": "Выравнивание области патчей",
   "Patch area alignment:": "Выравнивание области патчей:",
+  "Patch colours can only be edited on RGB charts — this chart stores multi-ink values.": "Patch colours can only be edited on RGB charts — this chart stores multi-ink values.",
   "Patch consistency tolerance (-T)": "Допуск согласованности патчей (-T)",
   "Patch count (with “patches”)": "Число патчей (с «patches»)",
   "Patch distribution": "Распределение патчей",

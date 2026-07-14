@@ -1,5 +1,4 @@
 {
-  "@language_name": "Svenska",
   "  •  Overwrite — replace the chart currently loaded in the Create Chart tab with this layout. The patch recipe and page layout there are updated and locked; your printer profile name and any measurements you've already taken are kept.\n  •  Save As — export the full chart (the patch list, the layout and the printable pages, plus the i1Profiler files and a colour list) to a folder you pick, without leaving the editor.\n  •  Cancel — go back to the editor and change nothing.": "  •  Skriv över — ersätt diagrammet som nu är inläst i Skapa diagram med den här layouten. Patch-receptet och sidlayouten där uppdateras och låses; ditt skrivarprofilnamn och eventuella mätningar du redan gjort behålls.\n  •  Spara som — exportera hela diagrammet (patch-listan, layouten och de utskrivbara sidorna, plus i1Profiler-filerna och en färglista) till en mapp du väljer, utan att lämna redigeraren.\n  •  Avbryt — gå tillbaka till redigeraren utan att ändra något.",
   "  •  {bullet_text}": "  •  {bullet_text}",
   " (monitor profile is ICC v4 — used approximate sRGB)": " (skärmprofilen är ICC v4 — använde ungefärlig sRGB)",
@@ -113,6 +112,7 @@
   "<i>Use as base for a new profile</i> — copy the files to a new subfolder so you can build a separate ICC profile without overwriting the original.": "<i>Använd som grund för ny profil</i> — kopiera filerna till en ny undermapp så att du kan bygga en separat ICC-profil utan att skriva över originalet.",
   "<i>Use as base for a new profile</i> — copy the measurement to a new subfolder so you can build a separate ICC profile without overwriting the original.": "<i>Använd som grund för ny profil</i> — kopiera mätningen till en ny undermapp så att du kan bygga en separat ICC-profil utan att skriva över originalet.",
   "<span style='color:#606060; font-size:11px'>-K and -I are mutually exclusive — enable only one at a time.</span>": "<span style='color:#606060; font-size:11px'>-K och -I utesluter varandra — aktivera bara en åt gången.</span>",
+  "@language_name": "Svenska",
   "A chart I made in ChromIQ": "Ett chart skapat i ChromIQ",
   "A compact profile type: one tone curve per channel plus a 3×3 matrix. Great for well-behaved devices (monitors, scanners); ChromIQ's recommended type for scanner profiles.": "En kompakt typ: en tonkurva per kanal plus en 3×3-matris. Utmärkt för väluppfostrade enheter (skärmar, skannrar); ChromIQs rekommenderade typ för skannerprofiler.",
   "A covered by B: {pct:.1f}%": "A täckt av B: {pct:.1f}%",
@@ -1488,6 +1488,7 @@
   "Patch added. Updating preview…": "Fält tillagt. Uppdaterar förhandsvisning…",
   "Patch area alignment": "Justering av fältområde",
   "Patch area alignment:": "Justering av fältområde:",
+  "Patch colours can only be edited on RGB charts — this chart stores multi-ink values.": "Patch colours can only be edited on RGB charts — this chart stores multi-ink values.",
   "Patch consistency tolerance (-T)": "Fältkonsistens-tolerans (-T)",
   "Patch count (with “patches”)": "Antal fält (med ”patches”)",
   "Patch distribution": "Fältfördelning",

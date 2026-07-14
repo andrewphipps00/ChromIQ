@@ -344,6 +344,21 @@ def _to100(c: QColor) -> tuple[float, float, float]:
     return (c.red() / 255 * 100, c.green() / 255 * 100, c.blue() / 255 * 100)
 
 
+def _display100(vals: tuple, color_rep: str = "iRGB") -> tuple[float, float, float]:
+    """Device tuple (0..100, any channel count) → display RGB 0..100 (#72).
+
+    RGB programs pass through untouched (swatches stay pixel-identical for
+    RGB charts); anything else goes through the engine's display
+    approximation — the same colours the rendered chart preview shows.
+    """
+    rep = color_rep.lstrip("i").upper()
+    if len(vals) == 3 and rep == "RGB":
+        return vals  # type: ignore[return-value]
+    from workflow.layout_engine.colorants import to_display_rgb
+    r, g, b = to_display_rgb(tuple(vals), color_rep)
+    return (r / 255 * 100, g / 255 * 100, b / 255 * 100)
+
+
 def _swatch_icon(rgb: tuple[float, float, float], size: int = _SWATCH) -> QIcon:
     """Colour-filled swatch with a 1-px luminance-adaptive border so dark
     patches stay visible against the dark grid background and light patches
@@ -510,15 +525,19 @@ class _ReorderListWidget(QListWidget):
         super().__init__(parent)
         self._drag_originals: list[tuple[QListWidgetItem, QIcon]] = []
         self._drop_line: tuple[int, int, int] | None = None  # (x, y0, y1)
+        # Device tuple → display RGB (0..100) for swatch/ghost icons. The
+        # hosting dialog points this at its chart-aware converter when a
+        # non-RGB chart is loaded (#72); the default handles plain RGB.
+        self.display_rgb = _display100
 
     def startDrag(self, supported_actions) -> None:  # noqa: N802
         selected = self.selectedItems()
         size = self.iconSize().width() or _SWATCH
         self._drag_originals = [(it, it.icon()) for it in selected]
         for it, _ in self._drag_originals:
-            rgb = it.data(Qt.ItemDataRole.UserRole)
-            if rgb is not None:
-                it.setIcon(_ghost_swatch_icon(rgb, size))
+            dev = it.data(Qt.ItemDataRole.UserRole)
+            if dev is not None:
+                it.setIcon(_ghost_swatch_icon(self.display_rgb(dev), size))
         try:
             super().startDrag(supported_actions)
         finally:
@@ -3509,6 +3528,8 @@ class Ti2RelayoutDialog(QDialog):
         self._grid.setSelectionMode(QListWidget.SelectionMode.ExtendedSelection)
         self._grid.setIconSize(QSize(_SWATCH, _SWATCH))
         self._grid.setSpacing(0)        # gap is the delegate's per-cell trailing margin
+        # Drag-ghost icons follow the chart's colorspace (N-tuple aware, #72).
+        self._grid.display_rgb = self._display_rgb
         self._delegate = _SwatchDelegate(self._grid, _SWATCH)
         self._grid.setItemDelegate(self._delegate)
         self._grid.setGridSize(self._delegate.sizeHint(None, None))
@@ -4592,12 +4613,27 @@ class Ti2RelayoutDialog(QDialog):
         self._note_edit()
 
     # -- patch grid ---------------------------------------------------------
+    def _display_rgb(self, dev: tuple) -> tuple[float, float, float]:
+        """Device tuple → display RGB (0..100) for this chart's colorspace (#72)."""
+        return _display100(dev, self._spec.color_rep if self._spec else "iRGB")
+
+    def _patch_tooltip(self, n: int, dev: tuple) -> str:
+        """Grid tooltip: exact RGB format for RGB charts (unchanged), per-ink
+        values for multi-ink charts, e.g. ``#7  C 40 · M 10 · Y 0 · K 5`` (#72)."""
+        if self._spec is None or (len(dev) == 3
+                                  and self._spec.color_rep.lstrip("i") == "RGB"):
+            return f"#{n}  RGB {tuple(round(v) for v in dev)}"
+        inks = [f.split("_")[-1] for f in self._spec.dev_fields]
+        return f"#{n}  " + " · ".join(
+            f"{ink} {round(v)}" for ink, v in zip(inks, dev))
+
     def _populate_grid(self, program: list[tuple]) -> None:
         self._grid.clear()
-        for i, rgb in enumerate(program, start=1):
-            it = QListWidgetItem(_swatch_icon(rgb, self._swatch_size), str(i))
-            it.setData(Qt.ItemDataRole.UserRole, tuple(rgb))
-            it.setToolTip(f"#{i}  RGB {tuple(round(v) for v in rgb)}")
+        for i, dev in enumerate(program, start=1):
+            it = QListWidgetItem(
+                _swatch_icon(self._display_rgb(dev), self._swatch_size), str(i))
+            it.setData(Qt.ItemDataRole.UserRole, tuple(dev))
+            it.setToolTip(self._patch_tooltip(i, dev))
             self._grid.addItem(it)
         self._update_grid_count()
 
@@ -4605,9 +4641,9 @@ class Ti2RelayoutDialog(QDialog):
         """Refresh #1..#N labels + tooltips (after drag-reorder or add/remove)."""
         for i in range(self._grid.count()):
             it = self._grid.item(i)
-            rgb = it.data(Qt.ItemDataRole.UserRole)
+            dev = it.data(Qt.ItemDataRole.UserRole)
             it.setText(str(i + 1))
-            it.setToolTip(f"#{i + 1}  RGB {tuple(round(v) for v in rgb)}")
+            it.setToolTip(self._patch_tooltip(i + 1, dev))
         # Keep the top-right "… N patches …" readout in step with the grid:
         # _renumber runs after every add / remove / append / reorder.
         self._refresh_info()
@@ -4646,7 +4682,8 @@ class Ti2RelayoutDialog(QDialog):
         self._grid.setGridSize(self._delegate.sizeHint(None, None))
         for i in range(self._grid.count()):
             it = self._grid.item(i)
-            it.setIcon(_swatch_icon(it.data(Qt.ItemDataRole.UserRole), size))
+            it.setIcon(_swatch_icon(
+                self._display_rgb(it.data(Qt.ItemDataRole.UserRole)), size))
         self._grid.scheduleDelayedItemsLayout()
 
     def _set_show_numbers(self, on: bool) -> None:
@@ -4678,10 +4715,11 @@ class Ti2RelayoutDialog(QDialog):
         self._grid.scheduleDelayedItemsLayout()
         self._grid.viewport().update()
 
-    def _grid_item(self, rgb: tuple) -> QListWidgetItem:
-        """Build a grid item for one RGB patch (icon + UserRole payload)."""
-        it = QListWidgetItem(_swatch_icon(rgb, self._swatch_size), "")
-        it.setData(Qt.ItemDataRole.UserRole, tuple(rgb))
+    def _grid_item(self, dev: tuple) -> QListWidgetItem:
+        """Build a grid item for one patch (icon + UserRole device payload)."""
+        it = QListWidgetItem(_swatch_icon(self._display_rgb(dev),
+                                          self._swatch_size), "")
+        it.setData(Qt.ItemDataRole.UserRole, tuple(dev))
         return it
 
     def _add_patch(self) -> None:
@@ -4995,10 +5033,17 @@ class Ti2RelayoutDialog(QDialog):
 
         Format mirrors what :func:`workflow.ti2_relayout.parse_color_values`
         accepts so the file round-trips through the New chart dialog's
-        "Paste colour values" mode.
+        "Paste colour values" mode. The hex/RGB list formats are RGB-only by
+        definition; a multi-ink chart offers the i1Profiler pair instead
+        (#72 — a "50 40 30 10" ink line would silently misparse as RGB on
+        re-import, so it is not offered).
         """
         if self._grid.count() == 0:
             self._status.setText(tr("No patches to export."))
+            return
+        if self._spec is not None and \
+                self._spec.color_rep.lstrip("i").upper() != "RGB":
+            self._export_i1profiler()
             return
         from PyQt6.QtWidgets import QInputDialog
         fmt, ok = QInputDialog.getItem(
@@ -5048,12 +5093,12 @@ class Ti2RelayoutDialog(QDialog):
 
         Writes the same ``<base>.txt`` (CGATS) + ``<base>.pxf`` (CxF3) pair the
         Create Chart tab produces, so the layout the user designed here can be
-        handed straight to i1Profiler. RGB only (matching the editor and the
-        i1Profiler exporter); the program goes via a temp .ti1 the exporter
-        reads.
+        handed straight to i1Profiler. Channel-generic since #72: the program
+        goes via a temp .ti1 the exporter reads — RGB/CMYK sets get the
+        ``.txt`` + ``.pxf`` pair, CMYK+N sets the ``.pxf`` only (i1Profiler
+        accepts +N sets only as CxF; ``export_from_ti1`` decides).
         """
         import tempfile
-        from workflow.i1profiler_import import RgbPatch, write_ti1 as _write_ti1
         from workflow import i1profiler_export as X
 
         prog = self._program_from_grid()
@@ -5073,7 +5118,12 @@ class Ti2RelayoutDialog(QDialog):
         try:
             with tempfile.TemporaryDirectory() as td:
                 ti1 = Path(td) / f"{base}.ti1"
-                _write_ti1([RgbPatch(*rgb) for rgb in prog], ti1)
+                if self._spec is not None:
+                    R.write_ti1(self._spec, prog, ti1)
+                else:
+                    from workflow.i1profiler_import import RgbPatch, \
+                        write_ti1 as _write_ti1
+                    _write_ti1([RgbPatch(*rgb) for rgb in prog], ti1)
                 txt_out, pxf_out = X.export_from_ti1(
                     ti1, out_dir, base_name=base, descriptor=base)
         except Exception as exc:  # noqa: BLE001 — surface any writer failure
@@ -5086,7 +5136,20 @@ class Ti2RelayoutDialog(QDialog):
             if n_exp == 1 else
             tr("Exported {n} colours to {name}.").format(n=n_exp, name=name))
 
+    def _rgb_edit_allowed(self) -> bool:
+        """Colour-pick / lighten / darken act on RGB values — on a multi-ink
+        chart they would corrupt the ink tuples, so they are disabled until a
+        per-ink editor exists (#72, v1 limitation)."""
+        if self._spec is None or self._spec.color_rep.lstrip("i").upper() == "RGB":
+            return True
+        self._status.setText(
+            tr("Patch colours can only be edited on RGB charts — this chart "
+               "stores multi-ink values."))
+        return False
+
     def _set_patch_colour(self) -> None:
+        if not self._rgb_edit_allowed():
+            return
         items = self._grid.selectedItems()
         if not items:
             self._status.setText(tr("Select one or more patches first."))
@@ -5106,6 +5169,8 @@ class Ti2RelayoutDialog(QDialog):
         self._schedule_auto_refresh()
 
     def _transform_selection(self, factor: float) -> None:
+        if not self._rgb_edit_allowed():
+            return
         items = self._grid.selectedItems()
         if not items:
             self._status.setText(tr("Select one or more patches first."))
@@ -6439,7 +6504,14 @@ class Ti2RelayoutDialog(QDialog):
 
         Same format :func:`workflow.ti2_relayout.parse_color_values` accepts, so
         the file round-trips through the New chart dialog's "Paste colour values".
+        RGB charts only — for a multi-ink chart nothing is written (the format
+        cannot carry ink values; matches ``chart_exports.write_colours_txt``).
         """
+        if self._spec is not None and \
+                self._spec.color_rep.lstrip("i").upper() != "RGB":
+            log.debug("colour-list export skipped: %s chart is not RGB",
+                      self._spec.color_rep)
+            return
         lines: list[str] = []
         for r100, g100, b100 in self._program_from_grid():
             r = max(0, min(255, round(r100 / 100 * 255)))

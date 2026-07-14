@@ -1,5 +1,4 @@
 {
-  "@language_name": "日本語",
   "  •  Overwrite — replace the chart currently loaded in the Create Chart tab with this layout. The patch recipe and page layout there are updated and locked; your printer profile name and any measurements you've already taken are kept.\n  •  Save As — export the full chart (the patch list, the layout and the printable pages, plus the i1Profiler files and a colour list) to a folder you pick, without leaving the editor.\n  •  Cancel — go back to the editor and change nothing.": "  •  上書き — 「チャート作成」に現在読み込まれているチャートをこのレイアウトで置き換えます。そこのパッチレシピとページレイアウトは更新されロックされます。プリンタープロファイル名とすでに行った測定は保持されます。\n  •  名前を付けて保存 — チャート全体（パッチ一覧、レイアウト、印刷可能なページ、さらに i1Profiler ファイルと色リスト）を、エディターを離れずに選んだフォルダーにエクスポートします。\n  •  キャンセル — 何も変更せずにエディターに戻ります。",
   "  •  {bullet_text}": "  •  {bullet_text}",
   " (monitor profile is ICC v4 — used approximate sRGB)": "（モニタープロファイルは ICC v4 — おおよその sRGB を使用）",
@@ -113,6 +112,7 @@
   "<i>Use as base for a new profile</i> — copy the files to a new subfolder so you can build a separate ICC profile without overwriting the original.": "<i>新しいプロファイルのベースとして使用</i> — ファイルを新しいサブフォルダにコピーし、元を上書きせずに別のICCプロファイルを作成できるようにします。",
   "<i>Use as base for a new profile</i> — copy the measurement to a new subfolder so you can build a separate ICC profile without overwriting the original.": "<i>新しいプロファイルのベースとして使用</i> — 測定を新しいサブフォルダにコピーし、元を上書きせずに別のICCプロファイルを作成できるようにします。",
   "<span style='color:#606060; font-size:11px'>-K and -I are mutually exclusive — enable only one at a time.</span>": "<span style='color:#606060; font-size:11px'>-K と -I は同時に使えません — 一度に有効にできるのは片方だけです。</span>",
+  "@language_name": "日本語",
   "A chart I made in ChromIQ": "ChromIQ で作成したチャート",
   "A compact profile type: one tone curve per channel plus a 3×3 matrix. Great for well-behaved devices (monitors, scanners); ChromIQ's recommended type for scanner profiles.": "コンパクトな形式：チャネルごとのトーンカーブと 3×3 行列。素直な機器（モニター、スキャナー）に最適で、ChromIQ がスキャナープロファイルに推奨する形式です。",
   "A covered by B: {pct:.1f}%": "AのうちBが覆う割合: {pct:.1f}%",
@@ -1488,6 +1488,7 @@
   "Patch added. Updating preview…": "パッチを追加しました。プレビュー更新中…",
   "Patch area alignment": "パッチ領域の配置",
   "Patch area alignment:": "パッチ領域の配置:",
+  "Patch colours can only be edited on RGB charts — this chart stores multi-ink values.": "Patch colours can only be edited on RGB charts — this chart stores multi-ink values.",
   "Patch consistency tolerance (-T)": "パッチ整合性許容値 (-T)",
   "Patch count (with “patches”)": "パッチ数（「patches」付き）",
   "Patch distribution": "パッチ分布",
