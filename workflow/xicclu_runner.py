@@ -33,6 +33,7 @@ generator previews clash with a running chartread/colprof.
 """
 from __future__ import annotations
 
+import math
 import subprocess
 from pathlib import Path
 from typing import Callable, Sequence
@@ -151,3 +152,56 @@ def backward_device(
     lines = [" ".join(f"{v:.6f}" for v in row) for row in lab_rows]
     res = _run_xicclu(bin_dir, args, profile, lines, runner)
     return [tuple(v * 100.0 for v in row) for row in res]
+
+
+# ---------------------------------------------------------------------------
+# The perceptual bridge (#72 Tier C): RGB generator sets → device values
+# ---------------------------------------------------------------------------
+
+def _srgb_to_lab_rows(rgb_rows: Sequence[tuple[float, float, float]]
+                      ) -> list[tuple[float, float, float]]:
+    """sRGB 0..100 triples → Lab, via the patch generators' own converter (so
+    the bridge sees exactly the colours the RGB sets were designed in)."""
+    import numpy as np
+    from workflow.patch_generators import _srgb_to_lab
+
+    arr = np.asarray(rgb_rows, dtype=float) / 100.0
+    lab = _srgb_to_lab(arr)
+    return [tuple(float(v) for v in row) for row in lab]
+
+
+def to_device_via_profile(
+    rgb_patches: Sequence[tuple[float, float, float]],
+    profile: str | Path,
+    bin_dir: str | Path,
+    *,
+    intent: str = "r",
+    k_rule: str | None = "r",
+    ink_limit: float | None = None,
+    moved_threshold: float = 3.0,
+    runner: Callable[..., subprocess.CompletedProcess] = subprocess.run,
+) -> tuple[list[tuple[float, ...]], int]:
+    """Every RGB generator set becomes a device-value factory (#72 Tier C).
+
+    RGB (0..100) → Lab → backward through the preconditioning ``profile`` →
+    device tuples (0..100), plus the **honest displacement count**: the device
+    values are run forward again and any patch whose round-trip Lab moved by
+    ΔE76 > ``moved_threshold`` counts as "outside this printer's gamut, moved
+    to the nearest printable colour" (#72 appendix B — the 3.0 threshold is
+    empirically clean: fully-in-gamut sets stay under it, OOG sets are far
+    above). Clipped targets land on *distinct* surface points, so patches are
+    kept, deduplicated later in device space.
+
+    Returns ``(device_rows, moved_count)``. One xicclu process per direction.
+    """
+    if not rgb_patches:
+        return [], 0
+    labs = _srgb_to_lab_rows(rgb_patches)
+    dev = backward_device(labs, profile, bin_dir, intent=intent,
+                          k_rule=k_rule, ink_limit=ink_limit, runner=runner)
+    back = forward_lab(dev, profile, bin_dir, intent=intent, runner=runner)
+    moved = sum(
+        1 for want, got in zip(labs, back)
+        if math.dist(want, got) > moved_threshold
+    )
+    return dev, moved

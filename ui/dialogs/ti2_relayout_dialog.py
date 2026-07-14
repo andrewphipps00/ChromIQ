@@ -253,6 +253,7 @@ def _wire_spacer_mutex(boxes: tuple) -> None:
         cb.toggled.connect(_make(i))
 from workflow import ti2_relayout as R
 from workflow import patch_generators as G
+from workflow import patch_generators_nd as NDG
 
 log = get_logger(__name__)
 
@@ -721,6 +722,9 @@ class _NewChartDialog(QDialog):
         self.result_program: list[tuple] | None = None
         self.result_options: R.LayoutOptions | None = None
         self.result_basename: str = "chart"
+        # Honest OOG note from the perceptual bridge (#72, appendix B) — set
+        # by _build_generated_program_nch, surfaced by the editor's status.
+        self.nch_moved_note: str = ""
         # Engine layout-mode the user picked in the Chart section (only
         # meaningful when the engine is on); the editor applies these to the
         # new chart's recipe (#93).
@@ -1429,7 +1433,14 @@ class _NewChartDialog(QDialog):
     # ---- Device / three-state model (#72) --------------------------------
 
     def _nch_device_type(self) -> str:
-        """targen ``-d`` value for the chosen device type ("2" RGB, "4" CMYK…)."""
+        """targen ``-d`` value for the chosen device type ("2" RGB, "4" CMYK…).
+
+        The Add-patches dialog shares the generate panel but has no Device box
+        (it always extends the loaded chart, whose colorspace is fixed) — it
+        reports RGB here so all state-2/3 gating stays off.
+        """
+        if getattr(self, "_device_type", None) is None:
+            return "2"
         return "2" if (self._device_type.currentData() in (None, "rgb")) else "4"
 
     def _nch_ink_codes(self) -> list[str]:
@@ -1568,21 +1579,79 @@ class _NewChartDialog(QDialog):
         self._update_gen_counts()
         self._do_push_live_preview()
 
+    # Generator-row classification for the three-state model (#72): RGB-cube
+    # constructs never generalise (a 9-step factorial in 7 channels is ~4.8 M
+    # patches); look-based sets need the preconditioning profile; the rest is
+    # N-native via the device adapters in workflow.patch_generators_nd.
+    _GEN_CUBE_BOUND = ("cube", "edges", "corners", "spirals")
+    _GEN_PERCEPTUAL = ("skin", "blues", "greens", "sunrises", "flamingos",
+                       "hs", "pastel", "image")
+
     def _apply_gen_state_gating(self, state: int) -> None:
-        """Gate the source modes + generator panel for the three-state model.
+        """Gate the source modes + generator rows for the three-state model.
 
         State 1 (RGB): everything enabled, exactly as before #72. States 2/3:
-        hex/RGB pasting is meaningless and the colour-set generators are RGB
-        constructs until the N-native/perceptual engines unlock them (Tier C
-        re-gates per row); targen seeding covers multi-ink coverage today. The
-        3D cube preview is an RGB-cube projection — hidden for multi-ink.
+        hex/RGB pasting is meaningless; the RGB-cube rows stay greyed forever
+        (Even coverage is their replacement), the look-based rows unlock with
+        a channel-matching profile (state 3), the N-native rows (neutral
+        ramp, near-neutral rings, white/black, fill, unique) work in both.
+        The 3D cube preview is an RGB-cube projection — hidden for multi-ink.
         """
         rgb = state == 1
         self._mode_paste.setEnabled(rgb)
-        self._mode_generate.setEnabled(rgb)
-        if not rgb and (self._mode_paste.isChecked()
-                        or self._mode_generate.isChecked()):
+        if not rgb and self._mode_paste.isChecked():
             self._mode_seed.setChecked(True)
+        # Per-row gating + honest tooltips. Original RGB tooltips are stashed
+        # once and restored on the way back to state 1.
+        if not self._gen_orig_tooltips:
+            for name in self._GEN_CUBE_BOUND + self._GEN_PERCEPTUAL + (
+                    "nearneutral",):
+                cb = getattr(self, f"_gen_{name}")
+                self._gen_orig_tooltips[name] = cb.toolTip()
+        tip_cube = tr(
+            "These sets trace the corners and edges of the RGB colour cube, "
+            "which only exists on RGB printers. \"Even coverage\" does the "
+            "same job for multi-ink printers — it spreads patches across "
+            "every ink combination your device can print.")
+        tip_profile = tr(
+            "This set places patches by how colours look (skin, sky, "
+            "foliage…). On a multi-ink printer the app first needs a "
+            "preconditioning profile, so it knows which ink mix produces "
+            "each colour. Add one in the Preconditioning profile field above "
+            "— its tooltip walks through the two-pass workflow, and the "
+            "field accepts any profile made for this exact printer and ink "
+            "set. On RGB printers this set is always available.")
+        tip_rings_nch = tr(
+            "Greys are where your eyes are pickiest, and where a printer "
+            "drifts first. This set places rings of patches around the grey "
+            "axis, so the profile learns exactly how much cyan, magenta and "
+            "yellow your printer needs for a clean, cast-free neutral — the "
+            "classic \"grey balance\" chart, built in.\n\n"
+            "Without a preconditioning profile the rings are centred on "
+            "equal amounts of C, M and Y. On a real printer that mix "
+            "usually looks slightly warm or green — that's expected, and "
+            "it's exactly why the rings exist: they bracket the neutral "
+            "region generously, and the measurement finds the true neutral "
+            "inside them. Tip: keep the ring offset at its default or "
+            "larger here.\n\n"
+            "With a preconditioning profile (see the field above) the same "
+            "rings are re-centred on your printer's actual neutral, so "
+            "every patch lands closer to where it matters most. Same "
+            "checkbox — the app simply aims better once it knows your "
+            "printer.")
+        for name in self._GEN_CUBE_BOUND:
+            cb = getattr(self, f"_gen_{name}")
+            cb.setEnabled(rgb)
+            cb.setToolTip(self._gen_orig_tooltips[name] if rgb else tip_cube)
+        for name in self._GEN_PERCEPTUAL:
+            cb = getattr(self, f"_gen_{name}")
+            cb.setEnabled(rgb or state == 3)
+            cb.setToolTip(self._gen_orig_tooltips[name] if rgb else
+                          (tip_profile if state == 2 else
+                           self._gen_orig_tooltips[name]))
+        self._gen_nearneutral.setToolTip(
+            self._gen_orig_tooltips["nearneutral"] if rgb else tip_rings_nch)
+        self._nch_gen_box.setVisible(not rgb)
         # The fold button lives next to the cube; hide both for multi-ink.
         # Only act on a real transition so state-1 refreshes don't resize
         # the window through _on_fold_toggled.
@@ -2402,6 +2471,66 @@ class _NewChartDialog(QDialog):
         # it reads the cube's steps-per-axis directly at build time and stays even
         # at any setting (Knut, #78). The old edges↔cube auto-sync is gone (the
         # cube spin already refreshes the counts, which now drive the edges total).
+        # --- Multi-ink rows (#72 Tier C) — shown only in states 2/3 ---------
+        # A separate widget above the RGB grid so the state-1 panel stays
+        # pixel-identical. Even coverage replaces the RGB-cube constructs;
+        # per-ink ramps + ink-pair overprints are the N-native staples.
+        self._nch_gen_box = QWidget(parent)
+        self._nch_gen_box.setObjectName("nch_gen_box")
+        ng = QGridLayout(self._nch_gen_box)
+        ng.setContentsMargins(0, 0, 0, 4)
+        ng.setHorizontalSpacing(8)
+        ng.setVerticalSpacing(4)
+        self._nch_targen = QCheckBox(tr("Even coverage (targen)"),
+                                     self._nch_gen_box)
+        self._nch_targen.setChecked(True)
+        self._nch_targen.setToolTip(
+            tr("Spreads patches evenly across every ink combination your "
+               "printer can mix — targen's optimised distribution, the "
+               "backbone of a first multi-ink profile. With a preconditioning "
+               "profile set, the spread follows the printer's real response "
+               "instead of the theoretical ink space."))
+        self._nch_targen.toggled.connect(self._update_gen_counts)
+        self._nch_targen_n = _spin(8, 4000, 800)
+        self._nch_targen_count = _count_label()
+        ng.addWidget(self._nch_targen, 0, 0)
+        ng.addWidget(QLabel(tr("patches:")), 0, 1)
+        ng.addWidget(self._nch_targen_n, 0, 2)
+        ng.addWidget(self._nch_targen_count, 0, 7)
+        self._nch_perink = QCheckBox(tr("Per-ink ramps"), self._nch_gen_box)
+        self._nch_perink.setChecked(True)
+        self._nch_perink.setToolTip(
+            tr("A tone ramp of every ink on its own, up to 100 % — how each "
+               "ink behaves alone, from highlight to full coverage. The "
+               "profile needs these to know each ink's own character."))
+        self._nch_perink.toggled.connect(self._update_gen_counts)
+        self._nch_perink_n = _spin(2, 64, 8)
+        self._nch_perink_count = _count_label()
+        ng.addWidget(self._nch_perink, 1, 0)
+        ng.addWidget(QLabel(tr("steps/ink:")), 1, 1)
+        ng.addWidget(self._nch_perink_n, 1, 2)
+        ng.addWidget(self._nch_perink_count, 1, 7)
+        self._nch_pairs = QCheckBox(tr("Ink-pair overprints"), self._nch_gen_box)
+        self._nch_pairs.setChecked(True)
+        self._nch_pairs.setToolTip(
+            tr("Two inks printed together, stepped up in tandem for every "
+               "ink pair — how the inks mix on paper. Kept inside the ink "
+               "limit by construction (each ink stays at or below half the "
+               "limit)."))
+        self._nch_pairs.toggled.connect(self._update_gen_counts)
+        self._nch_pairs_n = _spin(1, 32, 4)
+        self._nch_pairs_count = _count_label()
+        ng.addWidget(self._nch_pairs, 2, 0)
+        ng.addWidget(QLabel(tr("steps/pair:")), 2, 1)
+        ng.addWidget(self._nch_pairs_n, 2, 2)
+        ng.addWidget(self._nch_pairs_count, 2, 7)
+        ng.setColumnStretch(6, 1)
+        self._nch_gen_box.setVisible(False)
+        # Original RGB tooltips, restored when the device returns to state 1
+        # (the gating swaps in the greyed-explanation texts, #72).
+        self._gen_orig_tooltips: dict = {}
+
+        indent.addWidget(self._nch_gen_box)
         indent.addWidget(self._gen_panel)
         return indent
 
@@ -2684,6 +2813,21 @@ class _NewChartDialog(QDialog):
         the per-row spin boxes on their checkbox."""
         on = self._gen_sets_active()
         self._gen_panel.setEnabled(on)
+        state = self._nch_state()
+        if getattr(self, "_nch_gen_box", None) is not None:
+            self._nch_gen_box.setEnabled(on)
+            for cb, spin, lbl, count in (
+                (self._nch_targen, self._nch_targen_n, self._nch_targen_count,
+                 lambda: self._nch_targen_n.value()),
+                (self._nch_perink, self._nch_perink_n, self._nch_perink_count,
+                 lambda: NDG.per_ink_ramps_count(
+                     len(self._nch_ink_codes()), self._nch_perink_n.value())),
+                (self._nch_pairs, self._nch_pairs_n, self._nch_pairs_count,
+                 lambda: NDG.ink_pair_overprints_count(
+                     len(self._nch_ink_codes()), self._nch_pairs_n.value())),
+            ):
+                spin.setEnabled(cb.isChecked())
+                lbl.setText(_patches_label(count()) if state != 1 else "")
         # Grey each row's size control(s) when its set is unticked.
         for cb, spins in (
             (self._gen_cube, (self._gen_cube_n,)),
@@ -2716,8 +2860,20 @@ class _NewChartDialog(QDialog):
         for cb, _build, count, label in self._gen_specs():
             n = count()
             label.setText(_patches_label(n))
-            if cb.isChecked():
+            # Disabled rows never contribute (#72 states 2/3: a ticked but
+            # greyed RGB-cube/look-based row must not count or build).
+            if cb.isChecked() and cb.isEnabled():
                 total += n
+        if state != 1:
+            for cb, count in (
+                (self._nch_targen, lambda: self._nch_targen_n.value()),
+                (self._nch_perink, lambda: NDG.per_ink_ramps_count(
+                    len(self._nch_ink_codes()), self._nch_perink_n.value())),
+                (self._nch_pairs, lambda: NDG.ink_pair_overprints_count(
+                    len(self._nch_ink_codes()), self._nch_pairs_n.value())),
+            ):
+                if cb.isChecked():
+                    total += count()
         # "From image" shows a hint until a photo is loaded.
         if self._gen_image.isChecked() and self._gen_image_px is None:
             self._gen_image_count.setText(tr("load an image"))
@@ -2733,8 +2889,10 @@ class _NewChartDialog(QDialog):
         # and white). Near-neutral greys is only off-axis tints, never pure
         # white/black; Colour extremes never lands on white/black either (six
         # chromatic corners only), so neither counts here (Knut, #78).
-        corner = ((1 if (self._gen_cube.isChecked() or self._gen_edges.isChecked()
-                         or self._gen_corners.isChecked()) else 0)
+        corner = ((1 if ((self._gen_cube.isChecked() and self._gen_cube.isEnabled())
+                         or (self._gen_edges.isChecked() and self._gen_edges.isEnabled())
+                         or (self._gen_corners.isChecked()
+                             and self._gen_corners.isEnabled())) else 0)
                   + (1 if (self._gen_neutral.isChecked()
                            and self._gen_neutral_n.value() >= 2) else 0))
         sets_have = (1 if corner else 0) if self._gen_unique.isChecked() else corner
@@ -2766,9 +2924,86 @@ class _NewChartDialog(QDialog):
         # Keep the embedded live cube in step with the colour-set controls.
         self._push_live_preview()
 
+    def _build_generated_program_nch(self, state: int) -> list[tuple]:
+        """Build the device-value program for a multi-ink chart (#72 Tier C).
+
+        Panel order: targen coverage → per-ink ramps → ink-pair overprints →
+        neutral ramp → near-neutral grey-balance rings → (state 3) the
+        look-based sets through the perceptual bridge — then min-distance
+        spacing, white/black anchors and the gap fill, mirroring the RGB
+        build. The honest out-of-gamut displacement note lands in
+        ``self.nch_moved_note`` for the caller to surface.
+        """
+        codes = self._nch_ink_codes()
+        n = len(codes)
+        k_ix = codes.index("k") if "k" in codes else None
+        limit = float(self._ink_limit.value())
+        program: list[tuple] = []
+        self.nch_moved_note = ""
+        if self._nch_targen.isChecked():
+            extra_args = [f"-D{self._INK_DFLAG[c]}" for c in codes[4:]]
+            extra_args.append(f"-l{int(limit)}")
+            if state == 3:
+                extra_args += ["-c", self._precond_path]
+            program.extend(R.seed_from_targen(
+                self._bin_dir, self._nch_targen_n.value(), device="4",
+                extra_args=extra_args))
+        if self._nch_perink.isChecked():
+            program.extend(NDG.per_ink_ramps(n, self._nch_perink_n.value()))
+        if self._nch_pairs.isChecked():
+            program.extend(NDG.ink_pair_overprints(
+                n, self._nch_pairs_n.value(), ink_limit=limit))
+        if self._gen_neutral.isChecked():
+            program.extend(NDG.neutral_ramp_device(
+                self._gen_neutral_n.value(), n, ink_limit=limit))
+        if self._gen_nearneutral.isChecked():
+            program.extend(NDG.near_neutrals_device(
+                self._gen_nearneutral_n.value(),
+                float(self._gen_nearneutral_off.value()),
+                self._gen_nearneutral_rings.value(), n, ink_limit=limit))
+        if state == 3:
+            from workflow.xicclu_runner import to_device_via_profile
+            moved_total = requested = 0
+            for name in self._GEN_PERCEPTUAL:
+                cb = getattr(self, f"_gen_{name}")
+                if not (cb.isChecked() and cb.isEnabled()):
+                    continue
+                build = next(b for c, b, _cnt, _lbl in self._gen_specs()
+                             if c is cb)
+                rgb = build()
+                if not rgb:
+                    continue
+                dev, moved = to_device_via_profile(
+                    rgb, self._precond_path, self._bin_dir, ink_limit=limit)
+                program.extend(dev)
+                moved_total += moved
+                requested += len(rgb)
+            if moved_total:
+                self.nch_moved_note = tr(
+                    "{moved} of {req} look-based colours lie outside this "
+                    "printer's gamut and were moved to the nearest printable "
+                    "colour.").format(moved=moved_total, req=requested)
+        if self._gen_unique.isChecked():
+            program = NDG.enforce_min_distance_nd(
+                program, _GEN_MIN_DIST, existing=self._existing_patches)
+        if self._gen_whiteblack.isChecked():
+            have_w, have_b = NDG.count_white_black_device(
+                program, n, k_index=k_ix, ink_limit=limit)
+            program.extend(NDG.white_black_device(
+                self._gen_whiteblack_n.value(), n, k_index=k_ix,
+                have_white=have_w, have_black=have_b, ink_limit=limit))
+        if self._gen_fill.isChecked():
+            seed = list(self._existing_patches) + program
+            program.extend(NDG.fill_gaps_nd(
+                seed, self._effective_fill_target(), n_channels=n))
+        return program
+
     def _build_generated_program(self) -> list[tuple]:
         """Concatenate every ticked generator's patches, in panel order,
         de-duplicating across sets when 'Ensure unique colours' is on."""
+        state = self._nch_state()
+        if state != 1:
+            return self._build_generated_program_nch(state)
         program: list[tuple] = []
         for cb, build, _count, _label in self._gen_specs():
             if not cb.isChecked():
@@ -2967,6 +3202,12 @@ class _NewChartDialog(QDialog):
 
     def _do_push_live_preview(self) -> None:
         if getattr(self, "_gen_total", None) is None:
+            return
+        if self._nch_state() != 1:
+            # Multi-ink: building the real program shells targen (and, in
+            # state 3, xicclu) — far too heavy for a live keystroke path
+            # (#72 R5). The per-row estimates from _update_gen_counts stand,
+            # and the cube preview is hidden for multi-ink anyway.
             return
         # The generated additions for the current set selection. Built even when
         # the master Generate toggle is off, so the Total previews them like the
@@ -3243,7 +3484,11 @@ class _NewChartDialog(QDialog):
                                     "from the pasted text."))
                 return
         elif self._mode_generate.isChecked():
-            program = self._build_generated_program()
+            try:
+                program = self._build_generated_program()
+            except Exception as exc:  # noqa: BLE001 — targen/xicclu failure
+                QMessageBox.warning(self, tr("Generation failed"), str(exc))
+                return
             if not program:
                 QMessageBox.warning(self, tr("No colour sets"),
                                     tr("Tick at least one colour set to "
@@ -4822,7 +5067,13 @@ class Ti2RelayoutDialog(QDialog):
             except Exception as exc:  # noqa: BLE001
                 log.warning("seed engine panel for new chart failed: %s", exc)
         self._refresh_engine_panel_visible()
-        self._set_chart(spec, dlg.result_program or [], "New chart")
+        # Honest out-of-gamut note from the perceptual bridge (#72): tell the
+        # user how many look-based colours were moved to the gamut surface.
+        note = "New chart"
+        moved = getattr(dlg, "nch_moved_note", "")
+        if moved:
+            note += " — " + moved
+        self._set_chart(spec, dlg.result_program or [], note)
 
     def _set_chart(self, spec: R.ChartSpec, program: list[tuple], note: str,
                    *, is_saved: bool = False) -> None:

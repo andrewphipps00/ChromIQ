@@ -57,11 +57,21 @@ def test_state2_reveals_rows_and_gates_modes(dlg):
     assert not dlg._nch_limit_row.isHidden()
     assert not dlg._nch_prof_row.isHidden()
     assert dlg._nch_inks_row.isHidden()          # plain CMYK: no extra slots
-    # Paste/generate are RGB constructs until Tier C — seed is forced.
+    # Paste is hex/RGB-only; generate works via the multi-ink rows (Tier C).
     assert not dlg._mode_paste.isEnabled()
-    assert not dlg._mode_generate.isEnabled()
-    assert dlg._mode_seed.isChecked()
+    assert dlg._mode_generate.isEnabled()
     assert dlg._ink_limit.value() == 300         # the safe default
+    # Row gating: RGB-cube constructs off, look-based off (no profile),
+    # N-native rows + the multi-ink rows on. (Generate mode first — the whole
+    # panel is greyed in seed mode, which would mask the per-row state.)
+    dlg._mode_generate.setChecked(True)
+    dlg._update_gen_counts()
+    assert not dlg._gen_cube.isEnabled() and not dlg._gen_edges.isEnabled()
+    assert not dlg._gen_skin.isEnabled() and not dlg._gen_blues.isEnabled()
+    assert dlg._gen_neutral.isEnabled() and dlg._gen_nearneutral.isEnabled()
+    assert dlg._gen_whiteblack.isEnabled()
+    assert not dlg._nch_gen_box.isHidden()
+    assert "grey balance" in dlg._gen_nearneutral.toolTip()
 
 
 def test_extra_ink_chips_and_ink_set_label(dlg):
@@ -158,6 +168,59 @@ def test_on_ok_threads_device_into_spec_and_targen(dlg, monkeypatch):
     assert dlg.result_spec.ink_limit == 280.0
     assert dlg.result_recipe["device"]["type"] == "cmykplus"
     assert dlg.result_program == [(0.0, 0.0, 0.0, 0.0), (10.0, 20.0, 30.0, 40.0)]
+
+
+@needs_cmyk_profile
+def test_state3_unlocks_perceptual_rows(dlg):
+    dlg._mode_generate.setChecked(True)
+    _pick_device(dlg, "cmyk")
+    dlg._precond_path = str(GENERIC_CMYK)
+    dlg._refresh_nch_state()
+    assert dlg._nch_state() == 3
+    assert dlg._gen_skin.isEnabled() and dlg._gen_blues.isEnabled()
+    assert not dlg._gen_cube.isEnabled()           # cube-bound stays off forever
+    # Back to state 2: perceptual re-locks with the needs-profile tooltip.
+    dlg._clear_precond()
+    assert not dlg._gen_skin.isEnabled()
+    assert "preconditioning profile" in dlg._gen_skin.toolTip()
+    # And back to RGB: original tooltips restored.
+    _pick_device(dlg, "rgb")
+    assert dlg._gen_cube.isEnabled() and dlg._gen_skin.isEnabled()
+    assert "preconditioning" not in dlg._gen_skin.toolTip()
+
+
+def test_nch_program_builds_device_tuples(dlg, monkeypatch):
+    # State 2, no targen (stubbed out): ramps + pairs + rings + white/black.
+    monkeypatch.setattr(M.R, "seed_from_targen",
+                        lambda *a, **k: [(1.0, 2.0, 3.0, 4.0)])
+    _pick_device(dlg, "cmyk")
+    dlg._mode_generate.setChecked(True)
+    for n in dlg._GEN_CHECKS:
+        getattr(dlg, f"_gen_{n}").setChecked(False)
+    dlg._gen_nearneutral.setChecked(True)
+    dlg._gen_nearneutral_n.setValue(8)
+    dlg._gen_whiteblack.setChecked(True)
+    dlg._gen_unique.setChecked(True)
+    dlg._nch_targen.setChecked(True)
+    dlg._nch_targen_n.setValue(50)
+    dlg._nch_perink.setChecked(True)
+    dlg._nch_perink_n.setValue(4)
+    dlg._nch_pairs.setChecked(True)
+    dlg._nch_pairs_n.setValue(2)
+    prog = dlg._build_generated_program()
+    assert prog and all(len(p) == 4 for p in prog)
+    # targen stub (1) + per-ink 16 + pairs 12 + rings + white/black anchors.
+    from workflow.patch_generators import near_neutrals_count
+    rings = near_neutrals_count(8, 1)
+    # White/black tops up to N of each — a ring patch that already sits on an
+    # anchor cell counts toward it, hence >= …+1 not a fixed +2.
+    assert len(prog) >= 1 + 16 + 12 + rings + 1
+    # Ticked-but-disabled RGB rows contribute nothing.
+    dlg._gen_cube.setChecked(True)
+    assert len(dlg._build_generated_program()) == len(prog)
+    # White/black anchors present: ink white = all-0, black = K-only.
+    assert (0.0, 0.0, 0.0, 0.0) in prog
+    assert (0.0, 0.0, 0.0, 100.0) in prog
 
 
 def test_on_ok_rgb_unchanged(dlg, monkeypatch):
