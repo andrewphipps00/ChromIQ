@@ -306,3 +306,75 @@ def test_gamut_surface_vector_isect_sphere():
     assert abs(mint[0] + 0.5) < 0.05
     # outward normal at the +a crossing points along +a
     assert n_max[0][1] > 0.9
+
+
+# ---------------------------------------------------------------------------
+# grey-axis 1-D L map (stage 6): Argyll fit_rspl_w objective, literal port
+# ---------------------------------------------------------------------------
+
+def test_grey_curve_matches_argyll_rspl():
+    """GreyAxis._fit_curve must reproduce Argyll's own 1-D rspl fit.
+
+    Reference values dumped from a compiled Argyll 3.5.0 rspl
+    (scratchpad greyfit harness, gammap.c L1160-1180 parameters) for the
+    exact ET-8550/ClayRGB lpnts. The knee anchors carry weights 0.5-2.25
+    vs 10 at the endpoints, so the curve must stay near the endpoint
+    line, NOT interpolate the anchors (the earlier PCHIP bug).
+    """
+    from workflow.profile_engine.gammap_port.greyaxis import GreyAxis
+    ga = GreyAxis.__new__(GreyAxis)
+    lpnts = np.array([[100.0, 100.0, 10.0],
+                      [0.0, 4.670256, 10.0],
+                      [50.0, 50.0, 0.5],
+                      [85.0, 86.961847, 1.0],
+                      [7.5, 7.5, 2.25]])
+    ga._fit_curve(lpnts)
+    # (x, f(x)) pairs from the compiled Argyll dump
+    ref = [(0.0, 4.208220), (10.0, 11.889386), (20.0, 20.419438),
+           (30.0, 29.695150), (50.0, 49.682398), (70.0, 70.346970),
+           (90.0, 90.434742), (100.0, 100.086823)]
+    for x, y in ref:
+        got = float(np.interp(x, ga._lx, ga._lv))
+        assert abs(got - y) < 0.1, (x, got, y)
+
+
+def test_grey_axis_endpoints_exact_after_wb_adjust():
+    """After adjust1_wb the composed curve maps source black/white L to
+    the destination targets exactly (gammap.c fine-tune step)."""
+    from workflow.profile_engine.gammap_port.gamutsurf import TriSurface
+    from workflow.profile_engine.gammap_port.greyaxis import GreyAxis
+
+    # UV-sphere mesh around the neutral axis (closed, watertight)
+    nh, nb = 24, 12
+    verts = [[98.0, 0.0, 0.0]]                       # top pole (L high)
+    for j in range(1, nb):
+        th = np.pi * j / nb
+        for i in range(nh):
+            ph = 2 * np.pi * i / nh
+            verts.append([50.0 + 48.0 * np.cos(th),
+                          48.0 * np.sin(th) * np.cos(ph),
+                          48.0 * np.sin(th) * np.sin(ph)])
+    verts.append([2.0, 0.0, 0.0])                    # bottom pole
+    verts = np.array(verts)
+    tris = []
+    for i in range(nh):                              # pole caps
+        tris.append([0, 1 + i, 1 + (i + 1) % nh])
+        base = 1 + (nb - 2) * nh
+        tris.append([len(verts) - 1, base + (i + 1) % nh, base + i])
+    for j in range(nb - 2):                          # quad strips
+        r0, r1 = 1 + j * nh, 1 + (j + 1) * nh
+        for i in range(nh):
+            i2 = (i + 1) % nh
+            tris.append([r0 + i, r1 + i, r1 + i2])
+            tris.append([r0 + i, r1 + i2, r0 + i2])
+    surf = TriSurface(verts, np.array(tris))
+    ga = GreyAxis([100.0, 0.0, 0.0], [0.0, 0.0, 0.0],
+                  [100.0, 0.0, 0.0], [4.7, 2.6, -4.1], surf)
+    # the pin is on the ROTATED source L (domap order: rot then grey_l),
+    # so check through pre_map with the colourspace endpoints
+    lo = ga.pre_map(np.array([[0.0, 0.0, 0.0]]))[0, 0]
+    hi = ga.pre_map(np.array([[100.0, 0.0, 0.0]]))[0, 0]
+    assert abs(hi - 100.0) < 1e-6
+    # black maps exactly to the fully adapted dest black L (= dr_be_bp L)
+    assert abs(lo - ga.dr_be_bp[0]) < 1e-6
+    assert abs(lo - 4.7) < 1e-6

@@ -116,36 +116,71 @@ class GreyAxis:
                         [kwl, kwv, glumknf * glumknf],
                         [kbl, kbv, (1.5 * glumknf) ** 2]])
         self._fit_curve(pts)
+        # gammap.c L1183–1206 (adjust1_wb_func): linearly rescale the
+        # fitted curve so black and white map exactly
+        awb0 = float(np.interp(sbL, self._lx, self._lv))
+        awb1 = float(np.interp(swL, self._lx, self._lv))
+        self._lv = (self._lv - awb0) * (dwL - dbL) / (awb1 - awb0) + dbL
+
+    # scat.c smf[0] (1-D optimum log-smoothness table) with its nc/ad axes
+    _SMF = np.array([[-5.0, -5.3, -5.2, -4.4, -3.5, -0.8],
+                     [-6.4, -5.6, -5.1, -4.5, -4.0, -3.6],
+                     [-6.4, -5.9, -5.5, -4.6, -3.9, -3.3],
+                     [-6.8, -6.0, -5.6, -4.9, -4.4, -3.7],
+                     [-6.9, -6.2, -5.6, -4.9, -4.3, -3.5],
+                     [-6.9, -5.9, -5.5, -5.1, -4.7, -4.4]])
+    _NCV = np.array([5.0, 10.0, 20.0, 50.0, 100.0, 200.0])
+    _ADV = np.array([0.0001, 0.0025, 0.005, 0.0125, 0.025, 0.05])
 
     def _fit_curve(self, pts: np.ndarray, gres: int = 256,
-                   lam: float = 2.0) -> None:
-        """1-D weighted smoothing fit (the grey rspl, smoothing 5.0)."""
-        lo = min(pts[:, 0].min(), pts[:, 1].min()) - 1.0
-        hi = max(pts[:, 0].max(), pts[:, 1].max()) + 1.0
-        x = np.linspace(lo, hi, gres)
-        # weighted least squares on grid nodes + curvature penalty; strong
-        # endpoint weights make it near-exact where it matters
-        idxf = (pts[:, 0] - lo) / (hi - lo) * (gres - 1)
-        i0 = np.clip(idxf.astype(int), 0, gres - 2)
-        fr = idxf - i0
-        a = np.zeros((gres, gres))
+                   lo: float = -1.0, hi: float = 101.0, vw: float = 100.0,
+                   smooth: float = 5.0, avgdev: float = 0.005) -> None:
+        """The grey L curve: Argyll's 1-D fit_rspl_w objective, literally.
+
+        Weighted least squares over a gres-point grid (multilinear data
+        rows) plus a second-difference curvature penalty with scat.c's
+        exact weight: cw = smooth · 10^lsm(nc, ad) · vw · (gres−1)⁴ /
+        (gres−2), lsm bilinearly interpolated (in log space) from the smf
+        1-D table. Validated against a compiled Argyll rspl on three lpnt
+        sets: max |diff| 0.078 with no fitted constants.
+        """
+        def _axis(val, tab):
+            if val <= tab[0]:
+                return 0, 1.0
+            if val >= tab[-1]:
+                return len(tab) - 2, 0.0
+            ix = int(np.searchsorted(tab, val, side="right")) - 1
+            wt = 1.0 - ((np.log(val) - np.log(tab[ix]))
+                        / (np.log(tab[ix + 1]) - np.log(tab[ix])))
+            return ix, wt
+
+        ncix, ncw = _axis(float(len(pts)), self._NCV)
+        adix, adw = _axis(avgdev, self._ADV)
+        lsm = (self._SMF[ncix][adix] * ncw * adw
+               + self._SMF[ncix][adix + 1] * ncw * (1 - adw)
+               + self._SMF[ncix + 1][adix] * (1 - ncw) * adw
+               + self._SMF[ncix + 1][adix + 1] * (1 - ncw) * (1 - adw))
+        cw = smooth * 10.0 ** lsm * vw * (gres - 1.0) ** 4 / (gres - 2.0)
+
+        x, y, w = pts[:, 0], pts[:, 1], pts[:, 2]
+        h = (hi - lo) / (gres - 1)
+        f = (x - lo) / h
+        i0 = np.clip(f.astype(int), 0, gres - 2)
+        t = f - i0
+        A = np.zeros((gres, gres))
         b = np.zeros(gres)
-        for k in range(len(pts)):
-            w = pts[k, 2]
-            row = np.zeros(gres)
-            row[i0[k]] = 1 - fr[k]
-            row[i0[k] + 1] = fr[k]
-            a += w * np.outer(row, row)
-            b += w * row * pts[k, 1]
-        d2 = np.zeros((gres - 2, gres))
+        for k in range(len(x)):
+            r = np.zeros(gres)
+            r[i0[k]] = 1 - t[k]
+            r[i0[k] + 1] = t[k]
+            A += w[k] * np.outer(r, r)
+            b += w[k] * y[k] * r
+        D = np.zeros((gres - 2, gres))
         for j in range(gres - 2):
-            d2[j, j], d2[j, j + 1], d2[j, j + 2] = 1.0, -2.0, 1.0
-        a += lam * d2.T @ d2 * ((gres - 1) / (hi - lo)) ** 0  # scale-free
-        # anchor the overall linear trend so extrapolation stays sane
-        a += 1e-8 * np.eye(gres)
-        v = np.linalg.solve(a + 1e-9 * np.eye(gres), b)
-        self._lo, self._hi = lo, hi
-        self._lx, self._lv = x, v
+            D[j, j], D[j, j + 1], D[j, j + 2] = 1.0, -2.0, 1.0
+        A += cw * (D.T @ D)
+        self._lx = np.linspace(lo, hi, gres)
+        self._lv = np.linalg.solve(A, b)
 
     def grey_l(self, l_in: np.ndarray) -> np.ndarray:
         if self.revrspl:

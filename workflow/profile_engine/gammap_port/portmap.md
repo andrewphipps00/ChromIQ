@@ -362,3 +362,57 @@ Operating point meanwhile: VECADJ-only output (0.909 median).
   strict comparison: generate transformed .gam via gamio write or feed
   premapped verts to smthdump? simpler: e2e gate directly vs colprof
   realized probes) → row-recipe fit → gate → wire → suite → UI #43.
+
+## Grey 1-D rspl fit ported EXACTLY (2026-07-15)
+
+- PCHIP interpolant was WRONG: it honoured the weak knee anchors
+  (w 0.5–2.25) as hard constraints; Argyll's smoothing-5.0 rspl nearly
+  ignores them (their curve ~the endpoint line with a soft knee).
+  Symptom: port neutrals L10→8.96 vs colprof realized L10→14.4.
+- Ground truth harness: `scratchpad/argbuild/greyfit.c` — calls Argyll's
+  own new_rspl(1,1)+fit_rspl_w exactly as gammap.c L1160–1180 (il −1..101,
+  gres 256, ol 0..100, smooth 5.0, avgdev 0.005), lpnts on stdin, dumps
+  f(x) x=−1..101/0.25. Compile: like smthdump minus gamut/nearsmth
+  (needs plot/vrml.c cgats icc.c for rspl/gam.c symbol).
+- fit_rspl_w 1-D semantics transcribed from rspl/scat.c (SMOOTH2 undef →
+  table opt_smooth; V17 2nd-order):
+  E(u) = Σ_n w_n(Σ_j φ_j(x_n)u_j − y_n)² + cw·Σ_i(u[i−1]−2u[i]+u[i+1])²,
+  cw = smooth · 10^lsm · vw · (gres−1)⁴/(gres−2); vw = output range
+  (100, the "incorrect but built into the tables" d.vw scale);
+  lsm = log-space bilinear from smf[0] table over (nc=ndp, ad=avgdev);
+  data rows multilinear, k_n = cow.w raw, values unnormalised; curvature
+  = pure second differences (ipos NULL). Multigrid is just the solver —
+  direct solve of the final objective matches.
+- Validation (3 lpnt sets vs greyfit dumps): max |diff| 0.078 / 0.036 /
+  0.008 — ZERO fitted constants. Ported into GreyAxis._fit_curve.
+- adjust1_wb_func (gammap.c L1183+): after the fit, linear rescale so
+  f(sbL)=dbL, f(swL)=dwL exactly — ported into GreyAxis.__init__.
+- GammapMapper (gammap.py) now assembles the WHOLE pipeline as the
+  shipping class; e2e harness = scratchpad/argbuild/e2e_gate.py (uses
+  cached surface tables keyed by grey-curve tag; run from repo root).
+  Assembly-faithfulness check: class reproduced the heredoc's 3.65
+  (3.63) before the curve fix. Grey-curve fix: 3.63 → 3.44 (neutrals
+  now match the grey curve; residual is elsewhere — see below).
+
+## ROOT CAUSE #2: colprof maps in Jab, not Lab (2026-07-15)
+
+- xicc.c L2030: USE_CAM (default build) → perccas = 0x2 → perceptual
+  gmi->usecas = 0x2 = CIECAM02 Jab. profout.c: intentp =
+  icxPerceptualAppearance, intento = icxAppearance — the gamuts handed
+  to new_gammap AND all mapped colours are Jab, converted via cam02 with
+  xicc_enum_viewcond(x, vc, -1, …) profile-derived DEFAULT viewing
+  conditions (no -c/-d given).
+- Our .gam pair was made with iccgamut default -pl (Lab) — every
+  geometric stage validated correctly (smthdump consumed the same Lab
+  gamuts) but the SPACE disagrees with colprof's actual map. In Jab the
+  ET-8550 black is J=9.77 and ClayRGB black J=7.90 (vs Lab 4.67/0.0) —
+  the compression geometry is completely different in the darks, which
+  is exactly where the realized-vs-port residual concentrated.
+- Jab gamuts regenerated: iccgamut -ff -ir -pj -d3 (COLOR_REP JAB);
+  iccgamut/xicclu use the same xicc_enum_viewcond defaults as colprof,
+  so Argyll's own tools provide all conversions for gating (xicclu
+  -pj = dev→Jab) — no cam02 port needed for validation. For the ENGINE
+  (no profiles at runtime), cam02.c + xicc_enum_viewcond defaults must
+  be ported (validate against an xicclu/cam02 dump harness).
+- Jab gate: scratchpad/argbuild/e2e_gate_jab.py (port maps Jab→Jab on
+  Jab gamuts; realized ref chain: Lab→B2A(-ip)→dev→xicclu -pj).
