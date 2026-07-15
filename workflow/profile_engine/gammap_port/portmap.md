@@ -688,3 +688,24 @@ Argyll bit-for-bit here would require DEGRADING my optimiser to reproduce
 Powell's early-stopping. Recommend NOT doing that: the algorithm is
 copied exactly, the numerics are exact-or-better, and for +N (no baseline)
 a solver ≥ Argyll's is the best possible foundation.
+
+## PROVEN: Argyll's REAL code maps a +N gamut (2026-07-15)
+
+Decisive feasibility test for an exact-mode built on Argyll's actual
+compiled gamut mapping (not the Python port):
+- gmcloud.c (scratchpad/argbuild): compiles Argyll's gamut.c +
+  nearsmth.c + gammap.c. Reads a source .gam + a Lab/Jab CLOUD; builds
+  the dest gamut via Argyll's own gout->expand(point) (NOT a hand mesh —
+  that fails "vector_isect failed"); gout->setwb(wp,bp) (else "Unable to
+  read destination white and black points"); then new_gammap->domap.
+- Fed the 6CLR (CMYKOG) model's 20,000-point Jab surface cloud + paper
+  wb: **rc=0, 17 s, sensible mapped colours** (e.g. 70/60/40 →
+  70.7/47.1/33.7, white → 95.0). One benign warning ("non-monotonic —
+  may not be very smooth", also seen from colprof on rough gamuts).
+CONCLUSION: Argyll's gamut mapper operates on the 3-D colour SHELL, not
+ink channels — colprof's >4-ink refusal is only in the ICC ink-
+separation stage, not the mapper. So an exact mode calling Argyll's real
+code (arm's-length helper, like colprof/iccgamut) gives BIT-EXACT Argyll
+for RGB, CMYK **and +N**, and is FASTER than the Python exact-geometry
+port (17 s C vs 380 s Python). Proposed: exact/slow mode = this helper;
+fast mode = the Python port. Ship cost: bundle+sign the helper binary.
