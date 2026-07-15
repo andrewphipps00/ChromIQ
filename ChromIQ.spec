@@ -14,6 +14,7 @@ The result will be in dist/ChromIQ.app
 
 import os
 import sys
+import platform
 import certifi
 from PyInstaller.utils.hooks import collect_all, collect_dynamic_libs
 certifi_where = certifi.where()
@@ -41,6 +42,19 @@ _we_datas, _we_binaries, _we_hiddenimports = collect_all('PyQt6-WebEngine')
 # freetype-py ships the native libfreetype it binds to; collect_all bundles that
 # dylib + the module so the vector-PDF glyph outlining works in the frozen app.
 _ft_datas, _ft_binaries, _ft_hiddenimports = collect_all('freetype')
+
+# ...except on Windows/ARM, where freetype-py has no wheel with a bundled native
+# lib (collect_all finds nothing to ship). Bundle our vendored ARM64 FreeType so
+# the vector-PDF export works in the frozen ARM app too; core.freetype_bootstrap
+# adds this dir to the DLL search path at startup (#72).
+_ft_vendor_datas = []
+if sys.platform == 'win32' and platform.machine().upper() in ('ARM64', 'AARCH64'):
+    _ft_vp = os.path.join('vendor', 'freetype', 'win-arm64', 'freetype.dll')
+    if os.path.exists(_ft_vp):
+        _ft_vendor_datas = [(_ft_vp, 'vendor/freetype/win-arm64')]
+    else:
+        print(f"[ChromIQ.spec] {_ft_vp} missing — vector-PDF export will be "
+              f"unavailable in this Windows/ARM bundle.")
 
 # numpy 2.4+ links against a SciPy-built OpenBLAS (`libscipy_openblas64_.dylib`)
 # that may live in any of three places depending on platform / wheel layout:
@@ -105,6 +119,7 @@ a = Analysis(
         ('data/scanner_targets', 'data/scanner_targets'),
         (certifi_where, 'certifi'),
         *_gammap_datas,
+        *_ft_vendor_datas,
         *_ic_datas,
         *_we_datas,
         *_oc_datas,

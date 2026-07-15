@@ -18,6 +18,16 @@ import numpy as np
 import pytest
 from PIL import Image
 
+# Vector text needs FreeType's native library. freetype-py ships no ARM64
+# Windows wheel with a bundled DLL, so `import freetype` raises RuntimeError
+# there — skip this module cleanly rather than aborting collection for the whole
+# suite. (importorskip only catches ImportError, so guard explicitly.)
+try:
+    import freetype  # noqa: F401
+except Exception as exc:  # ImportError, or RuntimeError when the C lib is absent
+    pytest.skip(f"FreeType native library unavailable: {exc}",
+                allow_module_level=True)
+
 from workflow.layout_engine import (chart, geometry, instruments, papers,
                                      raster, ti1_reader, vector_pdf)
 from workflow.layout_engine.ti1_reader import ColorTarget

@@ -18,6 +18,14 @@ at the class level: no real subprocess, no cross-test signal leak, no modal.
 """
 import pytest
 
+# On Windows/ARM, make freetype-py find our vendored ARM64 FreeType before any
+# test imports `freetype` (e.g. test_vector_pdf collects it at module load), so
+# the vector-PDF tests actually run there instead of skipping (#72). No-op on
+# every other platform.
+from core.freetype_bootstrap import ensure_freetype_library
+
+ensure_freetype_library()
+
 
 @pytest.fixture(autouse=True)
 def _no_real_editor_render(monkeypatch):

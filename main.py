@@ -111,6 +111,11 @@ except BaseException:
 def main() -> int:
     from core.version import APP_VERSION
 
+    # Windows/ARM has no freetype-py wheel with a native lib; point it at our
+    # vendored ARM64 FreeType so the vector-PDF export works (#72). No-op else.
+    from core.freetype_bootstrap import ensure_freetype_library
+    ensure_freetype_library()
+
     app = QApplication(sys.argv)
     app.setApplicationName("ChromIQ")
     app.setApplicationVersion(APP_VERSION)
