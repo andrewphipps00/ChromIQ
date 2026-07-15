@@ -97,3 +97,23 @@ oracle rig stays as the CI cross-check.
 - icm helpers needed: icmVecRotMat, icmPlaneEqn3/icmPlaneDist3,
   icmInverse3x3/icmTranspose3x3, icmLab2LCh, icmBlend3 — all standard
   geometry; write numpy equivalents in gammap_port/geom.py with tests.
+
+### comp_ce exact algorithm (L842–974, transcribed — ready to code)
+
+1. rotate `in` by rot[0] → lab; LCh.
+2. hue segment: find c0 with cusp_lch[0][c0].h ≤ h < cusp_lch[0][c1].h
+   (wrap +360 when h1<h0); c1 = (c0+1)%6.
+3. light/dark: ld = 0 if icmPlaneDist3(cusp_pe[0][c0], lab) ≥ 0 else 1.
+4. bb = cusp_bc[0][c0][ld] · (lab − cusp_lab[0][8]).
+5. tww = min(|bb0+bb1|, 1); ccx = 1 + (ccx−1)·tww;
+   tpw = 1 if ctw ≤ 0 else tww^ctw; cw_l *= tpw; cw_h *= tpw; cw_c *= tpw.
+6. mlab = cusp_bc[1][c0][ld] · bb + cusp_lab[1][8]; mlch = LCh(mlab).
+7. olch = LCh(rot[1] · in) (unchanged source in dest-aligned space).
+8. blends: mlch.L = cw_l·mlch.L + (1−cw_l)·olch.L;
+   mlch.C = cw_c·mlch.C + (1−cw_c)·olch.C;
+   **hue uses cw_c as well** (mlch.h = cw_c·mlch.h + (1−cw_c)·olch.h,
+   after same-side ±360 adjustment; wrap ≥360) — cw_h is used ONLY in the
+   activation test + tpw scaling. Argyll quirk — replicate EXACTLY.
+9. mlch.C *= ccx; out = irot[1] · Lab(mlch).
+Gate: only when docusp and (cw_l>0 or cw_c>0 or cw_h>0 or ccx>0); else
+out = in.
