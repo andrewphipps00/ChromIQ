@@ -173,12 +173,13 @@ def test_settings_dialog_mode_combo_roundtrip():
     dlg = SettingsDialog(fake)
     try:
         assert dlg._gammap_mode_combo.currentData() == "argyll"
-        # visible while the engine is on; hidden when it is turned off
-        assert dlg._gammap_mode_cell.isVisibleTo(dlg)
+        # shown while the engine is on; hidden when it is turned off (checked
+        # via the explicit hidden state, independent of which tab is current)
+        assert not dlg._gammap_mode_cell.isHidden()
         dlg._profile_engine_check.setChecked(False)
-        assert not dlg._gammap_mode_cell.isVisibleTo(dlg)
+        assert dlg._gammap_mode_cell.isHidden()
         dlg._profile_engine_check.setChecked(True)
-        assert dlg._gammap_mode_cell.isVisibleTo(dlg)
+        assert not dlg._gammap_mode_cell.isHidden()
         idx = dlg._gammap_mode_combo.findData("fast")
         dlg._gammap_mode_combo.setCurrentIndex(idx)
         dlg._save_and_close()

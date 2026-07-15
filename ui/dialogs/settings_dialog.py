@@ -555,16 +555,8 @@ class SettingsDialog(QDialog):
         self._gammap_mode_combo = NoScrollComboBox(self)
         self._gammap_mode_combo.addItem(tr("Fast"), "fast")
         self._gammap_mode_combo.addItem(tr("Bit-exact"), "argyll")
-        # Compact: size to the current item (not a fixed wide box) and drop the
-        # global 26px input min-height so it doesn't tower over the checkbox
-        # rows it sits among (CSS min-height overrides setMaximumHeight, so it
-        # has to be lowered in the stylesheet).
         self._gammap_mode_combo.setSizeAdjustPolicy(
             NoScrollComboBox.SizeAdjustPolicy.AdjustToContents)
-        self._gammap_mode_combo.setStyleSheet(
-            "QComboBox { min-height: 16px; padding: 1px 28px 1px 6px; }")
-        self._gammap_mode_combo.setSizePolicy(
-            QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed)
         gammap_mode_tip = TooltipButton(
             tr("Gamut mapping"),
             tr("This chooses how the profile engine builds the perceptual "
@@ -617,6 +609,24 @@ class SettingsDialog(QDialog):
         # shown only while the engine is enabled.
         self._profile_engine_check.toggled.connect(
             self._gammap_mode_cell.setVisible)
+
+        # Both live on their own "Beta features" tab.
+        self._beta_page = QWidget(self)
+        _beta = QVBoxLayout(self._beta_page)
+        _beta.setContentsMargins(16, 16, 16, 16)
+        _beta.setSpacing(12)
+        _beta_intro = QLabel(tr(
+            "Experimental features — enabled at your own risk. Verify every "
+            "result before you rely on it."), self)
+        _beta_intro.setWordWrap(True)
+        _beta.addWidget(_beta_intro)
+        _eng_row = QHBoxLayout()
+        _eng_row.addWidget(self._profile_engine_check)
+        _eng_row.addStretch()
+        _eng_row.addWidget(engine_tip)
+        _beta.addLayout(_eng_row)
+        _beta.addWidget(self._gammap_mode_cell)
+        _beta.addStretch()
 
         self._native_print_check = QCheckBox(tr("Use default macOS printer dialog"), self)
         native_tip = TooltipButton(
@@ -705,7 +715,6 @@ class SettingsDialog(QDialog):
             _bh_cell(self._cal_mode_check, cal_tip),
             _bh_cell(self._chromiq_refine_check, refine_tip),
             _bh_cell(self._averaging_check, averaging_tip),
-            _bh_cell(self._profile_engine_check, engine_tip),
         ]
         if native_print_supported():
             bh_cells.append(_bh_cell(self._native_print_check, native_tip))
@@ -719,10 +728,6 @@ class SettingsDialog(QDialog):
 
         for i, cell in enumerate(bh_cells):
             bh.addWidget(cell, i // 2, i % 2)
-        # The gamut-mapping picker sits in the left column of its own row, so
-        # its tooltip lines up with the column-0 checkbox tooltips above it.
-        _gm_row_idx = (len(bh_cells) + 1) // 2
-        bh.addWidget(gammap_mode_cell, _gm_row_idx, 0)
 
         # The platform-gated print options above are constructed unconditionally
         # (their attributes are referenced by _load_settings / _save_and_close /
@@ -821,6 +826,8 @@ class SettingsDialog(QDialog):
                           tr("Scanner Limits"))
         self._tabs.addTab(self._scroll_wrap(self._build_paths_tab()),
                           tr("Paths"))
+        self._tabs.addTab(self._scroll_wrap(self._beta_page),
+                          tr("Beta features"))
 
         # ---- About / Updates (below the tabs) ----
         credit1 = QLabel(tr("ChromIQ v{APP_VERSION} · Created by Sebastian Reiprich").format(APP_VERSION=APP_VERSION), self)
