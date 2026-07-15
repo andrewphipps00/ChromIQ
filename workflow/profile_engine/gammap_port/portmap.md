@@ -294,3 +294,20 @@ Per pass it∈0..3 (RSPLPASSES=4, mapsmooth=1.0, GAMMAP_RSPLAVGDEV):
 Final guides: dv_final = anv after last pass.
 Port: WarpMapper (value-field mode: target = train + field) plays both
 rspl roles; ~2 fits × 4 passes on 26k pts, grid 13–17³.
+
+### RSPLPASSES first implementation: 1.089 (VECADJ-only: 0.909) — fix list
+
+Slightly WORSE than VECADJ alone. Known deficiencies to fix (in order):
+1. build_neighbours must ALSO return the unnormalised smoothstep weights
+   (C's nd[].rw) — maxext uses rw, I passed normalised w.
+2. evect_fn is still the neutral-axis approximation; RSPLPASSES leans on
+   evect hard (tdst + corrections along it) → port the shrunk-gamut
+   (SHRINK=5, doshrink along cvect) + optfunc1a weighted-nearest evector
+   construction + fit the direction field (WarpMapper on directions).
+3. Per-pass instrumentation: extend smthdump to print temp/clen/rext per
+   iteration (add printfs inside the RSPLPASSES loop) → diff each pass.
+4. WarpMapper grid 13/λ0.01 as rspl stand-in — calibrate against their
+   mapres=29/mapsmooth=1.0/avgdev fit (their smoothing level differs; can
+   be measured directly: fit warp on (sv→their dv), compare map(_sv) vs
+   their per-pass temp dump).
+Operating point meanwhile: VECADJ-only output (0.909 median).

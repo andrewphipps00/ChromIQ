@@ -347,3 +347,62 @@ def vecadj_loop(sv: np.ndarray, dv0: np.ndarray, naxbf: np.ndarray,
         # W/K pinning blend, then iterate
         anv = (1.0 - naxbf[:, None]) * dv + naxbf[:, None] * new_anv
     return anv
+
+
+def rsplpasses_loop(sv: np.ndarray, dv: np.ndarray, naxbf: np.ndarray,
+                    fx: np.ndarray, nbr_idx, nbr_rw, dest_surf, evect_fn,
+                    passes: int = 4, rsplscale: float = 1.8) -> np.ndarray:
+    """The RSPLPASSES fine-tuning stage (C L3100–3360, per portmap
+    transcription). ``dv``: VECADJ output; ``fx``: per-point wt.f.x;
+    ``nbr_rw``: UNnormalised neighbour weights. WarpMapper plays rspl."""
+    from workflow.profile_engine.gamut_map import WarpMapper
+    n = len(sv)
+    inside_sv = dest_surf.nradial(sv) <= 1.0 + 1e-6
+    inside_dv = dest_surf.nradial(dv) <= 1.0 + 1e-6
+    nott = inside_sv & inside_dv
+    tdst = dv.copy()
+    tune = ~nott
+    if tune.any():
+        dirs = evect_fn(dv[tune])
+        mint, maxt, _, _ = dest_surf.vector_isect(dv[tune], dv[tune] + dirs)
+        tt = np.where(np.isnan(maxt), mint,
+                      np.where(np.abs(mint) < np.abs(maxt), mint, maxt))
+        hit = ~np.isnan(tt)
+        cand = dv[tune] + np.where(hit, tt, 0.0)[:, None] * dirs
+        rad = dest_surf.radial(dv[tune])
+        nd = np.linalg.norm(rad - dv[tune], axis=1)
+        idd = np.linalg.norm(cand - dv[tune], axis=1)
+        use = hit & (idd <= nd + 5.0)
+        t2 = tdst[tune]
+        t2[use] = cand[use]
+        t2[~use] = rad[~use]
+        tdst[tune] = t2
+    coff = np.zeros_like(dv)
+    rext = np.zeros(n)
+    anv = dv.copy()
+    for it in range(passes):
+        warp = WarpMapper(sv, anv, grid=13, lam=0.01)
+        temp = warp.map_lab(sv)
+        evect = evect_fn(temp)
+        clen = (evect * (tdst - temp)).sum(1)
+        # local weighted-max extension over neighbours (rw unnormalised)
+        maxext = np.empty(n)
+        for i in range(n):
+            t = nbr_rw[i] * (clen[nbr_idx[i]] + 20.0)
+            maxext[i] = max(t.max() if len(t) else 0.0, 0.0) - 20.0
+        if it == 0:
+            rext = np.where(rext <= 0.0, rext + maxext,
+                            rext + rsplscale * maxext)
+        tpoint = tdst + rext[:, None] * evect
+        icg = 1.4
+        ixg = fx * icg
+        ttt = it / (passes - 1.0)
+        cgain = (1 - ttt) * icg + ttt * 0.5 * icg
+        xgain = ((1 - ttt) * ixg + ttt * 0.5 * ixg) if it == 0 else 0.0
+        gain = np.where(rext > 0.0, cgain, xgain)
+        coff = coff + gain[:, None] * (tpoint - temp)
+        warp2 = WarpMapper(dv, dv + coff, grid=13, lam=0.01)
+        sm_coff = warp2.map_lab(dv) - dv
+        anv = dv + naxbf[:, None] * sm_coff
+        anv[nott] = dv[nott]
+    return anv
