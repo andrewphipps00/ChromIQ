@@ -117,3 +117,39 @@ oracle rig stays as the CI cross-check.
 9. mlch.C *= ccx; out = irot[1] · Lab(mlch).
 Gate: only when docusp and (cw_l>0 or cw_c>0 or cw_h>0 or ccx>0); else
 out = in.
+
+## Stage 4/5 status + near_smooth flow skeleton (offsets rel. L1809)
+
+Banked so far: gamutsurf.py (radial/nradial/vector_isect substrate, sphere-
+validated), xweights.py, error.py, cusps.py, geom.py, primitives.py.
+
+near_smooth(sc_gam, si_gam, dc_gam, xwh[14], gamcknf/gamxknf knees,
+usecomp/useexp, xvra, mapres, mapsmooth, …) phases (offset = line−1809):
+
++47 compat check · +58 opts setup · +64 init_ce · +69 alloc guides ·
++76 src_gam = image∩colorspace (skip: engine has no separate image gamut,
+si == sc) · +109 dst_gam = compression target: intersection of src and
+dest (or knee-expanded for expansion; gamcknf) — PORT NOTE: engine uses
+dest cloud directly for compression-only v1, knees later ·
++164 create guide list (null mapping): vertices of src_gam (+ xvra extra) —
+each guide: sv (source point), wt (interp_xweights at sv), flags in/out ·
++249 early-out if nothing to map · +259 per-point weights ·
++282 cusp-rotated mapping setup (comp_ce per point → _sv raw, sv rotated) ·
++329 W/B blend factor (comp_naxbf → naxbf, pins W/B) ·
++336 m3d: per-point 3D→2D tangent frame at radial surface point
+(optimisation runs in the 2D tangent plane) · +350 neighbour lists within
+relative-smoothing radius (r.rdl/r.rdh scaled, on normalised surface) ·
++575/+579 PASS 1: per point, powell 2D → weighted-nearest point wn/aodv
+(optfunc1/1a minimising aerrf to source) · +702 PASS 2: per point,
+powell 2D → nrdv (optfunc2 minimising comperr incl. depth) · then
+iterative smoothing loop (it/codf damping): neighbour-averaged relative
+targets, re-optimise, mxmv stop threshold · +787 range expand · +851
+inward correction vectors · +1077 fine-tune vs smoothing side effects ·
++1273 depth compensation · +1563 restore non-cusp-rotated sv ·
++1581 sub-surface points · +1937 grid surface points (surfpnts).
+
+**Port strategy for the engine (documented deviation, gates decide):**
+compression-only v1 (printer gamuts ⊂ typical source), guides = dest-
+projected optimum per passes 1–2 with the neighbour-smoothing iteration;
+sub-surface/grid points replaced by the maths-A warp fit over guide
+displacements (gammap.c does exactly this via rspl with PSMOOTH).
