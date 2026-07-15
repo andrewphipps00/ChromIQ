@@ -441,7 +441,8 @@ class OracleUnavailable(RuntimeError):
 
 def fit_colprof_mappers(meas: Ti3Measurement, source_gamut: Path | str,
                         settings, argyll_bin: Path | str | None,
-                        progress=None) -> dict[str, WarpMapper]:
+                        progress=None,
+                        node_lab: np.ndarray | None = None) -> dict:
     """Colprof-matched perceptual/saturation mappers (arm's-length oracle).
 
     Runs Argyll colprof as a subprocess on the same measurement with the
@@ -536,8 +537,53 @@ def fit_colprof_mappers(meas: Ti3Measurement, source_gamut: Path | str,
 
         if progress:
             progress("Fitting the colprof-matched rendering…")
-        return {"B2A0": WarpMapper(train, realized("p")),
-                "B2A2": WarpMapper(train, realized("s"))}
+        out = {"B2A0": WarpMapper(train, realized("p")),
+               "B2A2": WarpMapper(train, realized("s"))}
+        # Exact node targets: sample colprof's realized mapping AT the CLUT
+        # nodes the profile will carry — the tables then reproduce colprof's
+        # values up to quantisation, and the warp only serves smooth
+        # inversion (-nI) and off-node queries.
+        if node_lab is not None:
+            for tag, intent in (("B2A0", "p"), ("B2A2", "s")):
+                out[tag] = _ExactNodeMapper(node_lab, _realized_at(
+                    xicclu, icc, node_lab, intent, meas.n_channels),
+                    out[tag])
+        return out
+
+
+def _realized_at(xicclu: Path, icc: Path, lab: np.ndarray, intent: str,
+                 n_channels: int) -> np.ndarray:
+    import subprocess
+    inp = "\n".join(f"{a:.4f} {b:.4f} {c:.4f}" for a, b, c in lab)
+    r1 = subprocess.run([str(xicclu), "-fb", f"-i{intent}", "-pl", str(icc)],
+                        input=inp, capture_output=True, text=True)
+    dev = [" ".join(ln.rsplit("->", 1)[1].split()[:n_channels])
+           for ln in r1.stdout.splitlines() if "->" in ln]
+    r2 = subprocess.run([str(xicclu), "-ff", "-ir", "-pl", str(icc)],
+                        input="\n".join(dev), capture_output=True, text=True)
+    out = np.array([[float(v) for v in ln.rsplit("->", 1)[1].split()[:3]]
+                    for ln in r2.stdout.splitlines() if "->" in ln])
+    if len(out) != len(lab):
+        raise OracleUnavailable("node sampling failed")
+    return out
+
+
+class _ExactNodeMapper:
+    """colprof's realized mapping sampled exactly at the CLUT nodes; the
+    fitted warp answers everything off-node (the -nI inverse, probes)."""
+
+    def __init__(self, node_lab: np.ndarray, node_mapped: np.ndarray,
+                 warp: WarpMapper) -> None:
+        self._node_lab = node_lab
+        self._node_mapped = node_mapped
+        self._warp = warp
+
+    def map_lab(self, lab: np.ndarray) -> np.ndarray:
+        if lab is self._node_lab or (
+                lab.shape == self._node_lab.shape
+                and np.array_equal(lab, self._node_lab)):
+            return self._node_mapped
+        return self._warp.map_lab(lab)
 
 
 def _source_interior_lab(source_gamut: Path | str, rng, n: int) -> np.ndarray:
@@ -715,7 +761,8 @@ def build_mapped_b2a(model: ForwardModel, meas: Ti3Measurement, grid: int,
         try:
             oracle = fit_colprof_mappers(
                 meas, source_gamut, settings,
-                getattr(settings, "argyll_bin", None), progress)
+                getattr(settings, "argyll_bin", None), progress,
+                node_lab=node_lab)
         except OracleUnavailable as exc:
             if progress:
                 progress(f"Using the engine's own rendering ({exc}).")
