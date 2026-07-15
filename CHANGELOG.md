@@ -1,5 +1,33 @@
 # Changelog
 
+## v3.13.7-beta.3
+
+The ChromIQ profile engine (#122) — a profile builder inside the app, next
+to Argyll colprof. Optional and off by default; colprof remains the default
+engine everywhere.
+
+- **Settings → Behaviour → "ChromIQ profile engine (beta)"**: turning it on
+  adds a small "Profile engine" choice to the Build Profile tab — Argyll
+  colprof (default) or ChromIQ engine (beta). Build the same measurement
+  with both and compare; measurement files are never touched.
+- **Multi-ink profiles**: measurements from multi-ink charts (CMYK plus
+  orange, green, violet…) — which colprof cannot process — build
+  automatically with the ChromIQ engine. Together with the multi-ink charts
+  from Create Chart, the whole loop now closes inside ChromIQ: print,
+  measure, build, use as pre-conditioning profile.
+- **Loss-free rule**: the engine only takes a build it fully covers.
+  Options it doesn't do yet (spectral illuminants, FWA, custom smoothing,
+  extra command-line flags…) keep the build on colprof, and the log names
+  the reason. The standard gamut sources (ClayRGB / sRGB) are covered,
+  with perceptual and saturation tables built from them (approximate —
+  the colorimetric intents are the reference).
+- **Accuracy** (measured on real printers): at the same quality level the
+  engine's colour accuracy sits at colprof's level for RGB measurements;
+  profiles pass ColorSync verification and open in all Argyll tools.
+- Multi-ink profiles work in every downstream tool: previews, Lab 3D
+  views, profile-guided patch sets and lookups fall back transparently
+  where Argyll's own tools stop at 4 ink channels.
+
 ## v3.13.7-beta.2
 
 The multi-ink preview round (#72 Tier D), plus fixes from live testing.
