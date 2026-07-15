@@ -516,6 +516,18 @@ class TabProfile(QWidget):
                 return "engine"
             return "blocked"
         if beta:
+            # Bit-exact gamut mapping on a standard (<=4-ink) measurement:
+            # colprof builds these natively, so run it directly for a result
+            # identical to ArgyllCMS — the engine re-implements the forward and
+            # inverse tables, so it can only approximate colprof, never match it
+            # byte-for-byte. The engine (+ the bundled gamut helper) is reserved
+            # for CMY+N above, where colprof refuses.
+            if str(self._settings.get("gammap_mode", "fast")) == "argyll":
+                self._log.appendPlainText(tr(
+                    "[INFO] Bit-exact gamut mapping on a standard (≤4-ink) "
+                    "measurement — building with ArgyllCMS colprof directly, "
+                    "for a profile identical to Argyll."))
+                return "colprof"
             ok, why = engine_support(params)
             if ok:
                 return "engine"

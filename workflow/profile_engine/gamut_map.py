@@ -765,7 +765,15 @@ def build_mapped_b2a(model: ForwardModel, meas: Ti3Measurement, grid: int,
     # (multi-ink data or no Argyll binaries at all).
     progress = getattr(settings, "progress", None) if settings else None
     oracle: dict[str, object] = {}
-    if settings is not None and model is not None:
+    # Bit-exact mode on <=4-ink devices: colprof itself CAN build these, so the
+    # most faithful "Argyll's engine" result is real colprof — the oracle reads
+    # colprof's own B2A tables, whereas the native helper re-inverts with the
+    # engine's model and so only approximates them. The helper is reserved for
+    # CMY+N, where colprof refuses. Fast mode always uses the Python mapper.
+    _n = getattr(model, "n_channels", 0) if model is not None else 0
+    _bitexact_le4 = (getattr(settings, "gammap_mode", "fast") == "argyll"
+                     and 0 < _n <= 4)
+    if settings is not None and model is not None and not _bitexact_le4:
         try:
             from workflow.profile_engine.gammap_port.wire import (
                 PortUnavailable, fit_gammap_port_mappers)
@@ -777,6 +785,9 @@ def build_mapped_b2a(model: ForwardModel, meas: Ti3Measurement, grid: int,
             if progress:
                 progress(f"Ported gammap unavailable ({exc}) — "
                          "matching colprof's rendering instead.")
+    elif _bitexact_le4 and progress:
+        progress("Gamut mapping (bit-exact): rendering with ArgyllCMS "
+                 "colprof directly.")
     if settings is not None and meas is not None and (
             "B2A0" not in oracle or "B2A2" not in oracle):
         try:

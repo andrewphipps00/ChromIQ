@@ -558,50 +558,56 @@ class SettingsDialog(QDialog):
         self._gammap_mode_combo.setMinimumWidth(220)
         gammap_mode_tip = TooltipButton(
             tr("Gamut mapping"),
-            tr("This only matters when the ChromIQ profile engine is on, "
-            "and it chooses how the engine builds ONE part of your "
-            "profile: the perceptual and saturation renderings — the ones "
-            "that squeeze the full range of an image into the smaller "
-            "range your printer and paper can actually reproduce.\n\n"
-            "Both choices produce a correct, ready-to-use profile, and "
-            "both work for every printer ChromIQ supports, including "
-            "6- and more-ink models. The only difference is which piece "
-            "of software does the colour-squeezing maths:\n\n"
+            tr("This chooses how the profile engine builds the perceptual "
+            "and saturation renderings of your profile — the parts that "
+            "gently squeeze the full range of an image into the smaller "
+            "range your printer and paper can actually reproduce. (It has "
+            "no effect on a plain colour-accurate profile; it only shapes "
+            "those two renderings.)\n\n"
+            "Both choices give you a correct, ready-to-use profile for any "
+            "printer ChromIQ supports, including 6-ink and beyond. The "
+            "difference is which software does the colour-squeezing:\n\n"
             "  • Fast (built-in) — ChromIQ's own, careful re-creation of "
-            "Argyll's gamut-mapping maths, running right inside the app. "
-            "It builds a profile in a few seconds and, in our testing, is "
-            "indistinguishable from the result below. This is the best "
+            "Argyll's gamut-mapping maths, running right inside the app. It "
+            "finishes in a few seconds and, in our testing, is visually "
+            "indistinguishable from the exact result. This is the best "
             "choice for everyday use.\n\n"
-            "  • Bit-exact (Argyll's engine) — runs ArgyllCMS's ACTUAL "
-            "gamut-mapping engine, the very same code the Argyll tools "
-            "use, bundled with ChromIQ. The result is a literal, "
-            "identical match to what Argyll itself would produce. It "
-            "takes a little longer — expect up to a minute or two, and "
-            "somewhat more for multi-ink printers — and it is what makes "
-            "an exact Argyll result possible even for 6-ink and beyond, "
-            "which Argyll's own profiler cannot build directly.\n\n"
+            "  • Bit-exact (Argyll's engine) — gives you ArgyllCMS's real "
+            "result, not a re-creation of it:\n"
+            "       – For a normal RGB or CMYK printer, ChromIQ builds the "
+            "profile with ArgyllCMS colprof itself, so it is identical to "
+            "what Argyll would produce on its own.\n"
+            "       – For a 6-ink or larger printer — which Argyll's own "
+            "profiler cannot build at all — ChromIQ builds it with its "
+            "engine plus Argyll's actual gamut-mapping code (bundled with "
+            "the app), so the colour mapping is Argyll's real algorithm "
+            "there too.\n"
+            "     It takes a little longer — expect up to a minute or two, "
+            "and somewhat more for multi-ink printers.\n\n"
             "Which should you pick? Fast is perfect for everyday work and "
-            "quicker. Choose Bit-exact when you want the profile to be an "
-            "exact match to Argyll's own engine — for instance when you "
-            "are comparing results closely, or simply prefer maximum "
-            "faithfulness and don't mind the short wait. Either way the "
-            "colours are correct; this is about an exact match versus "
-            "build speed, not about one being right and the other wrong.\n\n"
-            "If the bundled Argyll engine is ever unavailable, ChromIQ "
-            "quietly falls back to Fast so a profile still builds. And "
-            "since building a profile is a one-time step per paper and "
-            "printer, even the slower choice only costs you those extra "
-            "minutes once."),
+            "quicker. Choose Bit-exact when you want the most faithful "
+            "possible result — for example when you are comparing engines "
+            "closely, or simply prefer maximum faithfulness and don't mind "
+            "the short wait. Either way the colours are correct; this is "
+            "about exactness versus build speed, not about one being right "
+            "and the other wrong.\n\n"
+            "Building a profile is a one-time step per paper and printer, "
+            "so even the slower choice only costs you those extra minutes "
+            "once."),
             self,
             min_width=680,
         )
-        gammap_mode_cell = QWidget(self)
+        self._gammap_mode_cell = gammap_mode_cell = QWidget(self)
         _gm_row = QHBoxLayout(gammap_mode_cell)
         _gm_row.setContentsMargins(0, 0, 0, 0)
         _gm_row.addWidget(QLabel(tr("Gamut mapping:"), self))
         _gm_row.addWidget(self._gammap_mode_combo)
         _gm_row.addStretch()
         _gm_row.addWidget(gammap_mode_tip)
+        # Gamut mapping only applies to the profile engine, so the picker is
+        # shown only while the engine is enabled.
+        self._profile_engine_check.toggled.connect(
+            self._gammap_mode_cell.setVisible)
 
         self._native_print_check = QCheckBox(tr("Use default macOS printer dialog"), self)
         native_tip = TooltipButton(
@@ -1618,6 +1624,9 @@ class SettingsDialog(QDialog):
         self._gammap_mode_combo.setCurrentIndex(
             max(0, self._gammap_mode_combo.findData(
                 str(s.get("gammap_mode", "fast")))))
+        # A no-change setChecked above may not emit toggled, so sync explicitly.
+        self._gammap_mode_cell.setVisible(
+            self._profile_engine_check.isChecked())
         self._native_print_check.setChecked(bool(s.get("use_native_print_dialog", False)))
         self._pdf_fallback_check.setChecked(bool(s.get("pdf_print_fallback", False)))
         self._confirm_print_check.setChecked(bool(s.get("confirm_before_printing", True)))

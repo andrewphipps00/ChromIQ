@@ -169,10 +169,16 @@ def test_settings_dialog_mode_combo_roundtrip():
         def set(self, k, v):
             self._s[k] = v
 
-    fake = _FakeSettings(gammap_mode="argyll")
+    fake = _FakeSettings(gammap_mode="argyll", profile_engine_beta=True)
     dlg = SettingsDialog(fake)
     try:
         assert dlg._gammap_mode_combo.currentData() == "argyll"
+        # visible while the engine is on; hidden when it is turned off
+        assert dlg._gammap_mode_cell.isVisibleTo(dlg)
+        dlg._profile_engine_check.setChecked(False)
+        assert not dlg._gammap_mode_cell.isVisibleTo(dlg)
+        dlg._profile_engine_check.setChecked(True)
+        assert dlg._gammap_mode_cell.isVisibleTo(dlg)
         idx = dlg._gammap_mode_combo.findData("fast")
         dlg._gammap_mode_combo.setCurrentIndex(idx)
         dlg._save_and_close()
