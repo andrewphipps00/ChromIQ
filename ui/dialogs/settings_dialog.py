@@ -530,10 +530,11 @@ class SettingsDialog(QDialog):
             "spectral illuminants and observers, paper-whitener "
             "compensation, ICC attributes and all the expert switches.\n\n"
             "  • Its colour rendering is computed by ChromIQ's own port "
-            "of Argyll's gamut-mapping algorithm. On our test data the "
-            "results measure within colprof's normal build-to-build "
-            "variation — you should not be able to tell the profiles "
-            "apart in print.\n\n"
+            "of Argyll's gamut-mapping algorithm. In our own limited "
+            "testing the results measure within colprof's normal "
+            "build-to-build variation — but it has not been tested "
+            "extensively yet, so treat that as promising rather than "
+            "proven.\n\n"
             "  • If a build needs something only colprof has (for example "
             "a hand-typed extra flag the engine doesn't recognise), that "
             "build is quietly handed to colprof and the log tells you "
@@ -541,8 +542,9 @@ class SettingsDialog(QDialog):
             "  • Your measurement files are never changed by either "
             "engine.\n\n"
             "Turning the option on shows this information once more and "
-            "asks you to confirm — it is still a beta, so please verify "
-            "your first profiles with a test print."),
+            "asks you to confirm. It is a new beta and has not been "
+            "extensively tested, so use it at your own risk and verify "
+            "every profile with a test print before you rely on it."),
             self,
             min_width=680,
         )
@@ -870,13 +872,16 @@ class SettingsDialog(QDialog):
             "•  You're always one click from going back. Switch this "
             "option off and ChromIQ returns to building every profile "
             "with colprof, exactly as before.\n\n"
-            "One honest note: this engine is still in beta. It's held up "
-            "well in our testing, but please treat your first few profiles "
-            "as trial runs — check them with a test print before you "
-            "commit to a big or important job. If anything ever looks "
-            "off, just turn the option back off and tell us what you saw; "
-            "every report genuinely helps make it better.\n\n"
-            "Ready to give it a go?"))
+            "Please read this part carefully: this engine is new and "
+            "still in beta. It has NOT been extensively tested yet, so "
+            "use it at your own risk. Treat every profile it makes as a "
+            "trial run — always check it with a test print before you "
+            "rely on it for anything that matters, and never use it "
+            "unchecked for an important or paid job. If anything looks "
+            "off, turn the option back off (colprof comes straight back) "
+            "and tell us what you saw; every report genuinely helps make "
+            "it better.\n\n"
+            "Enable it at your own risk and give it a try?"))
         box.setStandardButtons(QMessageBox.StandardButton.Ok
                                | QMessageBox.StandardButton.Cancel)
         ok_btn = box.button(QMessageBox.StandardButton.Ok)
