@@ -202,13 +202,37 @@ def fit_gammap_port_mappers(model, meas, source_gamut: Path | str,
     ap_src = Appearance(src_white_xyz)
 
     # destination: Argyll's own gamut construction on a temp model ICC
+    # (n ≤ 4 — Argyll's lookup machinery refuses more channels); for
+    # multi-ink models the engine meshes its own model cloud in Jab —
+    # there is no colprof geometry for +N, the model IS the gamut
     white_lab = model.predict(np.ones((1, model.n_channels))
                               if is_additive
                               else np.zeros((1, model.n_channels)))[0]
+    black_lab = model.predict(np.zeros((1, model.n_channels))
+                              if is_additive
+                              else np.ones((1, model.n_channels)))[0]
     paper_xyz = lab_to_xyz(white_lab[None, :])[0]
     ap_dst = Appearance(paper_xyz)
-    dst = dest_gam_jab(model, paper_xyz, bin_dir,
-                       color_rep=getattr(meas, "color_rep", ""))
+    if model.n_channels <= 4:
+        dst = dest_gam_jab(model, paper_xyz, bin_dir,
+                           color_rep=getattr(meas, "color_rep", ""))
+    else:
+        from workflow.profile_engine.gamut_map import (
+            destination_surface_lab)
+        from workflow.profile_engine.gammap_port.gamio import GamFile
+        dst_lab = destination_surface_lab(model, mesh=33,
+                                          ink_limit=ink_limit,
+                                          is_additive=is_additive)
+        dst_jab = ap_dst.lab_to_jab(dst_lab)
+        dverts, dtris = mesh_from_cloud(dst_jab, nh=48, nb=24)
+        d_cusps = cusps_from_cloud(dst_jab)
+        if d_cusps is None:
+            raise PortUnavailable("multi-ink cusps not resolvable")
+        d_wp = ap_dst.lab_to_jab(white_lab[None, :])[0]
+        d_bp = ap_dst.lab_to_jab(black_lab[None, :])[0]
+        dst = GamFile(vertices=dverts, triangles=dtris, white=d_wp,
+                      black=d_bp, cs_white=d_wp, cs_black=d_bp,
+                      cusps=d_cusps)
 
     gm = GammapMapper(src.vertices, src.triangles, src.cs_white,
                       src.cs_black, src.cusps, dst.vertices,
