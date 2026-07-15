@@ -93,14 +93,15 @@ def engine_support(params: "ProfileParams") -> tuple[bool, str]:
             return False, what
     gamut_source = params.gamut_src or params.gamut_sat_src
     if gamut_source:
-        from workflow.profile_engine.gamut_map import (GamutSourceError,
-                                                       source_kind)
+        # Any RGB/CMYK profile works — the surface is sampled live from the
+        # file (littleCMS reads v2 and v4). Only unreadable files gate.
+        from workflow.profile_engine.gamut_map import (
+            GamutSourceError, source_surface_from_profile)
         try:
-            source_kind(gamut_source)
-        except GamutSourceError:
+            source_surface_from_profile(gamut_source, mesh=5)
+        except GamutSourceError as exc:
             return False, tr(
-                "this gamut source profile (the engine knows ClayRGB/Adobe "
-                "RGB and sRGB)")
+                "this gamut source profile ({reason})").format(reason=exc)
     return True, ""
 
 

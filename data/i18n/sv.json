@@ -2678,7 +2678,7 @@
   "the colour-space profile you chose is ICC v4 (unreadable) — assumed sRGB": "färgrymdsprofilen du valde är ICC v4 (oläsbar) – antar sRGB",
   "the colour-space profile you chose is missing — assumed sRGB": "färgrymdsprofilen du valde saknas – antar sRGB",
   "the image's embedded profile is ICC v4 (unreadable) — assumed sRGB": "bildens inbäddade profil är ICC v4 (oläsbar) — antas sRGB",
-  "this gamut source profile (the engine knows ClayRGB/Adobe RGB and sRGB)": "this gamut source profile (the engine knows ClayRGB/Adobe RGB and sRGB)",
+  "this gamut source profile ({reason})": "this gamut source profile ({reason})",
   "tiffgamut could not build the image gamut.{s}": "tiffgamut kunde inte bygga bildens gamut.{s}",
   "using Argyll's default strip recognition": "använder Argylls standard-remsidentifiering",
   "using the colour-space profile you chose": "använder färgrymdsprofilen du valde",

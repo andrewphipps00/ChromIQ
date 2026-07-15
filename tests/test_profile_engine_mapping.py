@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import struct
 from datetime import datetime, timezone
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -23,12 +24,12 @@ from workflow.profile_engine.gamut_map import (GamutMapper, GamutSourceError,
                                                source_surface_lab)
 
 
-def test_source_kind_recognises_chromiq_gamut_sources():
+def test_source_kind_analytic_fast_path():
     assert source_kind("/x/ClayRGB.icm") == "adobe"
     assert source_kind("AdobeRGB1998.icc") == "adobe"
     assert source_kind("sRGB.icm") == "srgb"
-    with pytest.raises(GamutSourceError):
-        source_kind("WideGamutRGB.icc")
+    # everything else is sampled live from the profile, not rejected
+    assert source_kind("WideGamutRGB.icc") is None
 
 
 def test_source_surfaces_are_sane():
@@ -101,9 +102,57 @@ def test_build_with_gamut_source_writes_distinct_intents(tmp_path):
     assert entries[b"B2A2"] != entries[b"B2A0"]
 
 
-def test_build_with_unknown_gamut_source_fails_honestly(tmp_path):
+def test_build_with_unreadable_gamut_source_fails_honestly(tmp_path):
     ti3 = write_synth_ti3(tmp_path / "s.ti3", "iRGB",
                           ["RGB_R", "RGB_G", "RGB_B"], additive=True)
+    # missing file
     with pytest.raises(GamutSourceError):
         build_profile(ti3, tmp_path / "s.icc", BuildSettings(
-            quality="l", source_gamut="ProPhoto.icc"))
+            quality="l", source_gamut=tmp_path / "nope.icc"))
+    # present but not an ICC profile
+    junk = tmp_path / "junk.icc"
+    junk.write_bytes(b"not a profile")
+    with pytest.raises(GamutSourceError):
+        build_profile(ti3, tmp_path / "s.icc", BuildSettings(
+            quality="l", source_gamut=junk))
+
+
+def test_live_sampled_source_matches_analytic_srgb():
+    """The littleCMS live path agrees with the analytic surface (same gamut)."""
+    srgb_icm = Path("/Applications/Argyll/ref/sRGB.icm")
+    if not srgb_icm.exists():
+        pytest.skip("Argyll ref profiles not installed")
+    from workflow.profile_engine.gamut_map import source_surface_from_profile
+    analytic = source_surface_lab("srgb")
+    # bypass the name fast path by copying to a neutral name
+    import shutil, tempfile
+    with tempfile.TemporaryDirectory() as td:
+        p = Path(td) / "generic-source.icm"
+        shutil.copy(srgb_icm, p)
+        sampled = source_surface_from_profile(p)
+    # compare binned max chroma per hue sector — the quantity the mapper uses
+    def tabs(cloud):
+        h = (np.degrees(np.arctan2(cloud[:, 2], cloud[:, 1])) % 360 / 30
+             ).astype(int).clip(0, 11)
+        return np.array([np.hypot(cloud[m, 1], cloud[m, 2]).max()
+                         for m in (h == b for b in range(12))])
+    da = tabs(analytic)
+    ds = tabs(sampled)
+    assert np.abs(da - ds).max() < 6.0     # same gamut, small mesh/8-bit noise
+
+
+def test_build_with_arbitrary_profile_source(tmp_path):
+    """A v4 system profile (Display P3) or any engine-built ICC works as a
+    live gamut source — colprof-style 'don't care what you throw at it'."""
+    ti3 = write_synth_ti3(tmp_path / "s.ti3", "iRGB",
+                          ["RGB_R", "RGB_G", "RGB_B"], additive=True)
+    p3 = Path("/System/Library/ColorSync/Profiles/Display P3.icc")
+    if p3.exists():
+        src = p3
+    else:
+        # self-contained fallback: an engine-built profile as the source
+        src = tmp_path / "src.icc"
+        build_profile(ti3, src, BuildSettings(quality="l"))
+    res = build_profile(ti3, tmp_path / "out.icc", BuildSettings(
+        quality="l", source_gamut=src))
+    assert res.perceptual_distinct

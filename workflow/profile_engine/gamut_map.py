@@ -24,8 +24,12 @@ engine therefore ships these intents as *approximate*; the colorimetric
 tables remain authoritative. Full gammap-style guide-vector parity is the
 documented P4 follow-up.
 
-Source gamuts v1: analytic Adobe RGB (1998)/ClayRGB and sRGB primaries —
-exactly the profiles ChromIQ offers as colprof gamut sources (#121).
+Source gamuts are computed live from whatever profile is given — like
+colprof, the engine doesn't care which source you throw at it. ClayRGB /
+Adobe RGB and sRGB take an exact analytic fast path; every other RGB or
+CMYK profile (ProPhoto, Display P3, a printer profile, v2 or v4) is sampled
+through littleCMS. ICC v4 works here even though the Argyll tools can't
+read it.
 """
 from __future__ import annotations
 
@@ -56,19 +60,90 @@ NH, NP = 48, 24          # hue × elevation bins for the radial tables
 
 
 class GamutSourceError(ValueError):
-    """The gamut-source profile is not one the engine can map from (yet)."""
+    """The gamut-source profile could not be read (user-facing message)."""
 
 
-def source_kind(path: Path | str) -> str:
+def source_kind(path: Path | str) -> str | None:
+    """Analytic fast path for the two sources ChromIQ recommends (#121).
+
+    Exact primaries, no quantisation, no profile I/O. Anything else returns
+    ``None`` and is sampled live from the actual profile — the engine, like
+    colprof, doesn't care which source you throw at it.
+    """
     name = Path(path).stem.lower()
     if "clay" in name or "adobe" in name:
         return "adobe"
     if "srgb" in name:
         return "srgb"
-    raise GamutSourceError(
-        f"'{Path(path).name}' is not a gamut source the ChromIQ engine "
-        "knows. Use ClayRGB (Adobe RGB-compatible) or sRGB — or build with "
-        "Argyll colprof, which accepts any gamut source profile.")
+    return None
+
+
+def source_surface_from_profile(path: Path | str, mesh: int = 33
+                                ) -> np.ndarray:
+    """Source-gamut boundary cloud in Lab, computed live from any ICC.
+
+    The device-cube boundary is mapped through the profile with littleCMS
+    (PIL ``ImageCms``) — which, unlike the Argyll tools, also reads ICC v4
+    (Display P3, i1Profiler output, …). RGB and CMYK sources are supported.
+    The 8-bit LAB transform quantises to ≈0.5 ΔE — irrelevant for a gamut
+    surface that only feeds binned radial maxima.
+    """
+    kind = source_kind(path)
+    if kind is not None:
+        return source_surface_lab(kind, mesh)
+    p = Path(path)
+    if not p.is_file():
+        raise GamutSourceError(
+            f"Gamut source profile not found: {p}")
+    try:
+        from PIL import Image, ImageCms
+        prof = ImageCms.getOpenProfile(str(p))
+        space = (prof.profile.xcolor_space or "").strip()
+    except Exception as exc:
+        raise GamutSourceError(
+            f"'{p.name}' could not be read as an ICC profile "
+            f"({exc}).") from exc
+    if space not in ("RGB", "CMYK"):
+        raise GamutSourceError(
+            f"'{p.name}' is a {space or 'non-device'} profile — gamut "
+            "sources must be RGB or CMYK.")
+    n = 3 if space == "RGB" else 4
+    if n == 3:
+        u = np.linspace(0.0, 1.0, mesh)
+        faces = []
+        for ax in range(3):
+            for val in (0.0, 1.0):
+                g = np.zeros((mesh, mesh, 3))
+                a, b = [i for i in range(3) if i != ax]
+                g[:, :, ax] = val
+                g[:, :, a] = u[:, None]
+                g[:, :, b] = u[None, :]
+                faces.append(g.reshape(-1, 3))
+        dev = np.vstack(faces)
+    else:
+        rng = np.random.default_rng(17)
+        m = 12000
+        dev = rng.uniform(0.0, 1.0, (m, 4))
+        dev[np.arange(m), rng.integers(0, 4, m)] = \
+            rng.integers(0, 2, m).astype(float)
+    try:
+        lab_prof = ImageCms.createProfile("LAB")
+        tf = ImageCms.buildTransform(prof, lab_prof, space, "LAB",
+                                     renderingIntent=1)
+        dev8 = np.clip(dev * 255.0, 0, 255).round().astype(np.uint8)
+        img = Image.merge(space, [
+            Image.fromarray(dev8[:, c].reshape(-1, 1), "L")
+            for c in range(n)])
+        out = ImageCms.applyTransform(img, tf)
+        chans = [np.asarray(ch, dtype=float).reshape(-1)
+                 for ch in out.split()]
+    except Exception as exc:
+        raise GamutSourceError(
+            f"'{p.name}' could not be sampled as a gamut source "
+            f"({exc}).") from exc
+    return np.stack([chans[0] * 100.0 / 255.0,
+                     chans[1] - 128.0,
+                     chans[2] - 128.0], 1)
 
 
 def _rgb_to_xyz_matrix(xy: np.ndarray) -> np.ndarray:
@@ -239,8 +314,7 @@ def build_mapped_b2a(model: ForwardModel, meas: Ti3Measurement, grid: int,
                      is_additive: bool, ink_limit: float | None,
                      entries: int) -> tuple[bytes, bytes]:
     """The perceptual (B2A0) and saturation (B2A2) mft2 tags."""
-    kind = source_kind(source_gamut)
-    src = source_surface_lab(kind)
+    src = source_surface_from_profile(source_gamut)
     dst = destination_surface_lab(model, ink_limit=ink_limit,
                                   is_additive=is_additive)
     node_lab = b2a_mod.lab_grid(grid)

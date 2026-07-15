@@ -2678,7 +2678,7 @@
   "the colour-space profile you chose is ICC v4 (unreadable) — assumed sRGB": "你选择的色彩空间配置文件是 ICC v4（无法读取）— 假定为 sRGB",
   "the colour-space profile you chose is missing — assumed sRGB": "找不到你选择的色彩空间配置文件 — 假定为 sRGB",
   "the image's embedded profile is ICC v4 (unreadable) — assumed sRGB": "图像的嵌入配置文件为 ICC v4（无法读取）— 假定为 sRGB",
-  "this gamut source profile (the engine knows ClayRGB/Adobe RGB and sRGB)": "this gamut source profile (the engine knows ClayRGB/Adobe RGB and sRGB)",
+  "this gamut source profile ({reason})": "this gamut source profile ({reason})",
   "tiffgamut could not build the image gamut.{s}": "tiffgamut 无法构建图像色域。{s}",
   "using Argyll's default strip recognition": "使用Argyll默认的色条识别",
   "using the colour-space profile you chose": "使用你选择的色彩空间配置文件",
