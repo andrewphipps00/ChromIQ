@@ -233,3 +233,16 @@ header cusps/wb):
   consumes .gam-equivalent surfaces (engine generates its own vertex
   clouds + triangulation OR uses iccgamut at build time for RGB/CMYK and
   own mesh for +N), wire, probe gate, suite, UI task #43.
+
+## Stage-4/5 diff results (instrumented, same inputs)
+
+- PASS-1 aodv: **0.006 median** — EXACT (weights/cusps/aerrf/optimiser
+  proven).
+- Argyll's loop contribution: |dv−aodv| median 2.44 / 95% 9.1 — the
+  iteration phases are worth exactly this much.
+- My simplified loop output vs their dv: 2.87 median — WORSE than
+  stopping at aodv. Conclusion: port the loop phases literally (pass-2
+  objective with in-loop depth, evector rspl correction (+851), fine-tune
+  (+1077), depth compensation (+1273)), each validated by adding printf
+  dumps to smthdump at that phase. All tooling in place (compile line
+  above; add dumps to the smthdump.c copy, not the pristine source).
