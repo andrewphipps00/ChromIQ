@@ -12,13 +12,25 @@ from pathlib import Path
 
 import pytest
 
+from core.resource_path import argyll_binary
+from tests.argyll_env import argyll_bin_dir, argyll_tool
 from workflow import xicclu_runner as X
 
-ARGYLL_BIN = Path("/Applications/Argyll/bin")
+# The runner resolves the platform binary name (xicclu.exe on Windows), so the
+# stub file the unit tests plant must match — otherwise it's "not found" and the
+# injected fake runner is never reached.
+_XICCLU = argyll_binary("xicclu")
+
+# The Argyll bin is located per-OS (was hardcoded to the macOS path, so the live
+# tests skipped on Windows/Linux even with Argyll installed). The CMYK profile is
+# deliberately Apple's *Generic CMYK*: the round-trip ΔE thresholds below are
+# calibrated to it, so these are macOS-gated reference tests — a different CMYK
+# profile has different fidelity and would make the assertions profile-dependent.
+ARGYLL_BIN = argyll_bin_dir()
 GENERIC_CMYK = Path("/System/Library/ColorSync/Profiles/Generic CMYK Profile.icc")
 live = pytest.mark.skipif(
-    not (ARGYLL_BIN / "xicclu").exists() or not GENERIC_CMYK.exists(),
-    reason="ArgyllCMS or Generic CMYK profile not installed")
+    argyll_tool("xicclu") is None or not GENERIC_CMYK.is_file(),
+    reason="ArgyllCMS xicclu or the Generic CMYK reference profile not installed")
 
 
 def _fake_runner(stdout: str, returncode: int = 0):
@@ -39,7 +51,7 @@ def test_backward_parses_device_and_scales(tmp_path):
     fake = _fake_runner(
         "50.000000 40.000000 30.000000 [Lab] -> Lut -> "
         "0.126686 0.742860 0.733718 0.071004 [CMYK]\n")
-    (tmp_path / "xicclu").touch()
+    (tmp_path / _XICCLU).touch()
     out = X.backward_device([(50.0, 40.0, 30.0)], profile, tmp_path, runner=fake)
     assert out == [pytest.approx((12.6686, 74.2860, 73.3718, 7.1004), abs=1e-3)]
     # Flags: backward, relative intent, Lab in, default -kr; device 0..1 on stdin.
@@ -51,7 +63,7 @@ def test_backward_parses_device_and_scales(tmp_path):
 def test_backward_strips_tac_token_and_passes_limit(tmp_path):
     profile = tmp_path / "p.icc"
     profile.touch()
-    (tmp_path / "xicclu").touch()
+    (tmp_path / _XICCLU).touch()
     fake = _fake_runner(
         "50.0 -10.0 -20.0 [Lab] -> Lut -> "
         "0.882944 0.906397 0.170671 0.430979 TAC 2.390990 [CMYK]\n")
@@ -66,7 +78,7 @@ def test_backward_strips_tac_token_and_passes_limit(tmp_path):
 def test_parser_tolerates_fif_clip_marker(tmp_path):
     profile = tmp_path / "p.icc"
     profile.touch()
-    (tmp_path / "xicclu").touch()
+    (tmp_path / _XICCLU).touch()
     fake = _fake_runner(
         "50.0 40.0 30.0 [Lab] -> Lut -> "
         "0.000000 0.708436 0.691810 0.183498 [CMYK] (clip)\n")
@@ -78,7 +90,7 @@ def test_parser_tolerates_fif_clip_marker(tmp_path):
 def test_forward_xyz_keeps_pX_scale_and_sends_unit_device(tmp_path):
     profile = tmp_path / "p.icc"
     profile.touch()
-    (tmp_path / "xicclu").touch()
+    (tmp_path / _XICCLU).touch()
     fake = _fake_runner(
         "0.500000 0.400000 0.300000 0.100000 [CMYK] -> Lut -> "
         "19.331530 20.214111 19.083632 [XYZ]\n")
@@ -92,7 +104,7 @@ def test_forward_xyz_keeps_pX_scale_and_sends_unit_device(tmp_path):
 def test_result_count_mismatch_raises(tmp_path):
     profile = tmp_path / "p.icc"
     profile.touch()
-    (tmp_path / "xicclu").touch()
+    (tmp_path / _XICCLU).touch()
     fake = _fake_runner("only a banner line, no arrow\n")
     with pytest.raises(X.XiccluError, match="0 results for 1"):
         X.forward_lab([(10.0, 10.0, 10.0, 0.0)], profile, tmp_path, runner=fake)
@@ -101,7 +113,7 @@ def test_result_count_mismatch_raises(tmp_path):
 def test_nonzero_exit_raises_with_stderr(tmp_path):
     profile = tmp_path / "p.icc"
     profile.touch()
-    (tmp_path / "xicclu").touch()
+    (tmp_path / _XICCLU).touch()
 
     def run(cmd, **kw):
         return subprocess.CompletedProcess(cmd, 1, stdout="", stderr="boom")
