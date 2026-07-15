@@ -298,10 +298,16 @@ def fit_gammap_argyll_mappers(model, meas, source_gamut: Path | str,
                                           is_additive=is_additive)
         dst_cloud_jab = ap_dst.lab_to_jab(dst_lab)
 
+    # For a .gam destination the iccgamut file already carries the profile's
+    # white/black (exactly colprof's), so leave it untouched; only the cloud
+    # path needs explicit wp/bp.
+    map_wp = None if dst_gam is not None else wp_jab
+    map_bp = None if dst_gam is not None else bp_jab
+
     def _mk(intent: str) -> ArgyllHelperMapper:
         return ArgyllHelperMapper(
             src_gam=src_gam, intent=intent, mapres=mapres, ap_src=ap_src,
-            ap_dst=ap_dst, wp_jab=wp_jab, bp_jab=bp_jab, dst_gam=dst_gam,
+            ap_dst=ap_dst, wp_jab=map_wp, bp_jab=map_bp, dst_gam=dst_gam,
             dst_cloud_jab=dst_cloud_jab, td=td)
 
     return {"B2A0": _mk("p"), "B2A2": _mk("s")}
