@@ -110,6 +110,9 @@ class BuildSettings:
     observer: str = ""
     fwa: bool = False
     fwa_illum: str = ""
+    # Argyll binaries directory — lets the mapped tables match colprof's
+    # rendering exactly via the arm's-length oracle (gamut_map).
+    argyll_bin: Path | str | None = None
     timestamp: datetime | None = None        # fixed → byte-reproducible
     progress: Callable[[str], None] | None = None
 
@@ -203,18 +206,30 @@ def build_profile(ti3_path: Path | str, out_path: Path | str,
     _emit(settings, f"Inverting the model (B2A grid {b2a_grid})…")
     ink_limit = settings.ink_limit if settings.ink_limit is not None \
         else meas.ink_limit
+    # Multi-ink: anchor the neutral rendering + K separation in colprof's
+    # behaviour via a synthetic CMYK proxy (colprof can build THAT).
+    anchor = None
+    if n >= 5 and settings.argyll_bin is not None:
+        from workflow.profile_engine.gamut_map import (OracleUnavailable,
+                                                       fit_multiink_anchor)
+        try:
+            anchor = fit_multiink_anchor(
+                model, meas, settings.source_gamut or "", settings,
+                settings.argyll_bin, settings.progress)
+        except OracleUnavailable as exc:
+            _emit(settings, f"Using the engine's own rendering ({exc}).")
     node_lab = codec.node_lab(b2a_grid)
     dev_clut, residual = b2a_mod.build_b2a_clut(
         model, b2a_grid, channel_letters=meas.channel_letters,
         is_additive=meas.is_additive, ink_limit=ink_limit,
-        node_lab=node_lab)
+        node_lab=node_lab, k_prior=anchor)
     # refine_b2a_clut returns *curve-space* values — written straight into
     # the CLUT, with the inverse shaper curves as B2A output tables.
     dev_clut_shaped = b2a_mod.refine_b2a_clut(
         model, dev_clut, residual, b2a_grid,
         ink_limit=ink_limit, is_additive=meas.is_additive,
         channel_letters=meas.channel_letters,
-        node_lab=node_lab, lab_to01=codec.lab_to01)
+        node_lab=node_lab, lab_to01=codec.lab_to01, k_prior=anchor)
     in_gamut = residual <= 1.0
 
     _emit(settings, "Writing the profile…")
@@ -256,7 +271,7 @@ def build_profile(ti3_path: Path | str, out_path: Path | str,
             channel_letters=meas.channel_letters,
             is_additive=meas.is_additive, ink_limit=ink_limit,
             entries=entries_b2a, codec=codec, settings=settings,
-            a2b_grid=a2b_grid, a2b_entries=entries_a2b)
+            a2b_grid=a2b_grid, a2b_entries=entries_a2b, anchor=anchor)
         luts.update(mapped)
         perceptual_distinct = "B2A0" in mapped
     if "B2A0" not in luts:

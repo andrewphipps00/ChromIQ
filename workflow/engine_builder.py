@@ -270,9 +270,10 @@ class _EngineThread(QThread):
 class EngineProfileBuilder:
     """ProfileBuilder-compatible front end for the in-process engine."""
 
-    def __init__(self) -> None:
+    def __init__(self, settings=None) -> None:
         self._thread: _EngineThread | None = None
         self._last_error: str = ""
+        self._app_settings = settings
 
     @property
     def is_running(self) -> bool:
@@ -294,6 +295,9 @@ class EngineProfileBuilder:
               on_finish: Callable[[int], None]) -> None:
         try:
             settings = settings_from_params(params)
+            if self._app_settings is not None:
+                settings.argyll_bin = self._app_settings.get(
+                    "argyll_bin_path", "/Applications/Argyll/bin")
         except (ExtraArgsError, ValueError) as exc:
             self._last_error = str(exc)
             on_line(tr("[ERROR] {msg}").format(msg=exc))

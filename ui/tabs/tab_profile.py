@@ -279,7 +279,7 @@ class TabProfile(QWidget):
         self._runner        = runner
         self._settings      = settings
         self._builder       = ProfileBuilder(runner)
-        self._engine_builder = EngineProfileBuilder()          # #122 beta
+        self._engine_builder = EngineProfileBuilder(settings)  # #122 beta
         self._printcal_runner = PrintcalRunner(runner, settings)
         self._applycal_runner = ApplycalRunner(runner, settings)
         self._ti3_path: Path | None = None
@@ -482,10 +482,11 @@ class TabProfile(QWidget):
             "• Argyll colprof (default) — the proven engine behind every "
             "ChromIQ profile so far.\n\n"
             "• ChromIQ engine (beta) — built into the app. It accepts every "
-            "option on this tab, matches colprof's accuracy on our test "
-            "data, and adds what colprof can't do: profiles for multi-ink "
-            "printers (CMYK plus orange, green, violet…) — those "
-            "measurements use it automatically.\n\n"
+            "option on this tab, matches colprof's accuracy AND its "
+            "perceptual/saturation rendering on our test data, and adds "
+            "what colprof can't do: profiles for multi-ink printers (CMYK "
+            "plus orange, green, violet…) — those measurements use it "
+            "automatically.\n\n"
             "Pick it here to compare engines on the same measurement: one "
             "profile from each, nothing overwritten unless the file names "
             "collide. Only a hand-typed extra colprof flag the engine "

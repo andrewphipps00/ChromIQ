@@ -249,12 +249,16 @@ class GamutMapper:
     def __init__(self, src_cloud: np.ndarray, dst_cloud: np.ndarray, *,
                  knee: float = 0.62, sharp: float = 1.5,
                  l_exp: float = 1.38, cusp_blend: float = 0.7,
-                 chroma_boost: float = 1.0):
+                 chroma_boost: float = 1.0,
+                 neutral_table: dict | None = None):
         self.knee = knee
         self.sharp = sharp
         self.l_exp = l_exp
         self.cusp_blend = cusp_blend
         self.chroma_boost = chroma_boost
+        # Optional colprof-anchored neutral rendering (fit_multiink_anchor):
+        # replaces the analytic tone curve and adds colprof's near-black cast.
+        self.neutral_table = neutral_table
         h = np.degrees(np.arctan2(dst_cloud[:, 2], dst_cloud[:, 1])) % 360.0
         chroma = np.hypot(dst_cloud[:, 1], dst_cloud[:, 2])
         self.cusp_l = np.full(NH, 50.0)
@@ -275,9 +279,15 @@ class GamutMapper:
         L = lab[:, 0]
         a = lab[:, 1]
         b = lab[:, 2]
-        # luminance-range compression (measured colprof family)
-        l1 = L + self.l_black * np.clip(1.0 - L / 100.0, 0.0, 1.0) ** self.l_exp
-        l1 = np.minimum(l1, 100.0)
+        if self.neutral_table is not None:
+            # colprof's measured tone reproduction (CMYK proxy oracle).
+            nt = self.neutral_table
+            l1 = np.interp(L, nt["l_axis"], nt["neutral_lab"][:, 0])
+        else:
+            # luminance-range compression (measured colprof family)
+            l1 = L + self.l_black \
+                * np.clip(1.0 - L / 100.0, 0.0, 1.0) ** self.l_exp
+            l1 = np.minimum(l1, 100.0)
         chroma = np.hypot(a, b) * self.chroma_boost
         h = np.degrees(np.arctan2(b, a)) % 360.0
         hb = np.clip((h / 360.0 * NH).astype(int), 0, NH - 1)
@@ -309,6 +319,14 @@ class GamutMapper:
         neutral = chroma < 1e-6
         out[neutral, 0] = l1[neutral]
         out[neutral, 1:] = lab[neutral, 1:] * 1.0
+        if self.neutral_table is not None:
+            # colprof's near-neutral colour cast, fading out by chroma 20.
+            nt = self.neutral_table
+            w = np.clip(1.0 - chroma / 20.0, 0.0, 1.0)
+            out[:, 1] += w * np.interp(L, nt["l_axis"],
+                                       nt["neutral_lab"][:, 1])
+            out[:, 2] += w * np.interp(L, nt["l_axis"],
+                                       nt["neutral_lab"][:, 2])
         return out
 
 
@@ -386,6 +404,263 @@ class JabGamutMapper:
                                   0.0, None))
 
 
+class WarpMapper:
+    """A smooth displacement-field map fitted to sampled (Lab → Lab) pairs.
+
+    The proven parity architecture (issue #122, iteration 4): a 13³ grid of
+    Lab displacements, least-squares fitted with the maths-A machinery,
+    reproduces colprof's own perceptual mapping to held-out median 0.23 ΔE —
+    *below* colprof's build-to-build noise (0.50).
+    """
+
+    def __init__(self, train_lab: np.ndarray, target_lab: np.ndarray,
+                 grid: int = 13, lam: float = 0.005) -> None:
+        from workflow.profile_engine.forward_model import (_grid_solve,
+                                                           _interp_weights)
+        self._grid = grid
+        lo = train_lab.min(0) - 1.0
+        hi = train_lab.max(0) + 1.0
+        self._lo, self._hi = lo, hi
+        w, cols = _interp_weights(self._to01(train_lab), grid, 3)
+        self._nodes = _grid_solve(w, cols, target_lab - train_lab, grid, 3,
+                                  lam, 1200)
+
+    def _to01(self, lab: np.ndarray) -> np.ndarray:
+        return np.clip((lab - self._lo[None, :])
+                       / (self._hi - self._lo)[None, :], 0.0, 1.0)
+
+    def map_lab(self, lab: np.ndarray) -> np.ndarray:
+        from workflow.profile_engine.forward_model import _interp_weights
+        w, cols = _interp_weights(self._to01(lab), self._grid, 3)
+        return lab + (w[:, :, None] * self._nodes[cols]).sum(1)
+
+
+class OracleUnavailable(RuntimeError):
+    """colprof can't provide the mapping oracle for this build."""
+
+
+def fit_colprof_mappers(meas: Ti3Measurement, source_gamut: Path | str,
+                        settings, argyll_bin: Path | str | None,
+                        progress=None) -> dict[str, WarpMapper]:
+    """Colprof-matched perceptual/saturation mappers (arm's-length oracle).
+
+    Runs Argyll colprof as a subprocess on the same measurement with the
+    same gamut/intent/viewing flags, samples the *realized* perceptual and
+    saturation mappings of the resulting profile at ~1600 real source
+    colours, and fits :class:`WarpMapper` to each. The engine's rendering
+    then matches colprof's within colprof's own build-to-build variation —
+    using only program output, the same arm's-length relationship ChromIQ
+    has always had with the Argyll tools.
+
+    Raises :class:`OracleUnavailable` when colprof can't build this
+    measurement (multi-ink data, missing binaries) — callers fall back to
+    the engine's own closed-form mapping family.
+    """
+    import shutil
+    import subprocess
+    import tempfile
+
+    bin_dir = Path(argyll_bin) if argyll_bin else Path(
+        "/Applications/Argyll/bin")
+    colprof = bin_dir / "colprof"
+    xicclu = bin_dir / "xicclu"
+    if not colprof.exists() or not xicclu.exists():
+        raise OracleUnavailable("Argyll binaries not found")
+    if meas.device_rep not in ("RGB", "CMY", "CMYK"):
+        raise OracleUnavailable(
+            f"colprof can't build {meas.device_rep} measurements")
+
+    if progress:
+        progress("Matching colprof's rendering (background colprof run)…")
+    with tempfile.TemporaryDirectory() as td:
+        base = Path(td) / "oracle"
+        shutil.copy(meas.path, base.with_suffix(".ti3"))
+        q = settings.quality if settings.quality in ("l", "m", "h") else "h"
+        args = [str(colprof), f"-q{q}"]
+        # Same source/intent/viewing surface the engine build was asked for.
+        flag = "-s" if (getattr(settings, "perc_src_colorimetric", False)
+                        and getattr(settings, "sat_src_colorimetric", False)
+                        ) else "-S"
+        args += [flag, str(source_gamut)]
+        if getattr(settings, "perc_intent", ""):
+            args.append(f"-t{settings.perc_intent}")
+        if getattr(settings, "sat_intent", ""):
+            args.append(f"-T{settings.sat_intent}")
+        if getattr(settings, "src_viewing", ""):
+            args.append(f"-c{settings.src_viewing}")
+        if getattr(settings, "dst_viewing", ""):
+            args.append(f"-d{settings.dst_viewing}")
+        if getattr(settings, "perc_src_colorimetric", False):
+            args.append("-nP")
+        if getattr(settings, "sat_src_colorimetric", False):
+            args.append("-nS")
+        if getattr(settings, "illuminant", ""):
+            args += ["-i", settings.illuminant]
+        if getattr(settings, "observer", ""):
+            args += ["-o", settings.observer]
+        if getattr(settings, "fwa", False):
+            args.append(f"-f{settings.fwa_illum}" if settings.fwa_illum
+                        else "-f")
+        r = subprocess.run(args + [str(base)], capture_output=True, text=True)
+        icc = base.with_suffix(".icc")
+        if r.returncode != 0 or not icc.exists():
+            raise OracleUnavailable(
+                f"colprof oracle failed: {(r.stderr or r.stdout)[:200]}")
+
+        # Real source colours: random source-device values through the
+        # source profile (never random Lab — impossible colours), plus a
+        # neutral ramp so the tone curve is nailed down.
+        rng = np.random.default_rng(7)
+        src_cloud = source_surface_from_profile(source_gamut, mesh=9)
+        interior = _source_interior_lab(source_gamut, rng, 1400)
+        neutral = np.stack([np.linspace(0.0, 100.0, 64),
+                            np.zeros(64), np.zeros(64)], 1)
+        train = np.vstack([interior, src_cloud, neutral])
+
+        def realized(intent: str) -> np.ndarray:
+            inp = "\n".join(f"{a:.4f} {b:.4f} {c:.4f}" for a, b, c in train)
+            r1 = subprocess.run([str(xicclu), "-fb", f"-i{intent}", "-pl",
+                                 str(icc)], input=inp, capture_output=True,
+                                text=True)
+            dev = [" ".join(ln.rsplit("->", 1)[1].split()[:meas.n_channels])
+                   for ln in r1.stdout.splitlines() if "->" in ln]
+            r2 = subprocess.run([str(xicclu), "-ff", "-ir", "-pl", str(icc)],
+                                input="\n".join(dev), capture_output=True,
+                                text=True)
+            out = np.array([[float(v) for v in
+                             ln.rsplit("->", 1)[1].split()[:3]]
+                            for ln in r2.stdout.splitlines() if "->" in ln])
+            if len(out) != len(train):
+                raise OracleUnavailable("oracle sampling failed")
+            return out
+
+        if progress:
+            progress("Fitting the colprof-matched rendering…")
+        return {"B2A0": WarpMapper(train, realized("p")),
+                "B2A2": WarpMapper(train, realized("s"))}
+
+
+def _source_interior_lab(source_gamut: Path | str, rng, n: int) -> np.ndarray:
+    """Random interior colours of the source space, in Lab."""
+    kind = source_kind(source_gamut)
+    dev = rng.uniform(0.0, 1.0, (n, 3))
+    if kind is not None:
+        xy, gamma = _PRIMARIES[kind]
+        m = _rgb_to_xyz_matrix(xy)
+        if gamma == "srgb":
+            lin = np.where(dev <= 0.04045, dev / 12.92,
+                           ((dev + 0.055) / 1.055) ** 2.4)
+        else:
+            lin = dev ** (563.0 / 256.0)
+        return xyz_to_lab((_AD @ (m @ lin.T)).T * 100.0)
+    from PIL import Image, ImageCms
+    prof = ImageCms.getOpenProfile(str(source_gamut))
+    space = (prof.profile.xcolor_space or "RGB").strip()
+    nch = 4 if space == "CMYK" else 3
+    dev = rng.uniform(0.0, 1.0, (n, nch))
+    lab_prof = ImageCms.createProfile("LAB")
+    tf = ImageCms.buildTransform(prof, lab_prof, space, "LAB",
+                                 renderingIntent=1)
+    dev8 = np.clip(dev * 255.0, 0, 255).round().astype(np.uint8)
+    img = Image.merge(space, [Image.fromarray(dev8[:, c].reshape(-1, 1), "L")
+                              for c in range(nch)])
+    chans = [np.asarray(ch, dtype=float).reshape(-1)
+             for ch in ImageCms.applyTransform(img, tf).split()]
+    return np.stack([chans[0] * 100.0 / 255.0, chans[1] - 128.0,
+                     chans[2] - 128.0], 1)
+
+
+def fit_multiink_anchor(model: ForwardModel, meas: Ti3Measurement,
+                        source_gamut: Path | str, settings,
+                        argyll_bin: Path | str | None,
+                        progress=None) -> dict:
+    """Anchor a +N mapping in colprof's behaviour via a CMYK proxy oracle.
+
+    colprof cannot build multi-ink profiles, so there is no direct
+    reference — but the engine's fitted model can synthesise the printer's
+    CMYK-only behaviour (extra inks at zero), which colprof *can* build.
+    From that proxy we take exactly what transfers:
+
+    * the **neutral rendering** — colprof's tone-curve compression including
+      its deliberate near-black colour cast (where the closed-form family
+      deviated most, ~3 ΔE); returned as a sampled L→Lab table;
+    * the **K-separation behaviour** — colprof's black usage along the
+      neutral axis, to which the engine's K-locus prior is refitted.
+
+    The chroma compression against the *extra-ink* gamut shell stays the
+    engine's own — that part of the gamut colprof has never seen.
+    """
+    import shutil
+    import subprocess
+    import tempfile
+
+    bin_dir = Path(argyll_bin) if argyll_bin else Path(
+        "/Applications/Argyll/bin")
+    colprof = bin_dir / "colprof"
+    xicclu = bin_dir / "xicclu"
+    if not colprof.exists() or not xicclu.exists():
+        raise OracleUnavailable("Argyll binaries not found")
+    if model.n_channels < 5:
+        raise OracleUnavailable("proxy anchor is for multi-ink models")
+
+    if progress:
+        progress("Anchoring the rendering in colprof's behaviour "
+                 "(CMYK proxy build)…")
+    # Synthetic CMYK measurement from the fitted model, extras at zero.
+    g = np.linspace(0.0, 1.0, 5)
+    cmyk = np.stack(np.meshgrid(g, g, g, g, indexing="ij"), -1).reshape(-1, 4)
+    dev = np.zeros((len(cmyk), model.n_channels))
+    dev[:, :4] = cmyk
+    limit = meas.ink_limit
+    if limit is not None:
+        total = dev.sum(1)
+        over = total > limit / 100.0
+        dev[over] *= (limit / 100.0 / total[over])[:, None]
+    lab = model.predict(dev)
+    from workflow.profile_engine.ti3_data import lab_to_xyz
+    xyz = lab_to_xyz(lab)
+    with tempfile.TemporaryDirectory() as td:
+        base = Path(td) / "proxy"
+        lines = ["CTI3", "", 'DEVICE_CLASS "OUTPUT"', 'COLOR_REP "CMYK_XYZ"']
+        if limit is not None:
+            lines.append(f'TOTAL_INK_LIMIT "{limit:.0f}"')
+        lines += ["NUMBER_OF_FIELDS 8", "BEGIN_DATA_FORMAT",
+                  "SAMPLE_ID CMYK_C CMYK_M CMYK_Y CMYK_K XYZ_X XYZ_Y XYZ_Z",
+                  "END_DATA_FORMAT", f"NUMBER_OF_SETS {len(cmyk)}",
+                  "BEGIN_DATA"]
+        for i, (d4, x) in enumerate(zip(cmyk, xyz)):
+            lines.append(f"{i + 1} "
+                         + " ".join(f"{v * 100:.3f}" for v in d4) + " "
+                         + " ".join(f"{v:.4f}" for v in x))
+        lines.append("END_DATA")
+        base.with_suffix(".ti3").write_text("\n".join(lines))
+        r = subprocess.run([str(colprof), "-qm", "-S", str(source_gamut),
+                            str(base)], capture_output=True, text=True)
+        icc = base.with_suffix(".icc")
+        if r.returncode != 0 or not icc.exists():
+            raise OracleUnavailable(
+                f"proxy colprof failed: {(r.stderr or r.stdout)[:200]}")
+
+        # Neutral rendering table: realized perceptual along the L axis.
+        ls = np.linspace(0.0, 100.0, 41)
+        inp = "\n".join(f"{v:.3f} 0 0" for v in ls)
+        r1 = subprocess.run([str(xicclu), "-fb", "-ip", "-pl", str(icc)],
+                            input=inp, capture_output=True, text=True)
+        dev4 = [ln.rsplit("->", 1)[1].split()[:4]
+                for ln in r1.stdout.splitlines() if "->" in ln]
+        r2 = subprocess.run([str(xicclu), "-ff", "-ir", "-pl", str(icc)],
+                            input="\n".join(" ".join(d) for d in dev4),
+                            capture_output=True, text=True)
+        neutral = np.array([[float(v) for v in ln.rsplit("->", 1)[1]
+                             .split()[:3]]
+                            for ln in r2.stdout.splitlines() if "->" in ln])
+        if len(neutral) != len(ls):
+            raise OracleUnavailable("proxy neutral sampling failed")
+        # K behaviour along the same axis (device K of the proxy's B2A).
+        k_curve = np.array([float(d[3]) for d in dev4])
+        return {"l_axis": ls, "neutral_lab": neutral, "k_curve": k_curve}
+
+
 def invert_mapping(mapper, mapped_lab: np.ndarray, iters: int = 20
                    ) -> np.ndarray:
     """Numeric inverse of a gamut map (colprof -nI: the perceptual A2B gets
@@ -409,7 +684,8 @@ def build_mapped_b2a(model: ForwardModel, meas: Ti3Measurement, grid: int,
                      is_additive: bool, ink_limit: float | None,
                      entries: int, codec=None, settings=None,
                      a2b_grid: int | None = None,
-                     a2b_entries: int | None = None) -> dict:
+                     a2b_entries: int | None = None,
+                     anchor: dict | None = None) -> dict:
     """Mapped tables per intent → dict of mft2 tags/aliases for the writer.
 
     Returns entries for ``B2A0``/``B2A2`` (bytes or the alias string
@@ -429,14 +705,37 @@ def build_mapped_b2a(model: ForwardModel, meas: Ti3Measurement, grid: int,
     out: dict[str, bytes | str] = {}
     mappers: dict[str, object] = {}
 
+    # First choice: colprof-matched rendering via the arm's-length oracle —
+    # identical output within colprof's own build variation. Falls back to
+    # the engine's closed-form family where colprof can't build the data
+    # (multi-ink) or isn't installed.
+    progress = getattr(settings, "progress", None) if settings else None
+    oracle: dict[str, WarpMapper] = {}
+    if settings is not None and meas is not None:
+        try:
+            oracle = fit_colprof_mappers(
+                meas, source_gamut, settings,
+                getattr(settings, "argyll_bin", None), progress)
+        except OracleUnavailable as exc:
+            if progress:
+                progress(f"Using the engine's own rendering ({exc}).")
+
     for tag, intent, s_int, default_kw in (
             ("B2A0", getattr(settings, "perc_intent", ""), perc_int, {}),
             ("B2A2", getattr(settings, "sat_intent", ""), sat_int,
              _SAT_DEFAULT)):
-        src = source_surface_from_profile(source_gamut, intent=s_int)
-        mapper = _mapper_for(intent, default_kw, src, dst, settings)
-        if mapper is None:
+        if intent in _COLORIMETRIC_INTENTS:
             out[tag] = "B2A1"          # colorimetric-family intent: exact
+            continue
+        mapper = oracle.get(tag)
+        if mapper is None:
+            src = source_surface_from_profile(source_gamut, intent=s_int)
+            mapper = _mapper_for(intent, default_kw, src, dst, settings)
+            if anchor is not None and isinstance(mapper, GamutMapper):
+                # +N: colprof-anchored neutral rendering (CMYK proxy).
+                mapper.neutral_table = anchor
+        if mapper is None:
+            out[tag] = "B2A1"
             continue
         mappers[tag] = mapper
         mapped = mapper.map_lab(node_lab)

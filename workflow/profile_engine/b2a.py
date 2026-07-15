@@ -128,6 +128,7 @@ def invert_to_device(model: ForwardModel, target: np.ndarray, *,
                      iters: int = 6, damping: float = 0.05,
                      seed_res: int = 7,
                      seed: np.ndarray | None = None,
+                     k_prior: dict | None = None,
                      ) -> tuple[np.ndarray, np.ndarray]:
     """Invert the forward model at ``target`` Lab points.
 
@@ -152,8 +153,15 @@ def invert_to_device(model: ForwardModel, target: np.ndarray, *,
         # locus, extra inks their hue gates, C/M/Y are unconstrained.
         prior = np.zeros((len(target), n))
         prior_w = np.zeros((len(target), n))
-        prior[:, 3] = k_locus(target[:, 0])
-        prior_w[:, 3] = 0.05
+        if k_prior is not None:
+            # colprof-calibrated K behaviour (CMYK proxy oracle) — a firmer
+            # prior than the generic locus, matching how colprof separates.
+            prior[:, 3] = np.interp(target[:, 0], k_prior["l_axis"],
+                                    k_prior["k_curve"])
+            prior_w[:, 3] = 0.15
+        else:
+            prior[:, 3] = k_locus(target[:, 0])
+            prior_w[:, 3] = 0.05
         for ch in range(4, n):
             prior[:, ch] = extra_ink_amount(target, channel_letters[ch])
             prior_w[:, ch] = 0.05
@@ -200,6 +208,7 @@ def build_b2a_clut(model: ForwardModel, grid: int, *,
                    channel_letters: list[str], is_additive: bool,
                    ink_limit: float | None = None,
                    node_lab: np.ndarray | None = None,
+                   k_prior: dict | None = None,
                    ) -> tuple[np.ndarray, np.ndarray]:
     """Full B2A CLUT: (grid³, n) device fractions + (grid³,) OOG distance.
 
@@ -208,7 +217,8 @@ def build_b2a_clut(model: ForwardModel, grid: int, *,
     """
     target = lab_grid(grid) if node_lab is None else node_lab
     return invert_to_device(model, target, channel_letters=channel_letters,
-                            is_additive=is_additive, ink_limit=ink_limit)
+                            is_additive=is_additive, ink_limit=ink_limit,
+                            k_prior=k_prior)
 
 
 def refine_b2a_clut(model: ForwardModel, dev_clut: np.ndarray,
@@ -219,7 +229,8 @@ def refine_b2a_clut(model: ForwardModel, dev_clut: np.ndarray,
                     samples: int = 30000, lam: float = 0.03,
                     deep_oog: float = 5.0,
                     node_lab: np.ndarray | None = None,
-                    lab_to01=None) -> np.ndarray:
+                    lab_to01=None,
+                    k_prior: dict | None = None) -> np.ndarray:
     """Refit the B2A CLUT as one smooth field over exact inverse samples.
 
     Every random device point is an *exact* sample of the inverse function
@@ -267,7 +278,7 @@ def refine_b2a_clut(model: ForwardModel, dev_clut: np.ndarray,
         lab_targets = model.predict(probe_dev)
         dev_s, res_s = invert_to_device(
             model, lab_targets, channel_letters=channel_letters or [],
-            is_additive=is_additive, ink_limit=ink_limit)
+            is_additive=is_additive, ink_limit=ink_limit, k_prior=k_prior)
         keep = res_s < 1.0
         dev_s, lab_s = dev_s[keep], lab_targets[keep]
 
