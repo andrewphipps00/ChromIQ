@@ -743,3 +743,35 @@ ARCHITECTURE CONFIRMED (keep it):
 Recommendation: drop the bundled-helper idea; the "Most accurate (slower)"
 setting stays the Python exact-geometry path and matters only for +N
 (RGB/CMYK are already colprof-exact).
+
+## RECIPE RECOVERED + verified — self-contained cross-platform helper build (2026-07-15)
+
+Feature: user-selectable "Fast (Python)" vs "Bit-exact (Argyll helper)" B2A.
+Plan: ~/.claude/plans/dreamy-purring-clock.md. The gmcloud recipe was lost;
+recovered from Argyll 3.5.0 Jamfiles and REBUILT byte-identical (diff clean vs
+the known-good gmcloud on the +N cloud). No Jam needed — plain clang/CMake.
+
+Argyll source root: ~/Downloads/Argyll_V3.5.0_orig
+- Include dirs: h numlib icc cgats rspl gamut xicc spectro plot
+- Defines: ARGYLLCMS ALLINSTS UNIX UNIX_APPLE   (UNIX_APPLE is the mac leg)
+- Flags: -O2 -Wno-error=implicit-function-declaration -Wno-error=int-conversion
+- Library TUs (exact Jamfile lists), 45 units:
+    numlib: numsup dnsq powell dhsx varmet ludecomp svd zbrent rand sobol
+            aatree quadprog gnewt roots
+    icc:    icc iccstd
+    cgats:  pars cgats parsstd cgatsstd
+    rspl:   rspl scat rev gam spline opt      (SCAT=scat)
+    gamut:  gamut gammap nearsmth
+    xicc:   xicc xspect xcolorants xcam cam97s3 cam02 mpp ccmx ccss xfit
+            moncurve xcal bt1886 tm3015
+    spectro: conv        plot: vrml
+  OMITTED (unreferenced, external deps): xicc/xutils (libtiff), xicc/iccjpeg
+  (libjpeg). Linker pulls only referenced objects, so omission is clean.
+- Link (mac): -lm -framework CoreFoundation -framework Foundation
+    -framework IOKit -framework CoreServices -lobjc
+  (Linux leg: -lm -lpthread -lrt, no frameworks; numsup CF calls are __APPLE__-
+   gated. Windows leg: MSVC/mingw + winmm/etc — the residual CI unknown.)
+- Vendored closure (clang -MM): 45 .c + 114 headers = 159 files across
+  h/numlib/icc/cgats/rspl/gamut/xicc/spectro/plot. Minimal + precise.
+- gmcloud CLI (proof): `src.gam cloud.txt mapres [wp0 wp1 wp2 bp0 bp1 bp2]`.
+  Productionized contract → --src/--dst-cloud/--wp/--bp/--intent/--query/--out.
