@@ -468,6 +468,51 @@ New ground truth + ports, each validated:
   fit, cam02 port for engine wiring (xicclu validates), two-profile
   realized floor ~0.7–0.8 applies to the reference chain itself.
 
+## GATE PASSED at map level (2026-07-15, late)
+
+Final fixes, each found via the in-frame instrumented dumps (gmdump3/4 =
+gmdump + nearsmth_inst + gammap_inst; nsm_dump.txt has N rows uflag/
+vflag/w1/naxbf/_sv/sv/dv/aodv/nrdv + S rows sv2/dv2/sd3/w2/w3 in the
+premapped frame; nspasses.txt has V + per-pass P/A):
+
+1. **VECADJ is GAUSS-SEIDEL** (anv written per point IN pass, clip
+   included; dv never updated until after all passes; J from original
+   dv, a/b from iterating anv): 0.422 → **0.038** vs their V.
+2. **Inside-isect guides are REJECTED entirely** (nearsmth.c L1989) —
+   no interior identity rows exist in the C. (My null rows were an
+   invention; removed.)
+3. **Sub-surface rows transcribed literally** (L3390–3685): CYLIN_SUBVEC
+   defined → dv2 = pure neutral-target direction, adepth = adepth2
+   always; napoint = line-line-closest of guide ray with the DEST GAMUT
+   wb axis, J half-blended toward dv-J then endpoint-clipped; inner gate
+   |mint−1| < |maxt|−1 ∧ radial_isect(dv) < radial_src(dv); trivial-gate
+   ml ≤ 0.1; nonsense case sets dv=aodv; SUBVEC_SMOOTHING afterwards
+   (neighbour filter with cylindrical a/b scaling; calloc zeros from
+   invalid neighbours are REAL C behaviour). Line∩isect computed as
+   interval intersection of exact per-surface crossings
+   (inside(src)∧inside(dst)). Validated vs in-frame S rows: sd3 EXACT,
+   dv2 0.15, vflag 93.8%.
+4. **RSPLPASSES tdst is on the INTERSECTION gamut** (smp[i].dgam), not
+   the full dest, with vintersect2 segment semantics (inside → segment
+   entry behind the point; outside → first +ve crossing) and nearest =
+   nearest isect vertex. Fixed clen from ±17 tails to matching; with
+   this the full RSPLPASSES helps rather than harms.
+   `_RSPLPASSES_ON` module flag allows disabling (0.349 without).
+
+**Definitive gate (port vs Argyll's own domap, gmdump, -d10 Jab pair,
+200 probes): median 0.340 / 95% 1.660 / max 4.19** — median below
+colprof's own realized-roundtrip floor (0.41/0.90/2.0). Guide-level:
+aodv 0.086, VECADJ 0.038, naxbf exact, temp-fit 0.043, evect cos 0.9995.
+Their-rows-through-my-fitter cross-check: 0.079.
+
+Remaining tail contributors (documented, small): guide sampling
+positions (my Sobol ≠ their sobol.c sequence), evect field 5% tail
+(cos 0.87), rsplpasses residual. NEXT: cam02.c port + vc defaults for
+engine wiring (no profiles at runtime), engine-side triangulated
+surfaces from model clouds (UV-sphere sampling of the radial field),
+wire into build_mapped_b2a, engine-vs-colprof realized E2E, suite,
+UI #43, #44.
+
 ## THE definitive gate: gmdump (domap harness) + true floors (2026-07-15)
 
 - **gmdump** (scratchpad/argbuild/gmdump.c): compiles gammap.c itself

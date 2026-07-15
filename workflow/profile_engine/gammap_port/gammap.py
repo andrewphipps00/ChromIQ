@@ -9,8 +9,10 @@ instrumented Argyll internals — see ``portmap.md`` for the numbers):
 2. guide construction on the pre-mapped source: hextant weights, cusp
    mapping, pass-1 weighted-nearest on the src∩dst surface (validated
    0.006/0.038 vs Argyll), exact shrunk-gamut evectors (cos 0.993),
-   the VECADJ neighbour-smoothing loop (0.518 vs Argyll's own output);
-3. knee sub-surface rows (gamcknf) + null interior guides;
+   the Gauss-Seidel VECADJ neighbour-smoothing loop (0.038 median vs
+   Argyll's own dumped output on identical inputs);
+3. knee sub-surface rows (gamcknf); inside-isect sources are rejected
+   outright (the C keeps NO interior guide rows);
 4. gammap.c's complete final row recipe: 512 grey-axis rows with the
    bent→straight black blend (USE_GREYMAP, L1380–1459), guide rows
    w 1.01, sub-surface w2 / identity-at-depth w3 rows, and the outer
@@ -41,6 +43,9 @@ from workflow.profile_engine.gammap_port.xweights import (ALXPOW, ALXTHR,
                                                           RRDL,
                                                           expand_weights,
                                                           interp_xweights)
+
+
+_RSPLPASSES_ON = True      # nearsmth.c RSPLPASSES fine-tune stage
 
 
 def _sobol2(n: int) -> np.ndarray:
@@ -126,7 +131,8 @@ class GammapMapper:
 
     def __init__(self, src_verts, src_tris, src_cs_wp, src_cs_bp, src_cusps,
                  dst_verts, dst_tris, dst_cs_wp, dst_cs_bp, dst_cusps, *,
-                 intent: str = "p", surf_cache: dict | None = None) -> None:
+                 intent: str = "p", surf_cache: dict | None = None,
+                 dst_gam_wp=None, dst_gam_bp=None) -> None:
         table = (wtab.SATURATION_WEIGHTS if intent in ("s", "ms")
                  else wtab.PERCEPTUAL_WEIGHTS)
         xw = expand_weights(table)
@@ -159,9 +165,14 @@ class GammapMapper:
                                _ss_verts(psrc_verts, np.asarray(src_tris),
                                          xvra=3.0)])
 
-        inside = isect.nradial(guide_src) <= 1.0 + 1e-4
-        null_sv = guide_src[inside]
-        sv = guide_src[~inside]
+        # points strictly inside the isect are REJECTED outright
+        # (nearsmth.c L1989: "double back/convex" points are ignored —
+        # they produce NO rows at all; the interior is shaped only by the
+        # grey rows, sd3 anchors, surface-grid rows and rspl smoothing)
+        r_pt = np.linalg.norm(guide_src - CENT[None, :], axis=1)
+        r_is = np.linalg.norm(isect.radial(guide_src) - CENT[None, :],
+                              axis=1)
+        sv = guide_src[~(r_is > r_pt + 1e-4)]
 
         wts = interp_xweights(sv, xw, cm)
         w = wts["w"]
@@ -284,20 +295,35 @@ class GammapMapper:
         out_i = ~nott
         if out_i.any():
             evo = evect_fn(dv[out_i])
-            # nearest on dest ≈ nearest dest VERTEX (tight bound for the
-            # C's `nearest` sanity gate; the radial projection is far too
-            # loose and admits insane intersection targets)
-            dverts = np.asarray(dst_verts, float)
-            d2 = ((dv[out_i][:, None, :] - dverts[None, :, :]) ** 2
-                  ).sum(2)
+            dvo = dv[out_i]
+            # tdst lives on the INTERSECTION gamut (smp[i].dgam), not the
+            # full dest. Nearest ≈ nearest vertex of the isect (source
+            # verts on/inside dest ∪ dest verts on/inside source).
+            iverts = np.vstack([
+                psrc_verts[ss_d.nradial(psrc_verts) <= 1.0 + 1e-3],
+                np.asarray(dst_verts, float)[
+                    ss_ps.nradial(np.asarray(dst_verts, float))
+                    <= 1.0 + 1e-3]])
+            if len(iverts) == 0:
+                iverts = np.asarray(dst_verts, float)
+            d2 = ((dvo[:, None, :] - iverts[None, :, :]) ** 2).sum(2)
             nix = d2.argmin(1)
-            near = dverts[nix]
+            near = iverts[nix]
             nd = np.sqrt(d2[np.arange(len(nix)), nix])
-            mint, maxt, _, _ = tri_d.vector_isect(dv[out_i],
-                                                  dv[out_i] + evo)
-            tt2 = np.where(np.isfinite(maxt), maxt, np.nan)
-            isec = dv[out_i] + tt2[:, None] * evo
-            idist = np.linalg.norm(isec - dv[out_i], axis=1)
+            # line ∩ isect via per-surface interval intersection, with
+            # vintersect2 semantics: inside → segment ENTRY (behind, −ve
+            # direction); outside → first +ve crossing
+            mint_s2, maxt_s2, _, _ = tri_ps.vector_isect(dvo, dvo + evo)
+            mint_d2, maxt_d2, _, _ = tri_d.vector_isect(dvo, dvo + evo)
+            t_in = np.fmax(mint_s2, mint_d2)
+            t_out = np.fmin(maxt_s2, maxt_d2)
+            ok = np.isfinite(t_in) & np.isfinite(t_out) & (t_in <= t_out)
+            p1_in = isect.nradial(dvo) <= 1.0 + 1e-6
+            tt2 = np.where(p1_in, t_in,
+                           np.where(t_in >= -1e-8, t_in, t_out))
+            tt2 = np.where(ok, tt2, np.nan)
+            isec = dvo + tt2[:, None] * evo
+            idist = np.linalg.norm(isec - dvo, axis=1)
             use = np.isfinite(idist) & (idist <= nd + 5.0)
             tgt = near.copy()
             tgt[use] = isec[use]
@@ -307,7 +333,7 @@ class GammapMapper:
         rext = np.zeros(len(dv))
         fx_w = w[:, FX]
         lastmap = None
-        RSPLPASSES, RSPLSCALE = 4, 1.8
+        RSPLPASSES, RSPLSCALE = (4 if _RSPLPASSES_ON else 0), 1.8
         for it in range(RSPLPASSES):
             m1 = Rspl3(sv, anv, np.ones(len(sv)), map_il, map_ih,
                        gres=mapres, smooth=2.0)
@@ -341,53 +367,100 @@ class GammapMapper:
             upd = ~nott
             anv[upd] = dv[upd] + naxbf[upd, None] * filt[upd]
         dv = anv
+        if lastmap is None:      # RSPLPASSES disabled: plain guide fit
+            lastmap = Rspl3(sv, dv, np.ones(len(sv)), map_il, map_ih,
+                            gres=mapres, smooth=2.0)
 
-        # knee sub-surface rows (nearsmth.c L3460+, compression branch)
-        mv = dv - sv
-        ml = np.linalg.norm(mv, axis=1)
-        moved = ml > 2.0
+        # sub-surface rows (nearsmth.c L3390–3685, CYLIN_SUBVEC +
+        # SUBVEC_SMOOTHING both defined — validated vs the in-frame nsm
+        # dump: sd3 exact, dv2 0.15 median, vflag 93.8% agreement)
+        # line∩intersection-gamut as interval intersection of the exact
+        # per-surface crossings: inside(isect) = inside(src) ∧ inside(dst)
+        mint_s, maxt_s, _, _ = tri_ps.vector_isect(sv, dv)
+        mint_d, maxt_d, _, _ = tri_d.vector_isect(sv, dv)
+        i_mint = np.fmax(mint_s, mint_d)
+        i_maxt = np.fmin(maxt_s, maxt_d)
+        got_iv = np.isfinite(i_mint) & np.isfinite(i_maxt)
+        wp_g = np.asarray(dst_gam_wp if dst_gam_wp is not None
+                          else dst_cs_wp, float)
+        bp_g = np.asarray(dst_gam_bp if dst_gam_bp is not None
+                          else dst_cs_bp, float)
+        nsub = len(sv)
+        sub2_s = np.zeros_like(sv)
+        sub2_t = np.zeros_like(sv)
+        sub3 = np.zeros_like(sv)
+        sub_valid = np.zeros(nsub, bool)
+        rr_dst = np.linalg.norm(isect.radial(dv) - CENT[None, :], axis=1)
+        rr_src = np.linalg.norm(ss_ps.radial(dv) - CENT[None, :], axis=1)
+        mvl = np.linalg.norm(dv - sv, axis=1)
+        u_ax = wp_g - bp_g
+        for i in range(nsub):
+            ml = mvl[i]
+            if ml <= 0.1 or not got_iv[i]:
+                continue
+            mi, ma = i_mint[i], i_maxt[i]
+            mv = dv[i] - sv[i]
+            # closest point on the dest gamut W-B axis to the guide line
+            w0 = bp_g - sv[i]
+            a11 = u_ax @ u_ax
+            a12 = u_ax @ mv
+            a22 = mv @ mv
+            den = a11 * a22 - a12 * a12
+            s_ax = ((a12 * (mv @ w0) - a22 * (u_ax @ w0)) / den
+                    if abs(den) > 1e-12 else 0.0)
+            nap = bp_g + s_ax * u_ax
+            # J half-blended toward dv (compression), then clipped to the
+            # bp..wp range by REPLACING with the endpoint
+            nap = nap.copy()
+            nap[0] = 0.5 * nap[0] + 0.5 * dv[i][0]
+            if nap[0] < bp_g[0]:
+                nap = bp_g.copy()
+            elif nap[0] > wp_g[0]:
+                nap = wp_g.copy()
+            adepth2 = np.linalg.norm(nap - dv[i])
+            if mi >= -1e-8 and ma > 1e-8:
+                if (abs(mi - 1.0) < abs(ma) - 1.0
+                        and rr_dst[i] < rr_src[i]):
+                    sknf = gamcknf * 0.6
+                    adepth1 = ml * 0.5 * (ma + mi - 2.0)
+                    adepth = adepth2 * 0.9      # CYLIN_SUBVEC
+                    if adepth1 < 0.5 * adepth2:
+                        continue
+                    sub_valid[i] = True
+                    sub2_s[i] = dv[i]
+                    ml2 = ml * (1.0 - sknf)
+                    adepth *= (1.0 - sknf)
+                    sml = min(ml2, adepth)
+                    nat = nap - sub2_s[i]
+                    nn = max(np.linalg.norm(nat), 1e-9)
+                    sub2_t[i] = sub2_s[i] + nat / nn * sml
+                    sub3[i] = 0.4 * sub2_t[i] + 0.6 * nap
+            elif not (mi < -1e-8 and ma > 1e-8):
+                dv[i] = aodv[i]          # nonsense vector: clip to aodv
+        # SUBVEC_SMOOTHING: neighbour-filtered dv2 with cylindrical
+        # feature scaling; invalid neighbours contribute zeros (the C
+        # callocs nsm, so their sv2/dv2 are zero — replicate exactly)
+        sub2_t_s = sub2_t.copy()
+        for i in np.flatnonzero(sub_valid):
+            j = nbr_idx[i]
+            ww = nbr_w[i][:, None]
+            sav = (ww * sub2_s[j]).sum(0)
+            dav = (ww * sub2_t[j]).sum(0)
+            scr = np.hypot(sav[1], sav[2])
+            dcr = np.hypot(dav[1], dav[2])
+            scf = dcr / max(scr, 1e-9)
+            tmp = sub2_s[i] - sav
+            tmp[1] *= scf
+            tmp[2] *= scf
+            sub2_t_s[i] = tmp + dav
         sub_s, sub_t, sub_w = [], [], []
-        if moved.any():
-            mint, maxt, _, _ = tri_d.vector_isect(sv[moved], dv[moved])
-            wpt = np.asarray(dst_cs_wp, float)
-            bpt = ga.dr_be_bp
-            axis = wpt - bpt
-            for k, i in enumerate(np.flatnonzero(moved)):
-                if np.isnan(mint[k]) or not (mint[k] >= -1e-8
-                                             and maxt[k] > 1e-8):
-                    continue
-                d_line = mv[i] / ml[i]
-                w0 = sv[i] - bpt
-                a11 = axis @ axis
-                a12 = axis @ d_line
-                den = a11 - a12 * a12
-                t_ax = ((axis @ w0 - a12 * (d_line @ w0)) / den
-                        if abs(den) > 1e-9 else 0.5)
-                nap = bpt + np.clip(t_ax, 0, 1) * axis
-                nap = 0.5 * nap + 0.5 * np.array([sv[i][0], nap[1], nap[2]])
-                nap[0] = np.clip(nap[0], bpt[0], wpt[0])
-                adepth2 = np.linalg.norm(nap - sv[i])
-                adepth1 = ml[i] * 0.5 * (maxt[k] + mint[k] - 2.0)
-                adepth = min(adepth1, adepth2) * 0.9
-                if adepth1 < 0.5 * adepth2 or adepth <= 0:
-                    continue
-                sknf = gamcknf * 0.6
-                sv2 = dv[i]
-                sml = min(ml[i] * (1 - sknf), adepth * (1 - sknf))
-                dv2 = sv2 + d_line * sml
-                natarg = nap - sv2
-                nn = np.linalg.norm(natarg)
-                if nn > 1e-9:
-                    natarg = sv2 + natarg / nn * sml
-                    dv2 = ((1 - sml / adepth2) * dv2
-                           + (sml / adepth2) * natarg)
-                sub_s.append(sv2)
-                sub_t.append(dv2)
-                sub_w.append(0.7)
-                sd3 = 0.4 * dv2 + 0.6 * nap
-                sub_s.append(sd3)          # identity row (gammap.c L1694)
-                sub_t.append(sd3)
-                sub_w.append(0.4 * gamcknf)
+        for i in np.flatnonzero(sub_valid):
+            sub_s.append(sub2_s[i])
+            sub_t.append(sub2_t_s[i])
+            sub_w.append(0.7)
+            sub_s.append(sub3[i])        # identity row (gammap.c L1694)
+            sub_t.append(sub3[i])
+            sub_w.append(0.4 * gamcknf)
 
         # ---- gammap.c final row assembly ----
         # surface grid anchor rows (nearsmth.c L3746+): outer two layers
@@ -418,9 +491,9 @@ class GammapMapper:
                              0.1)
             ws = 0.1 * np.minimum(g2g / g2c, 1.0)
 
-        train = [gp, sv, null_sv]
-        target = [gv, dv, null_sv]
-        rw = [gw, np.full(len(sv), 1.01), np.full(len(null_sv), 1.01)]
+        train = [gp, sv]
+        target = [gv, dv]
+        rw = [gw, np.full(len(sv), 1.01)]
         if sub_s:
             train.append(np.array(sub_s))
             target.append(np.array(sub_t))
