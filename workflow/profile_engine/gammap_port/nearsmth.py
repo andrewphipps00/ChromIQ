@@ -78,13 +78,26 @@ def near_smooth_guides(src_cloud: np.ndarray, dst_cloud: np.ndarray,
     destination targets (both (N, 3) Lab).
     """
     src_surf = GamutSurface(src_cloud)
+    dc_surf = GamutSurface(dst_cloud)
+
+    # Compression target = INTERSECTION of source and destination
+    # (nexpintersect, C +109): per-direction min radius. With useexp=0 the
+    # destination's bulges beyond the source are never mapped onto.
     dst_surf = GamutSurface(dst_cloud)
+    dst_surf.tab = np.minimum(dst_surf.tab, src_surf.tab)
 
     # Guide sources: the source surface bins themselves (≈ vertex set).
     sv = src_surf.radial(src_cloud if n_guides is None
                          else src_cloud[np.random.default_rng(5).choice(
                              len(src_cloud), n_guides, replace=False)])
     sv = np.unique(np.round(sv, 3), axis=0)
+
+    # Null mapping for source points inside the target (C: "Rejecting
+    # point because it's inside destination" — they aren't optimised);
+    # they re-enter the warp fit as identity pairs.
+    inside = dst_surf.nradial(sv) <= 1.0 + 1e-4
+    null_sv = sv[inside]
+    sv = sv[~inside]
 
     wts = interp_xweights(sv, xw, cm)
     w = wts["w"]
@@ -176,4 +189,6 @@ def near_smooth_guides(src_cloud: np.ndarray, dst_cloud: np.ndarray,
             dv[out] = dst_surf.radial(dv[out])
         target = dv
 
-    return sv, dv
+    # optimised compression guides + null-mapped interior surface points
+    return (np.vstack([sv, null_sv]),
+            np.vstack([dv, null_sv]))
