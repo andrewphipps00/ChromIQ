@@ -339,3 +339,26 @@ Operating point meanwhile: VECADJ-only output (0.909 median).
 - Validation harness for the E2E gate: gamut/maptest.c is an existing
   new_gammap harness — compile like smthtest if a full-gammap dump is
   needed; else colprof -P net guides + realized probes as before.
+
+### gammap.c grey-axis + L-map port refs (final block)
+
+- L700–1000: sswp/ssbp same-L interpolants; dr_cs = greymf blend of dest
+  vs source cs points; fawp/fabp clipped to dest via vector_isect; wrot
+  white rotation; bendBP/clipBP/BPadpt branches per gmi->bph; equal-length
+  ssbp scaling (dvl/svl); grot/igrot = icmVecRotMat pairs (rotation FIRST
+  on all source points).
+- L1000–1180: L-curve targets swL/dwL/sbL/dbL via glumwcpf/glumwexf/
+  glumbcpf/glumbexf blends; revrspl swap for symmetry; lpnts: endpoints
+  weight 10, USE_GLUMKNF knee points (cppos 0.50, kpwpos 0.30, kpbpos
+  0.15, knee via glumknf) → grey rspl fit smoothing 5.0 (1-D maths-A
+  equivalent); s->map final 3-D fit smoothing `smooth` over the row
+  recipe; full map(x) = grey-L(rot(x)) then 3-D map (verify exact
+  composition order in gammap's domap/interp — read gammap.c interp fn).
+- Perceptual gmi values: xicc.c entry near L2280 (gamcknf=1.1 block) —
+  read greymf/glumwcpf/glumbcpf/glumknf/bph exact values next session
+  (grep output banked below in git history).
+- NEXT-SESSION ORDER: port grey-axis+Lmap → scl_gam transform → rerun
+  validated chain (smthdump inputs must ALSO be scl_gam-premapped for
+  strict comparison: generate transformed .gam via gamio write or feed
+  premapped verts to smthdump? simpler: e2e gate directly vs colprof
+  realized probes) → row-recipe fit → gate → wire → suite → UI #43.
