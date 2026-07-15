@@ -793,3 +793,21 @@ to the C's exact order — a large rewrite, not a slot-in. KEPT: the exact
 nearest-point swap test (TriSurface.nearest) — correct, metric-neutral. Residual
 saturation tail (95% ~5.5, fast mode +N only) stands; bit-exact +N uses the
 helper (exact). Don't re-attempt the slot-in pass-2.
+
+## #45 pass-2 FINAL: no form of pass-2 helps (2026-07-16)
+
+Exhausted the pass-2 approaches (all reverted; swap-criterion improvement kept):
+- depth-free comperr (va+vr, no depth): exact NO-OP (0.574, identical) — with
+  a_o dominating, the optimum stays at aodv. This matches the reference
+  nearsmth.py's effective behaviour (fixed dcr → constant, dxr dropped).
+- comperr WITH per-eval depth (dcr + expansion dxr): DEGRADES (0.637 csv /
+  0.669 raw-sv source), tail unchanged.
+CONCLUSION: the residual saturation tail (95% ~5.5 vs Argyll, FAST-mode +N,
+extreme chroma) cannot be closed by slotting pass-2 in. GammapMapper reaches
+0.574 via a tuned pipeline (TriSurface pass-1 → shrunk-evector → vecadj_loop
+fed aodv, NOT nrdv despite its docstring → RSPL). A C-exact fix needs the whole
+guide pipeline rewritten to nearsmth.c's order (pass1→pass2 nrdv→VECADJ 8p from
+nrdv→RSPL 4p) — large, high-risk (could regress the validated 0.34 perceptual),
+and the experiments give no confidence it would help. NOT pursued. The exact
+nearest-point swap test (TriSurface.nearest) is the kept improvement. Saturation
+is otherwise good across the gamut; bit-exact +N uses the helper (exact).
