@@ -138,10 +138,67 @@ def _emit(settings: BuildSettings, msg: str) -> None:
         settings.progress(msg)
 
 
+# Ordered build stages → target percentage. Each progress message is matched
+# by prefix (messages may carry format args), and the reported percentage
+# only ever moves forward, so the number is monotonic even if a stage is
+# skipped. Gamut mapping and the saturation table dominate the run time, so
+# they get the widest spans. Unmatched messages keep the current percentage.
+_STAGE_PCT: list[tuple[str, int]] = [
+    ("Reading the measurement", 2),
+    ("Computing colorimetry", 4),
+    ("Fitting the printer model", 8),
+    ("Inverting the model", 14),
+    ("Anchoring the rendering", 18),
+    ("Writing the profile", 20),
+    ("Building the perceptual and saturation", 24),
+    ("Gamut mapping: reading the source", 26),
+    ("Gamut mapping: measuring the printer", 30),
+    ("Gamut mapping: preparing colour surfaces", 40),
+    ("Gamut mapping: matching source colours", 46),
+    ("Gamut mapping: smoothing", 54),
+    ("Gamut mapping: fine-tuning", 62),
+    ("Gamut mapping: building the final colour table", 74),
+    ("Saturation table: matching colprof", 78),
+    ("Saturation table: fitting", 92),
+]
+
+
+class _PercentProgress:
+    """Wraps the user's progress callback and prefixes each line with a
+    monotonic percentage (``"42% · …"``), so the output field shows how
+    far along the build is. The progress bar keeps its own pulse."""
+
+    def __init__(self, inner) -> None:
+        self._inner = inner
+        self._pct = 0
+
+    def __call__(self, msg: str) -> None:
+        for prefix, pct in _STAGE_PCT:
+            if msg.startswith(prefix) and pct > self._pct:
+                self._pct = pct
+                break
+        if self._inner is not None:
+            self._inner(f"{self._pct}% · {msg}")
+
+
 def build_profile(ti3_path: Path | str, out_path: Path | str,
                   settings: BuildSettings | None = None) -> BuildResult:
-    """Build an ICC printer profile from a measured chart."""
+    """Build an ICC printer profile from a measured chart.
+
+    Wraps the build so every progress line is prefixed with a monotonic
+    percentage; the original callback is restored afterwards.
+    """
     settings = settings or BuildSettings()
+    orig_progress = settings.progress
+    settings.progress = _PercentProgress(orig_progress)
+    try:
+        return _build_profile_impl(ti3_path, out_path, settings)
+    finally:
+        settings.progress = orig_progress
+
+
+def _build_profile_impl(ti3_path: Path | str, out_path: Path | str,
+                        settings: BuildSettings) -> BuildResult:
     if settings.quality not in _QUALITY_INDEX:
         raise EngineError(f"Unknown quality {settings.quality!r} "
                           "(expected one of l, m, h, u).")
