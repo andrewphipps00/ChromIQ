@@ -261,6 +261,7 @@ def build_neighbours(sv: np.ndarray, rdl: np.ndarray, rdh: np.ndarray):
     n = len(sv)
     idx_list = []
     w_list = []
+    rw_list = []
     for i in range(n):
         il = max(rdl[i], 1e-3)
         ih = max(rdh[i], 1e-3)
@@ -279,8 +280,9 @@ def build_neighbours(sv: np.ndarray, rdl: np.ndarray, rdh: np.ndarray):
         w = w * w * (3.0 - 2.0 * w)
         tw = w.sum()
         idx_list.append(np.flatnonzero(m))
+        rw_list.append(w.copy())            # C nd[].rw — never normalised
         w_list.append(w / max(tw, 1e-12))
-    return idx_list, w_list
+    return idx_list, w_list, rw_list
 
 
 def vecadj_loop(sv: np.ndarray, dv0: np.ndarray, naxbf: np.ndarray,
