@@ -170,6 +170,8 @@ def settings_from_params(params: "ProfileParams") -> BuildSettings:
     """
     if params.wp_mode in _WP_MODE_ERRORS:
         raise ValueError(_WP_MODE_ERRORS[params.wp_mode])
+    _ = params.dark_emphasis   # -V: no-op for output-class data — colprof
+    #                            itself passes literal 1.0 (colprof.c)
     s = BuildSettings(
         quality=params.quality or "m",
         b2a_quality=params.b2a_quality or "",
