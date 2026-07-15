@@ -20,6 +20,8 @@ class GamFile:
     triangles: np.ndarray | None    # (M, 3) vertex indexes (may be None)
     white: np.ndarray
     black: np.ndarray
+    cs_white: np.ndarray            # colorspace white/black (header CSPACE_*)
+    cs_black: np.ndarray
     cusps: np.ndarray               # (6, 3) R Y G C B M
 
 
@@ -32,6 +34,8 @@ def read_gam(path: Path | str) -> GamFile:
 
     white = vec("GAMUT_WHITE")
     black = vec("GAMUT_BLACK")
+    cs_white = vec("CSPACE_WHITE")
+    cs_black = vec("CSPACE_BLACK")
     cusps = np.stack([vec(f"CUSP_{n}") for n in
                       ("RED", "YELLOW", "GREEN", "CYAN", "BLUE", "MAGENTA")])
 
@@ -46,4 +50,5 @@ def read_gam(path: Path | str) -> GamFile:
             triangles = np.array([[int(r[0]), int(r[1]), int(r[2])]
                                   for r in rows1])
     return GamFile(vertices=vertices, triangles=triangles, white=white,
-                   black=black, cusps=cusps)
+                   black=black, cs_white=cs_white, cs_black=cs_black,
+                   cusps=cusps)
