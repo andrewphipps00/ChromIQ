@@ -378,3 +378,39 @@ def test_grey_axis_endpoints_exact_after_wb_adjust():
     # black maps exactly to the fully adapted dest black L (= dr_be_bp L)
     assert abs(lo - ga.dr_be_bp[0]) < 1e-6
     assert abs(lo - 4.7) < 1e-6
+
+
+# ---------------------------------------------------------------------------
+# cam02 appearance space (stage 6): literal xicc/cam02.c port
+# ---------------------------------------------------------------------------
+
+def test_cam02_appearance_matches_xicclu_reference():
+    """Appearance (rel Lab → Jab) pinned against xicclu -ir -pj values
+    computed with a compiled Argyll (ClayRGB media white = D65).
+    The port matched xicclu to 0.0001 median on 200 probes; these rows
+    pin a spread of the gamut including the HK/bluelin-affected regions.
+    """
+    from workflow.profile_engine.gammap_port.cam02 import Appearance
+    ap = Appearance([0.95045471, 1.0, 1.08905029])
+    labs = np.array([[50.0, 0.0, 0.0], [20.0, 40.0, -60.0],
+                     [95.0, -5.0, 80.0], [5.0, 2.0, -4.0],
+                     [70.0, 60.0, 20.0]])
+    ref = np.array([[40.664, -1.1087, -0.6716],
+                    [21.0219, 10.6664, -54.1876],
+                    [92.8148, -9.7015, 65.5641],
+                    [10.4033, 1.3721, -4.4101],
+                    [65.7552, 61.61, 17.1564]])
+    got = ap.lab_to_jab(labs)
+    assert np.abs(got - ref).max() < 2e-3
+    # exact analytic inverse
+    back = ap.jab_to_lab(got)
+    assert np.abs(back - labs).max() < 1e-5
+
+
+def test_cam02_printer_white_roundtrip():
+    from workflow.profile_engine.gammap_port.cam02 import Appearance
+    ap = Appearance([0.81098938, 0.84335327, 0.73251343])
+    rng = np.random.default_rng(11)
+    labs = rng.uniform([2, -80, -80], [99, 80, 80], (200, 3))
+    back = ap.jab_to_lab(ap.lab_to_jab(labs))
+    assert np.abs(back - labs).max() < 1e-4
