@@ -6,6 +6,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable
 
+from PyQt6.QtCore import QThread, pyqtSignal
+
 from core.i18n import tr
 from core.logger import get_logger
 from core.strip_utils import letter_to_idx
@@ -99,12 +101,52 @@ class ProfcheckResult:
     raw_log: str = ""
 
 
+def _ti3_device_channels(ti3_path: Path) -> int:
+    """Number of device channels from the .ti3 COLOR_REP (0 if unreadable)."""
+    try:
+        head = Path(ti3_path).read_text(errors="replace")[:8000]
+    except OSError:
+        return 0
+    m = re.search(r'^COLOR_REP\s+"([^"]+)"', head, re.M)
+    return len(m.group(1).split("_")[0]) if m else 0
+
+
+class _NChannelWorker(QThread):
+    """Runs the Python +N accuracy check off the UI thread, streaming
+    profcheck-format lines."""
+    line = pyqtSignal(str)
+    done = pyqtSignal(int)
+
+    def __init__(self, params: "ProfcheckParams", bin_dir: Path, parent=None):
+        super().__init__(parent)
+        self._params = params
+        self._bin_dir = bin_dir
+
+    def run(self) -> None:                       # noqa: D102 — QThread worker
+        from workflow.profcheck_nchannel import (NChannelCheckError,
+                                                 run_check)
+        p = self._params
+        try:
+            lines = run_check(
+                p.ti3_path, p.icc_path, bin_dir=self._bin_dir,
+                de_formula=p.de_formula, intent=p.intent, sort=p.sort,
+                verbosity=p.verbosity)
+        except NChannelCheckError as exc:
+            self.line.emit(tr("[ERROR] {msg}").format(msg=exc))
+            self.done.emit(1)
+            return
+        for ln in lines:
+            self.line.emit(ln)
+        self.done.emit(0)
+
+
 class ProfcheckRunner:
     def __init__(self, runner: "ArgyllRunner") -> None:
         self._runner   = runner
         self._last_log = ""
         self._matched_errors: list[tuple[str, str]] = []
         self._matched_warnings: list[tuple[str, str]] = []
+        self._nchan_worker: _NChannelWorker | None = None
 
     def run(
         self,
@@ -112,9 +154,6 @@ class ProfcheckRunner:
         on_line: Callable[[str], None],
         on_finish: Callable[[int], None],
     ) -> None:
-        args = self._build_args(params)
-        cwd  = params.ti3_path.parent
-        log.info("profcheck: %s  [cwd=%s]", " ".join(args), cwd)
         self._last_log = ""
         self._matched_errors = []
         self._matched_warnings = []
@@ -124,6 +163,31 @@ class ProfcheckRunner:
             self._scan_line(line)
             on_line(line)
 
+        # >4-ink profiles: stock profcheck refuses the colourspace, so run the
+        # Python N-channel check (icclu forward lookup + ΔE) — same output
+        # format, so all downstream parsing / grading / refine-strip flagging
+        # works unchanged. Spectral options (FWA / custom illuminant / observer)
+        # aren't recomputed; the file's CIE values are used.
+        if _ti3_device_channels(params.ti3_path) > 4:
+            bin_dir = Path(self._runner._settings.get(
+                "argyll_bin_path", "/Applications/Argyll/bin"))
+            log.info("profcheck (N-channel): %s vs %s",
+                     params.ti3_path.name, params.icc_path.name)
+            self._nchan_worker = w = _NChannelWorker(params, bin_dir)
+            w.line.connect(_accumulate)
+
+            def _finished(code: int) -> None:
+                self._nchan_worker = None
+                on_finish(code)
+
+            w.done.connect(_finished)
+            w.finished.connect(w.deleteLater)
+            w.start()
+            return
+
+        args = self._build_args(params)
+        cwd  = params.ti3_path.parent
+        log.info("profcheck: %s  [cwd=%s]", " ".join(args), cwd)
         self._runner.run(
             "profcheck",
             args,
