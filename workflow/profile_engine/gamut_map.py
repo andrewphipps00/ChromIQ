@@ -756,18 +756,35 @@ def build_mapped_b2a(model: ForwardModel, meas: Ti3Measurement, grid: int,
     out: dict[str, bytes | str] = {}
     mappers: dict[str, object] = {}
 
-    # First choice: colprof-matched rendering via the arm's-length oracle —
-    # identical output within colprof's own build variation. Falls back to
-    # the engine's closed-form family where colprof can't build the data
-    # (multi-ink) or isn't installed.
+    # First choice: the ported gammap — colprof's own gamut-mapping
+    # algorithm running natively in the engine (Jab appearance space,
+    # validated 0.34 median against Argyll's own map; no colprof run).
+    # Second: the arm's-length colprof oracle (for intents/options the
+    # port doesn't cover yet). Last: the engine's closed-form family
+    # (multi-ink data or no Argyll binaries at all).
     progress = getattr(settings, "progress", None) if settings else None
-    oracle: dict[str, WarpMapper] = {}
-    if settings is not None and meas is not None:
+    oracle: dict[str, object] = {}
+    if settings is not None and model is not None:
         try:
-            oracle = fit_colprof_mappers(
+            from workflow.profile_engine.gammap_port.wire import (
+                PortUnavailable, fit_gammap_port_mappers)
+            oracle = fit_gammap_port_mappers(
+                model, meas, source_gamut, settings,
+                getattr(settings, "argyll_bin", None), progress,
+                is_additive=is_additive, ink_limit=ink_limit)
+        except Exception as exc:                      # noqa: BLE001
+            if progress:
+                progress(f"Ported gammap unavailable ({exc}) — "
+                         "matching colprof's rendering instead.")
+    if settings is not None and meas is not None and (
+            "B2A0" not in oracle or "B2A2" not in oracle):
+        try:
+            cp = fit_colprof_mappers(
                 meas, source_gamut, settings,
                 getattr(settings, "argyll_bin", None), progress,
                 node_lab=node_lab)
+            for tag, m in cp.items():
+                oracle.setdefault(tag, m)
         except OracleUnavailable as exc:
             if progress:
                 progress(f"Using the engine's own rendering ({exc}).")
