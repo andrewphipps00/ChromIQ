@@ -181,7 +181,10 @@ class GammapMapper:
     def __init__(self, src_verts, src_tris, src_cs_wp, src_cs_bp, src_cusps,
                  dst_verts, dst_tris, dst_cs_wp, dst_cs_bp, dst_cusps, *,
                  intent: str = "p", surf_cache: dict | None = None,
-                 dst_gam_wp=None, dst_gam_bp=None) -> None:
+                 dst_gam_wp=None, dst_gam_bp=None, progress=None) -> None:
+        def _tick(msg):
+            if progress:
+                progress(msg)
         table = (wtab.SATURATION_WEIGHTS if intent in ("s", "ms")
                  else wtab.PERCEPTUAL_WEIGHTS)
         xw = expand_weights(table)
@@ -205,6 +208,7 @@ class GammapMapper:
         tri_ps = TriSurface(psrc_verts, src_tris)
         ss_d = _sampled(tri_d, cache=surf_cache, key="dest")
         ss_ps = _sampled(tri_ps, cache=surf_cache, key="psrc")
+        _tick("Gamut mapping: preparing colour surfaces…")
         cm = CuspMapping(ga.pre_map(src_cusps), np.asarray(dst_cusps, float),
                          src_white=ga.pre_map(np.asarray(src_cs_wp,
                                                          float)[None, :])[0],
@@ -243,6 +247,7 @@ class GammapMapper:
             m = (cb == key[None, :]).all(1)
             csv[m] = cm.comp_ce(sv[m], cusp_weights=tuple(key))
 
+        _tick("Gamut mapping: matching source colours to the printer…")
         # pass 1 (pass 2 measured as a no-op in colprof's configuration).
         # For expansion intents the optimisation target is the FULL dest
         # (nearsmth.c: dst_gam = dc_gam when there is no image gamut).
@@ -328,6 +333,7 @@ class GammapMapper:
 
         nbr_idx, nbr_w, nbr_rw = build_neighbours(csv, w[:, RRDL],
                                                   w[:, RRDH])
+        _tick("Gamut mapping: smoothing the colour transitions…")
         dv = vecadj_loop(csv, aodv, naxbf, w[:, RDSM], nbr_idx, nbr_w,
                          ss_d, evect_fn, passes=8)
 
@@ -376,6 +382,7 @@ class GammapMapper:
         hi = scale * (map_ih - map_il) + map_il
         map_il, map_ih = lo, hi
 
+        _tick("Gamut mapping: fine-tuning the fit to the gamut edge…")
         # ---- RSPLPASSES fine-tune loop (nearsmth.c L3100–3345) ----
         # Guides are extended so the SMOOTHED rspl lands on the surface:
         # each pass fits the current guides, measures the projected
@@ -647,6 +654,7 @@ class GammapMapper:
             train.append(spts)
             target.append(sdv)
             rw.append(ws)
+        _tick("Gamut mapping: building the final colour table…")
         self._map = Rspl3(np.vstack(train), np.vstack(target),
                           np.concatenate(rw), map_il, map_ih,
                           gres=mapres, smooth=smooth)

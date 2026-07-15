@@ -477,7 +477,8 @@ def fit_colprof_mappers(meas: Ti3Measurement, source_gamut: Path | str,
             f"colprof can't build {meas.device_rep} measurements")
 
     if progress:
-        progress("Matching colprof's rendering (background colprof run)…")
+        progress("Saturation table: matching colprof's rendering "
+                     "(this runs Argyll colprof once in the background)…")
     with tempfile.TemporaryDirectory() as td:
         base = Path(td) / "oracle"
         shutil.copy(meas.path, base.with_suffix(".ti3"))
@@ -541,7 +542,7 @@ def fit_colprof_mappers(meas: Ti3Measurement, source_gamut: Path | str,
             return out
 
         if progress:
-            progress("Fitting the colprof-matched rendering…")
+            progress("Saturation table: fitting the matched rendering…")
         out = {"B2A0": WarpMapper(train, realized("p")),
                "B2A2": WarpMapper(train, realized("s"))}
         # Exact node targets: sample colprof's realized mapping AT the CLUT

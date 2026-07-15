@@ -195,11 +195,13 @@ def fit_gammap_port_mappers(model, meas, source_gamut: Path | str,
     bin_dir = Path(argyll_bin) if argyll_bin else Path(
         "/Applications/Argyll/bin")
     if progress:
-        progress("Building the gamut mapping (ported gammap)…")
+        progress("Gamut mapping: reading the source colour space…")
 
     src = source_gam_jab(source_gamut, bin_dir)
     src_white_xyz = read_icc_wtpt(source_gamut)
     ap_src = Appearance(src_white_xyz)
+    if progress:
+        progress("Gamut mapping: measuring the printer's colour range…")
 
     # destination: Argyll's own gamut construction on a temp model ICC
     # (n ≤ 4 — Argyll's lookup machinery refuses more channels); for
@@ -238,5 +240,5 @@ def fit_gammap_port_mappers(model, meas, source_gamut: Path | str,
                       src.cs_black, src.cusps, dst.vertices,
                       dst.triangles, dst.cs_white, dst.cs_black,
                       dst.cusps, intent="p", dst_gam_wp=dst.white,
-                      dst_gam_bp=dst.black)
+                      dst_gam_bp=dst.black, progress=progress)
     return {"B2A0": PortMapper(gm, ap_src, ap_dst)}
