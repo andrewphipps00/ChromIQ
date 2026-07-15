@@ -311,3 +311,31 @@ Slightly WORSE than VECADJ alone. Known deficiencies to fix (in order):
    be measured directly: fit warp on (sv→their dv), compare map(_sv) vs
    their per-pass temp dump).
 Operating point meanwhile: VECADJ-only output (0.909 median).
+
+## Session results: VECADJ validated · final-fit recipe · ROOT CAUSE of e2e gap
+
+- VECADJ chain now at **0.518–0.536 median vs their V** (frame fix: loop
+  runs on CUSP-MAPPED source; exact evector construction: cvect+doshrink
+  (icmNormalize33 = from `in` toward `p2` by len) + weighted-nearest on
+  shrunk gamut, cos 0.993 vs their dumped evectors; neighbour count
+  matches their verbose output exactly: 829.72).
+- SampledSurface: TriSurface radial field sampled 720×360 → tri accuracy
+  at table speed (pass-1 0.038, vecadj 73 s full-size).
+- smthdump now dumps S-records: sv2/dv2/sd3/w2/w3/vflag per guide.
+  gammap.c final rspl rows (L1620–1746): (sv→blend(sv,dv,gamcpf)) w1=1.01;
+  (sv2→blend(sv2,dv2,cpexf)) w2; (sd3→sd3 IDENTITY) w3 — colprof's own
+  interior anchors. Perceptual gamcpf=1.0 → div=dv.
+- **E2E gap root cause found**: even with THEIR guides + sub-rows the
+  realized-probe diff stays ~4.2 → the missing piece is gammap.c's
+  PRE-TRANSFORM: grey-axis rotation + 1-D L map applied to the source
+  BEFORE near_smooth (its scl_gam input is pre-mapped; my smthdump run
+  used raw gamuts — consistent for guide diffs, but the realized map =
+  Lmap∘rot∘nearsmth∘fit). Port gammap.c L700–1200 next: sswp/ssbp same-L
+  interpolants, dr_cs = greymf blend, fawp/fabp clip to dest, wrot
+  white-point rotation, bendBP branch per intent (perceptual bph from
+  xicc.c), lpnts grey L-map (1-D rspl, smoothing 5.0 — fit with 1-D
+  maths-A), then scl_gam = transformed source; re-run the whole validated
+  chain on that; full map = greyL/rot → warp(rows recipe).
+- Validation harness for the E2E gate: gamut/maptest.c is an existing
+  new_gammap harness — compile like smthtest if a full-gammap dump is
+  needed; else colprof -P net guides + realized probes as before.

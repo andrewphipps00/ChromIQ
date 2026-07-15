@@ -235,3 +235,55 @@ class TriSurface:
             n_min[i] = self.normal[idx[0]]
             n_max[i] = self.normal[idx[-1]]
         return mint, maxt, n_min, n_max
+
+
+class SampledSurface:
+    """Fast exact-ish surface: the TriSurface's radial field sampled once
+    onto a fine (hue × inclination) grid (default 0.5°), then bilinear —
+    tri accuracy (smooth field, dense sampling) at table speed. Falls back
+    to the TriSurface for vector_isect (exact crossings needed there)."""
+
+    def __init__(self, tri: "TriSurface", nh: int = 720, nb: int = 360
+                 ) -> None:
+        self._tri = tri
+        self.nh = nh
+        self.nb = nb
+        hue = (np.arange(nh) + 0.5) / nh * 2 * np.pi
+        incl = (np.arange(nb) + 0.5) / nb * np.pi
+        hh, bb = np.meshgrid(hue, incl, indexing="ij")
+        d = np.stack([np.cos(bb), np.sin(bb) * np.cos(hh),
+                      np.sin(bb) * np.sin(hh)], -1).reshape(-1, 3)
+        self.tab = tri.surface_radius(d).reshape(nh, nb)
+
+    def _radius(self, dirs: np.ndarray) -> np.ndarray:
+        r = np.maximum(np.linalg.norm(dirs, axis=1), 1e-9)
+        incl = np.arccos(np.clip(dirs[:, 0] / r, -1, 1))
+        hue = np.arctan2(dirs[:, 2], dirs[:, 1]) % (2 * np.pi)
+        fh = hue / (2 * np.pi) * self.nh - 0.5
+        fb = np.clip(incl / np.pi * self.nb - 0.5, 0.0, self.nb - 1.0)
+        h0 = np.floor(fh).astype(int) % self.nh
+        h1 = (h0 + 1) % self.nh
+        b0 = fb.astype(int)
+        b1 = np.minimum(b0 + 1, self.nb - 1)
+        wh = fh - np.floor(fh)
+        wb = fb - b0
+        return ((1 - wh) * (1 - wb) * self.tab[h0, b0]
+                + wh * (1 - wb) * self.tab[h1, b0]
+                + (1 - wh) * wb * self.tab[h0, b1]
+                + wh * wb * self.tab[h1, b1])
+
+    def radial(self, pts: np.ndarray) -> np.ndarray:
+        pts = np.atleast_2d(np.asarray(pts, float))
+        rel = pts - CENT[None, :]
+        r = np.maximum(np.linalg.norm(rel, axis=1), 1e-9)
+        rr = self._radius(rel)
+        return CENT[None, :] + rel * (rr / r)[:, None]
+
+    def nradial(self, pts: np.ndarray) -> np.ndarray:
+        pts = np.atleast_2d(np.asarray(pts, float))
+        rel = pts - CENT[None, :]
+        r = np.linalg.norm(rel, axis=1)
+        return r / np.maximum(self._radius(rel), 1e-9)
+
+    def vector_isect(self, a: np.ndarray, b: np.ndarray, samples: int = 0):
+        return self._tri.vector_isect(a, b)
