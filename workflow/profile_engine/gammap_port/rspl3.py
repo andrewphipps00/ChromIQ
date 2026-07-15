@@ -184,20 +184,40 @@ class Rspl3:
             self._grids.append(x.reshape(shape))
 
     def interp(self, pnts: np.ndarray) -> np.ndarray:
+        """SIMPLEX (tetrahedral) interpolation — Argyll rspl.c
+        interp_rspl_sx (its default). The grid is FIT with a multilinear
+        data term but LOOKED UP with simplex; matching this closes the
+        ~0.08 ΔE that trilinear lookup left against Argyll's own map.
+
+        Per point: sort the three cell fractions ascending (si), then
+        walk from the base corner up the dimensions in decreasing
+        fraction order — vertices (base, +si2, +si2+si1, +si2+si1+si0)
+        with weights (1−t[si2], t[si2]−t[si1], t[si1]−t[si0], t[si0]).
+        """
         pnts = np.atleast_2d(np.asarray(pnts, float))
         gres = self.gres
         f = (pnts - self.il[None, :]) / (self.ih - self.il)[None, :] \
             * (gres - 1)
         f = np.clip(f, 0.0, gres - 1.0)
         i0 = np.clip(f.astype(int), 0, gres - 2)
-        t = f - i0
-        out = np.zeros((len(pnts), len(self._grids)))
-        for c in range(8):
-            cx, cy, cz = (c >> 2) & 1, (c >> 1) & 1, c & 1
-            wt = (np.where(cx, t[:, 0], 1 - t[:, 0])
-                  * np.where(cy, t[:, 1], 1 - t[:, 1])
-                  * np.where(cz, t[:, 2], 1 - t[:, 2]))
+        t = f - i0                                  # (N, 3) fractions
+        si = np.argsort(t, axis=1)                  # ascending; si[:,2]=max
+        n = len(pnts)
+        rows = np.arange(n)
+        ts = np.take_along_axis(t, si, axis=1)      # sorted fractions
+        # simplex vertex offsets (cumulative one-hots from largest dim)
+        idx = i0.copy()
+        out = np.zeros((n, len(self._grids)))
+        # base corner, weight 1 − t[si2]
+        w = 1.0 - ts[:, 2]
+        for fch, g in enumerate(self._grids):
+            out[:, fch] += w * g[idx[:, 0], idx[:, 1], idx[:, 2]]
+        # step up dim si2 (weight t[si2]−t[si1]), then si1 (t[si1]−t[si0]),
+        # then si0 (t[si0])
+        for k, wexpr in ((2, ts[:, 2] - ts[:, 1]),
+                         (1, ts[:, 1] - ts[:, 0]),
+                         (0, ts[:, 0])):
+            idx[rows, si[:, k]] += 1
             for fch, g in enumerate(self._grids):
-                out[:, fch] += wt * g[i0[:, 0] + cx, i0[:, 1] + cy,
-                                      i0[:, 2] + cz]
+                out[:, fch] += wexpr * g[idx[:, 0], idx[:, 1], idx[:, 2]]
         return out
