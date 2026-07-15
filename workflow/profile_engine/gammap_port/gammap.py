@@ -109,6 +109,55 @@ def _ss_verts(verts: np.ndarray, tris: np.ndarray, xvra: float
     return np.vstack(out)
 
 
+
+def _nearest_on_mesh(pts: np.ndarray, verts: np.ndarray, tris: np.ndarray
+                     ) -> tuple[np.ndarray, np.ndarray]:
+    """Exact nearest point on a triangle mesh, per query point (used only
+    for the few tdst fallback/borderline points — the C's gamut nearest).
+    Returns (nearest points, distances)."""
+    a = verts[tris[:, 0]]
+    ab = verts[tris[:, 1]] - a
+    ac = verts[tris[:, 2]] - a
+    out = np.empty_like(pts)
+    dist = np.empty(len(pts))
+    for k, q in enumerate(pts):
+        ap = q[None, :] - a
+        d1 = (ab * ap).sum(1)
+        d2 = (ac * ap).sum(1)
+        d00 = (ab * ab).sum(1)
+        d01 = (ab * ac).sum(1)
+        d11 = (ac * ac).sum(1)
+        den = np.maximum(d00 * d11 - d01 * d01, 1e-12)
+        v = np.clip((d11 * d1 - d01 * d2) / den, 0.0, 1.0)
+        w = np.clip((d00 * d2 - d01 * d1) / den, 0.0, 1.0)
+        s = v + w
+        over = s > 1.0
+        sdiv = np.where(over, s, 1.0)
+        v = np.where(over, v / sdiv, v)
+        w = np.where(over, w / sdiv, w)
+        # clamp to the three edges where the interior projection left
+        # the triangle (barycentric clamp above is approximate but the
+        # per-edge projections below make it exact)
+        cand = [a + v[:, None] * ab + w[:, None] * ac]
+        for e0, ev in ((a, ab), (a, ac),
+                       (verts[tris[:, 1]], verts[tris[:, 2]]
+                        - verts[tris[:, 1]])):
+            tt = np.clip(((q[None, :] - e0) * ev).sum(1)
+                         / np.maximum((ev * ev).sum(1), 1e-12), 0.0, 1.0)
+            cand.append(e0 + tt[:, None] * ev)
+        best = None
+        bestd = None
+        for c in cand:
+            dd = ((c - q[None, :]) ** 2).sum(1)
+            j = dd.argmin()
+            if bestd is None or dd[j] < bestd:
+                bestd = dd[j]
+                best = c[j]
+        out[k] = best
+        dist[k] = np.sqrt(bestd)
+    return out, dist
+
+
 def _sampled(tri: TriSurface, nh: int = 360, nb: int = 180,
              cache: dict | None = None, key: str = "") -> SampledSurface:
     if cache is not None and key in cache:
@@ -210,6 +259,10 @@ class GammapMapper:
             # radial dest point itself
             drv = ss_d.radial(csv)
             r_c = np.linalg.norm(csv - CENT[None, :], axis=1)
+            # the C's swap test compares |nearest(dgam, sv)| with sr; the
+            # radial-point radius approximates that better than the
+            # nearest VERTEX on a -d10 mesh (both measured — vertex
+            # variant scored 0.81 vs 0.66 at the domap gate)
             r_d = np.linalg.norm(drv - CENT[None, :], axis=1)
             swap = r_d > r_c + 1e-9
             if swap.any():
@@ -375,6 +428,18 @@ class GammapMapper:
             isec = dvo + tt2[:, None] * evo
             idist = np.linalg.norm(isec - dvo, axis=1)
             use = np.isfinite(idist) & (idist <= nd + 5.0)
+            # refine with the EXACT nearest-on-surface (the C's gamut
+            # nearest) where the vertex approximation decides the result:
+            # fallback targets and borderline sanity-gate points
+            border = (~use) | (np.isfinite(idist)
+                               & (np.abs(idist - nd) <= 6.0))
+            if useexp and border.any():
+                npts, ndist = _nearest_on_mesh(
+                    dvo[border], np.asarray(dst_verts, float),
+                    np.asarray(dst_tris))
+                near[border] = npts
+                nd[border] = ndist
+                use = np.isfinite(idist) & (idist <= nd + 5.0)
             tgt = near.copy()
             tgt[use] = isec[use]
             tdst[out_i] = tgt
