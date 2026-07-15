@@ -192,14 +192,35 @@ class TriSurface:
     def _ray_ts(self, orig: np.ndarray, d: np.ndarray):
         return self._ray_hits(orig, d)
 
-    def surface_radius(self, d: np.ndarray) -> np.ndarray:
-        """Radius along unit directions from the centre (max crossing)."""
-        hits = self._ray_hits(np.repeat(CENT[None, :], len(d), 0), d)
-        r = np.empty(len(d))
-        for i, (ts, _) in enumerate(hits):
-            pos = ts[ts > 1e-9]
-            r[i] = pos.max() if len(pos) else 1e-9
-        return r
+    def surface_radius(self, d: np.ndarray, chunk: int = 4096) -> np.ndarray:
+        """Radius along unit directions from the centre (max ray crossing).
+
+        Fully vectorised Möller–Trumbore from CENT — no per-point Python
+        loop (the loopy version made the exact-geometry guide pipeline
+        impractically slow). Rays start at the gamut centre, so all
+        crossings have t > 0; the max is the outer surface radius.
+        """
+        d = np.atleast_2d(np.asarray(d, float))
+        n = len(d)
+        out = np.full(n, 1e-9)
+        v0, e1, e2 = self.v0, self.e1, self.e2
+        for lo in range(0, n, chunk):
+            dd = d[lo:lo + chunk][:, None, :]           # (C,1,3)
+            p = np.cross(dd, e2[None, :, :])
+            det = (e1[None, :, :] * p).sum(2)
+            ok = np.abs(det) > 1e-12
+            inv = np.where(ok, 1.0 / np.where(ok, det, 1.0), 0.0)
+            tvec = CENT[None, None, :] - v0[None, :, :]
+            u = (tvec * p).sum(2) * inv
+            q = np.cross(np.broadcast_to(tvec, (dd.shape[0],) + v0.shape),
+                         e1[None, :, :])
+            v = (dd * q).sum(2) * inv
+            t = (e2[None, :, :] * q).sum(2) * inv
+            hit = (ok & (u >= -1e-9) & (v >= -1e-9)
+                   & (u + v <= 1 + 1e-9) & (t > 1e-9))
+            tt = np.where(hit, t, -1.0)
+            out[lo:lo + chunk] = np.maximum(tt.max(1), 1e-9)
+        return out
 
     def radial(self, pts: np.ndarray) -> np.ndarray:
         pts = np.atleast_2d(np.asarray(pts, float))
@@ -235,6 +256,40 @@ class TriSurface:
             n_min[i] = self.normal[idx[0]]
             n_max[i] = self.normal[idx[-1]]
         return mint, maxt, n_min, n_max
+
+
+class IntersectSurface:
+    """Exact intersection of two triangulated gamuts (per-direction min
+    radius) — Argyll's nedst_gam = intersection of source and destination.
+    ``radial``/``nradial``/``surface_radius`` take the smaller of the two
+    surfaces' exact radii along each direction; ``vector_isect`` uses the
+    primary (destination) surface, matching how gammap.c clips."""
+
+    def __init__(self, tri_primary: "TriSurface", tri_other: "TriSurface"
+                 ) -> None:
+        self._tri = tri_primary
+        self._other = tri_other
+
+    def surface_radius(self, d: np.ndarray) -> np.ndarray:
+        return np.minimum(self._tri.surface_radius(d),
+                          self._other.surface_radius(d))
+
+    def radial(self, pts: np.ndarray) -> np.ndarray:
+        pts = np.atleast_2d(np.asarray(pts, float))
+        rel = pts - CENT[None, :]
+        r = np.maximum(np.linalg.norm(rel, axis=1), 1e-9)
+        dd = rel / r[:, None]
+        return CENT[None, :] + dd * self.surface_radius(dd)[:, None]
+
+    def nradial(self, pts: np.ndarray) -> np.ndarray:
+        pts = np.atleast_2d(np.asarray(pts, float))
+        rel = pts - CENT[None, :]
+        r = np.linalg.norm(rel, axis=1)
+        dd = rel / np.maximum(r, 1e-9)[:, None]
+        return r / np.maximum(self.surface_radius(dd), 1e-9)
+
+    def vector_isect(self, a: np.ndarray, b: np.ndarray, samples: int = 0):
+        return self._tri.vector_isect(a, b)
 
 
 class SampledSurface:

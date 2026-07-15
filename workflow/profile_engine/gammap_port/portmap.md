@@ -650,3 +650,23 @@ file's own 0.41 quantisation floor. Closing it fully = a bit-exact
 sobol.c + getssvert port (large, neutral payoff) — an owner decision.
 Instrumentation banked: gammap._row_blocks; _pattern_search restarts
 (optional, default off — measured no help on the aodv tail).
+
+## Exact triangle geometry replaces the surface table (2026-07-15)
+
+Removed the SampledSurface hue×inclination table (a substitution) in
+favour of Argyll's EXACT triangle geometry throughout the guide
+pipeline: TriSurface.surface_radius rewritten fully-vectorised (no
+per-point loop), + new IntersectSurface (exact per-direction min of two
+gamuts = Argyll's nedst_gam). Rejection now uses the accurate surface.
+- Isolated pass-1 aodv: **0.043 → 0.005** median (95% 0.67 → 0.38) vs
+  Argyll — the table's pole/neutral inaccuracy is gone.
+- Full gate: perceptual median **0.336 → 0.279** (guide values more
+  faithful); 95% 1.56 → 1.98 and max 3.84 → 4.39 rose slightly (the
+  tail is now the OPTIMISER's multi-minima + the evector field, NOT
+  geometry — aodv itself improved). Saturation flat (0.57).
+- COST: ~5× slower (perceptual build 34s → 170s exact-query). A profile
+  build is one-time, but +N (2 mappers) would be several minutes — a
+  real speed tradeoff to weigh.
+- Remaining substitutions to remove for full exactness: the evector
+  direction-field (WarpMapper → Argyll's rspl-of-directions) and the
+  pass-1 optimiser (pattern-search → powell; the max-4.4 outliers).
