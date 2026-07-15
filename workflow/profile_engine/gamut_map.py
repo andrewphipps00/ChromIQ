@@ -414,7 +414,8 @@ class WarpMapper:
     """
 
     def __init__(self, train_lab: np.ndarray, target_lab: np.ndarray,
-                 grid: int = 13, lam: float = 0.005) -> None:
+                 grid: int = 13, lam: float = 0.005,
+                 row_weights: np.ndarray | None = None) -> None:
         from workflow.profile_engine.forward_model import (_grid_solve,
                                                            _interp_weights)
         self._grid = grid
@@ -422,8 +423,12 @@ class WarpMapper:
         hi = train_lab.max(0) + 1.0
         self._lo, self._hi = lo, hi
         w, cols = _interp_weights(self._to01(train_lab), grid, 3)
-        self._nodes = _grid_solve(w, cols, target_lab - train_lab, grid, 3,
-                                  lam, 1200)
+        y = target_lab - train_lab
+        if row_weights is not None:
+            sw = np.sqrt(np.asarray(row_weights, float))[:, None]
+            w = w * sw
+            y = y * sw
+        self._nodes = _grid_solve(w, cols, y, grid, 3, lam, 1200)
 
     def _to01(self, lab: np.ndarray) -> np.ndarray:
         return np.clip((lab - self._lo[None, :])

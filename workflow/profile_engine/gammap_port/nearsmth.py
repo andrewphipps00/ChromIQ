@@ -69,8 +69,8 @@ def _pattern_search(surf: GamutSurface, ang0: np.ndarray, objective,
 def near_smooth_guides(src_cloud: np.ndarray, dst_cloud: np.ndarray,
                        xw: np.ndarray, cm: CuspMapping, *,
                        smooth_iters: int = 8,
-                       n_guides: int | None = None) -> tuple[np.ndarray,
-                                                             np.ndarray]:
+                       n_guides: int | None = None
+                       ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Compute (source, mapped-destination) guide pairs.
 
     ``xw``: the (14, 23) expanded weight table; ``cm``: the cusp context.
@@ -189,6 +189,66 @@ def near_smooth_guides(src_cloud: np.ndarray, dst_cloud: np.ndarray,
             dv[out] = dst_surf.radial(dv[out])
         target = dv
 
-    # optimised compression guides + null-mapped interior surface points
-    return (np.vstack([sv, null_sv]),
-            np.vstack([dv, null_sv]))
+    # Sub-surface knee vectors (C +1581, compression branch, gamcknf=1.1
+    # for the perceptual intent — xicc.c): each moved guide spawns weighted
+    # sub-rows that pull the fitted map's interior response inward, which
+    # is how colprof's net surface targets land INSIDE the surface
+    # (measured: 66% of its plotted guides at nradial < 0.98).
+    gamcknf = 1.1
+    mv = dv - sv
+    ml = np.linalg.norm(mv, axis=1)
+    moved = ml > 2.0
+    sub_s = []
+    sub_t = []
+    sub_w = []
+    if moved.any():
+        mint, maxt, n_min, n_max = dst_surf.vector_isect(sv[moved], dv[moved])
+        # neutral-axis point: closest point on the W-K axis to the mapping
+        # line, blended 0.5 with the horizontal-L point, clipped (C exact).
+        wpt = cm.cusps[1][6]
+        bpt = cm.cusps[1][7]
+        axis = wpt - bpt
+        for k, i in enumerate(np.flatnonzero(moved)):
+            if np.isnan(mint[k]) or not (mint[k] >= -1e-8 and maxt[k] > 1e-8):
+                continue
+            d_line = mv[i] / ml[i]
+            # line-line closest point on the neutral axis
+            w0 = sv[i] - bpt
+            a11 = axis @ axis
+            a12 = axis @ d_line
+            b1 = axis @ w0
+            b2 = d_line @ w0
+            den = a11 - a12 * a12
+            t_ax = (b1 - a12 * b2) / den if abs(den) > 1e-9 else 0.5
+            nap = bpt + np.clip(t_ax, 0.0, 1.0) * axis
+            nap = 0.5 * nap + 0.5 * np.array([sv[i][0], nap[1], nap[2]])
+            nap[0] = np.clip(nap[0], bpt[0], wpt[0])
+            adepth2 = np.linalg.norm(nap - sv[i])
+            adepth1 = ml[i] * 0.5 * (maxt[k] + mint[k] - 2.0)
+            adepth = min(adepth1, adepth2) * 0.9
+            if adepth1 < 0.5 * adepth2 or adepth <= 0:
+                continue
+            sknf = gamcknf * 0.6
+            sv2 = dv[i]
+            mml = ml[i] * (1.0 - sknf)
+            adepth *= (1.0 - sknf)
+            sml = min(mml, adepth)
+            dv2 = sv2 + d_line * sml
+            natarg = nap - sv2
+            nn = np.linalg.norm(natarg)
+            if nn > 1e-9:
+                natarg = sv2 + natarg / nn * sml
+                dv2 = (1.0 - sml / adepth2) * dv2 + (sml / adepth2) * natarg
+            sub_s.append(sv2)
+            sub_t.append(dv2)
+            sub_w.append(0.7)
+            sd3 = 0.4 * dv2 + 0.6 * nap
+            sub_s.append(sv2)
+            sub_t.append(sd3)
+            sub_w.append(0.4 * gamcknf)
+
+    sv_all = np.vstack([sv, null_sv] + ([np.array(sub_s)] if sub_s else []))
+    dv_all = np.vstack([dv, null_sv] + ([np.array(sub_t)] if sub_t else []))
+    w_all = np.concatenate([np.ones(len(sv) + len(null_sv)),
+                            np.array(sub_w) if sub_w else np.empty(0)])
+    return sv_all, dv_all, w_all

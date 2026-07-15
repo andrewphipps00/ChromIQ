@@ -184,3 +184,31 @@ instrumented check — no more blind knob-turning):
 Shipping behaviour remains: oracle path (0.78/0.59 = inside colprof's own
 noise) for everything colprof can build; proxy-anchored family for +N.
 The port stays unwired until the ≤0.5 gate passes.
+
+## BREAKTHROUGH TOOL + gate history (2026-07-15, late)
+
+**Ground truth without compiling Argyll**: `colprof -P` writes
+`gammap_p.x3d.html` / `gammap_s.x3d.html` containing an IndexedLineSet of
+the ACTUAL guide vectors (2,891 for the ET-8550/ClayRGB case). Parse:
+coordIndex pairs (i, j, -1), point list newline-separated triples, axes
+(x,y,z) = (a, b, L−50). Extraction script pattern in the session notes;
+saved once at scratchpad/guides_src.npy/guides_dst.npy.
+
+Measured facts from those guides:
+- 66% of colprof's guide targets land >2% INSIDE the intersection surface
+  (median nradial 0.926) — net knee/sub-surface effect.
+- Port guides matched at sources: length agrees (10.0 vs 10.7 median),
+  direction mostly agrees (cos median 0.973), residual concentrated in
+  saturated midtones (L 18–68, C 45–100) → knee zone.
+- Gate history: 4.96 → 5.03 (naxbf fix) → 6.73 (no pre-align) → 6.08
+  (intersection target + null guides) → 6.80 (first knee sub-vector
+  attempt). Interactions unattributable at probe level.
+
+**Next-session methodology (mandatory)**: validate STAGE BY STAGE against
+the extracted guides — (1) match the guide-source vertex sets; (2) diff
+pass-1 aodv against… (needs pass-level dumps: consider `colprof -P` at
+several stages via nearsmth's SHOW_* defines if compiling, else fit
+sub-models); minimum: tune the sub-surface/knee composition until the
+port's NET map reproduces the 66%-inside distribution and the per-guide
+targets ≤0.5 median, THEN probe-level gate. No composite probe-level
+tuning — it measurably degrades (see history).

@@ -56,8 +56,8 @@ class GammapMapper:
         # the C: gammap.c hands near_smooth the unaligned source gamut.
         # (Pre-aligning too applied the axis transform twice — measured:
         # guide error 7.6 median.)
-        sv, dv = near_smooth_guides(src_cloud, dst_cloud, xw, cm,
-                                    smooth_iters=smooth_iters)
+        sv, dv, gw = near_smooth_guides(src_cloud, dst_cloud, xw, cm,
+                                        smooth_iters=smooth_iters)
 
         # 3. smooth displacement warp through the guides (rspl / PSMOOTH
         #    equivalent). Interior anchors: aligned-space points well
@@ -73,7 +73,8 @@ class GammapMapper:
         idx = rng.choice(len(core), min(len(core), 400), replace=False)
         train = np.vstack([sv, core[idx]])
         target = np.vstack([dv, core[idx]])
-        self._warp = WarpMapper(train, target)
+        wts = np.concatenate([gw, np.full(len(idx), 0.3)])
+        self._warp = WarpMapper(train, target, row_weights=wts)
 
     def map_lab(self, lab: np.ndarray) -> np.ndarray:
         return self._warp.map_lab(np.atleast_2d(np.asarray(lab, float)))
