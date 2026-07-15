@@ -318,36 +318,31 @@ def vecadj_loop(sv: np.ndarray, dv0: np.ndarray, naxbf: np.ndarray,
 
     rdsm = 1.0 - np.sqrt(dsm)
     for _ in range(passes):
-        new_anv = anv.copy()
+        # GAUSS-SEIDEL, exactly as the C: each point's anv update (with
+        # its clip and naxbf blend) is written before later points in the
+        # same pass read it. dv stays the pass-2 value throughout.
         for i in range(n):
             j = nbr_idx[i]
             w = nbr_w[i][:, None]
             sav = (w * sv[j]).sum(0)
-            # L is not iterated (uses dv); a/b use the iterating anv
+            # J is not iterated (uses dv); a/b use the iterating anv
             dav = (w * np.stack([dv[j][:, 0], anv[j][:, 1],
                                  anv[j][:, 2]], 1)).sum(0)
             tmp = (sv[i] - sav) * nscale[i] + dav
             tmp = (1.0 - rdsm[i]) * tmp + rdsm[i] * dv[i]
-            new_anv[i] = tmp
-        # clip against the FULL destination along the evector direction
-        nr = dest_surf.nradial(new_anv)
-        out = nr > 1.0 + 1e-6
-        if out.any():
-            dirs = evect_fn(new_anv[out])
-            mint, maxt, _, _ = dest_surf.vector_isect(
-                new_anv[out], new_anv[out] + dirs)
-            clip = new_anv[out].copy()
-            hit = ~np.isnan(mint)
-            # nearest intersection along the direction
-            tt = np.where(np.isnan(maxt), mint, np.where(
-                np.abs(mint) < np.abs(maxt), mint, maxt))
-            clip[hit] = new_anv[out][hit] + tt[hit][:, None] * dirs[hit]
-            miss = ~hit
-            if miss.any():
-                clip[miss] = dest_surf.radial(new_anv[out][miss])
-            new_anv[out] = clip
-        # W/K pinning blend, then iterate
-        anv = (1.0 - naxbf[:, None]) * dv + naxbf[:, None] * new_anv
+            # clip against the FULL destination along the evector
+            if dest_surf.nradial(tmp[None, :])[0] > 1.0 + 1e-6:
+                dirs = evect_fn(tmp[None, :])
+                mint, maxt, _, _ = dest_surf.vector_isect(
+                    tmp[None, :], tmp[None, :] + dirs)
+                if not np.isnan(mint[0]):
+                    tt = (mint[0] if np.isnan(maxt[0])
+                          or abs(mint[0]) < abs(maxt[0]) else maxt[0])
+                    tmp = tmp + tt * dirs[0]
+                else:
+                    tmp = dest_surf.radial(tmp[None, :])[0]
+            # W/K pinning blend, written in place (visible within pass)
+            anv[i] = (1.0 - naxbf[i]) * dv[i] + naxbf[i] * tmp
     return anv
 
 

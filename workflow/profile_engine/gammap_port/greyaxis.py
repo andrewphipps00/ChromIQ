@@ -94,6 +94,20 @@ class GreyAxis:
         else:
             sbL = dbL = sr_cs_bp[0]
 
+        # fine-tune targets (L1020–1046, BEFORE the symmetry swap): source
+        # cs points scaled to the L-curve endpoints, put back in
+        # pre-rotated space; dest targets on the straight dest axis
+        # (note the C reuses t from the white computation for d_mt_bp)
+        t = (swL - sr_cs_bp[0]) / (sr_cs_wp[0] - sr_cs_bp[0])
+        self.s_mt_wp = apply_3x4(self.igrot,
+                                 sr_cs_bp + t * (sr_cs_wp - sr_cs_bp))
+        t = (sbL - sr_cs_wp[0]) / (sr_cs_bp[0] - sr_cs_wp[0])
+        self.s_mt_bp = apply_3x4(self.igrot,
+                                 sr_cs_wp + t * (sr_cs_bp - sr_cs_wp))
+        t = (dwL - dr_cs_bp[0]) / (dr_cs_wp[0] - dr_cs_bp[0])
+        self.d_mt_wp = dr_cs_bp + t * (dr_cs_wp - dr_cs_bp)
+        self.d_mt_bp = dr_cs_wp + t * (dr_cs_bp - dr_cs_wp)
+
         # symmetry swap (L1040–1046); the fitted curve is then inverted
         self.revrspl = (dwL - dbL) > (swL - sbL)
         if self.revrspl:

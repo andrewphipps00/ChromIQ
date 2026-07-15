@@ -416,3 +416,73 @@ Operating point meanwhile: VECADJ-only output (0.909 median).
   be ported (validate against an xicclu/cam02 dump harness).
 - Jab gate: scratchpad/argbuild/e2e_gate_jab.py (port maps Jab→Jab on
   Jab gamuts; realized ref chain: Lab→B2A(-ip)→dev→xicclu -pj).
+- Jab gate result with the same pipeline: **1.92 / 4.74 / 8.29** (from
+  3.44 / 12.40 / 26.48 in Lab) — hypothesis confirmed decisively.
+
+## Final-fit recipe completed + Rspl3 exact fitter (2026-07-15)
+
+New ground truth + ports, each validated:
+- **Rspl3 (rspl3.py)**: fit_rspl_w 3→3 transcribed (smf[2] 3-D table,
+  trilinear rows, per-axis 2nd-diff curvature, cw = smooth·10^lsm·vw_f·
+  (mres−1)⁴/Π(gres−2), per-channel vw, matrix-free Jacobi-CG).
+  Validated vs compiled Argyll `fit3d` harness (scratchpad/argbuild):
+  **0.0065 / 0.018 / 0.028** on 3k synthetic rows, gres 29, smooth 2.0.
+  fit3d.c reusable: header line + D/Q rows on stdin.
+- **Complete gammap.c row assembly** (was the biggest omission):
+  1. 512 grey-axis rows (USE_GREYMAP L1380–1459): premapped source axis
+     → blend of BENT black axis (dr_be_bp) into STRAIGHT (dr_cs_bp),
+     smoothstep-spline within brad of black, weight 1+t·brad. This is
+     what straightens colprof's neutrals above black (measured).
+  2. guide rows w1=1.01 (+ interior identity guides).
+  3. sub-surface w2 / sd3-identity w3 rows (unchanged).
+  4. surface-grid anchors (nearsmth.c L3746+): outer two layers
+     {0,hdmapres,hm−1,hm−1−hd} of the half-res grid over the
+     gexp(1.10)-expanded box, wn-mapped to source surface, dv via
+     lastmap, w1=0.1·min(1, |dv−cp|/|cp−cent|).
+  5. Final fit: Rspl3 gres=29(mapres -qm), smooth=psmooth=2.0 (NOT
+     PSMOOTH the weight-table const — gammap.c L345 psmooth=2.0 blended
+     by gampwf), avgdev=0.005, il/ih = gexp-expanded union box.
+- **W/B fine-tune (gammap.c L1799–1856)**: after the fit, rigid
+  icmVecRotMat taking the map's ACTUAL (a_wp,a_bp) — domap of s_mt_wp/bp
+  (source cs points scaled to swL/sbL, pre-rotated back via igrot) — to
+  (d_mt_wp,d_mt_bp) (dest straight axis at dwL; note C reuses t for bp).
+  Baked into map_lab output. Makes white/black EXACT (measured: white
+  100/−0.72/1.08 == colprof).
+- **RSPLPASSES ported literally** (nearsmth.c L3100–3345): tdst/nott
+  setup (inside-dest points never tuned; evect intersect with sanity
+  |isec|≤|nearest|+5), 4 passes: fit (raw _sv→anv) Rspl3 smooth=2.0 →
+  temp, clen along evect field, neighbourhood-max rext (rw UNnormalised,
+  self included, minext −20, RSPLSCALE 1.8 branch), gain schedule
+  icgain 1.4 → 0.5·, xgain=wt.f.x-scaled first pass only, coff
+  accumulate → smoothed via Rspl3(dv→coff, smooth=1.0!) → anv = dv +
+  naxbf·coff (nott points untouched). lastmap = pass-3 (_sv→anv) fit,
+  reused for the surfpnt dv lookup. NOTE: pass fits use the RAW source
+  point (_sv), not the cusp-mapped sv.
+- Jab gate history this session: 1.92 (old warp recipe) → 2.08 (full
+  rows + Rspl3, no RSPLPASSES; white 99.61) → 2.28 (+wb fine-tune;
+  white/black exact, neutrals all match) → RSPLPASSES run pending.
+- Remaining known gaps if gate unmet: guide density (theirs 26,850 via
+  nssverts stratified sampling at xvra=3.0 vs our 9,988 .gam verts —
+  engine controls its own cloud density; for .gam gates consider
+  triangle subdivision), evectmap as warp-of-directions vs their rspl
+  fit, cam02 port for engine wiring (xicclu validates), two-profile
+  realized floor ~0.7–0.8 applies to the reference chain itself.
+
+## THE definitive gate: gmdump (domap harness) + true floors (2026-07-15)
+
+- **gmdump** (scratchpad/argbuild/gmdump.c): compiles gammap.c itself
+  (compile line: smthdump deps + gamut/gammap.c + -I xicc -I spectro +
+  a one-line xicc_dump_gmi stub) and calls new_gammap EXACTLY as
+  colprof -S perceptual does (profout.c L2670: sc=src, s=NULL, d=dst,
+  sh=NULL, kbp 0/0, cmymap 0, rel 0, mapres, mn/mx NULL) with the
+  xicc.c "p" gmi hardcoded; dumps domap() for stdin probes. This is
+  noise-free ground truth for the whole map.
+- **colprof -qm uses gamut detail gres=10.0** (profout.c L2456+) — all
+  earlier gates ran -d3 gamuts (denser than colprof's!). -qm pair:
+  Clay_d10.gam / pdiag_d10.gam (iccgamut -ff -ir -pj -d10).
+- **Measured floors** (200 AdobeRGB-device probes, Jab): their own
+  domap vs their own realized -qm profile (pdiag.icc): **0.41 / 0.90 /
+  2.00** — the realized chain adds this much by itself; vs the -qh(?)
+  BASE.icc: 0.87 / 1.29 / 2.02 (quality mismatch inflates it more).
+  Gate = port vs domap directly (e2e_gate_domap.py); domap_ref.npy has
+  (jab_in, domap) for the standard 200 probes.
