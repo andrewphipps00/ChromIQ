@@ -136,7 +136,17 @@ class GammapMapper:
         table = (wtab.SATURATION_WEIGHTS if intent in ("s", "ms")
                  else wtab.PERCEPTUAL_WEIGHTS)
         xw = expand_weights(table)
-        gamcknf = 1.0        # xicc.c perceptual/saturation entries
+        # xicc.c gmi entries, verbatim ("p" L2186+, "s" L2299+)
+        if intent in ("s", "ms"):
+            gamcknf, gamxknf = 1.1, 0.5
+            useexp = True
+            smooth = 4.0             # gamswf(1.0) · ssmooth(4.0)
+            satenh = 0.9 if intent == "s" else 0.0
+        else:
+            gamcknf, gamxknf = 1.0, 0.0
+            useexp = False
+            smooth = 2.0             # gampwf(1.0) · psmooth(2.0)
+            satenh = 0.0
         tri_d = TriSurface(dst_verts, dst_tris)
         self._ga = ga = GreyAxis(src_cs_wp, src_cs_bp, dst_cs_wp, dst_cs_bp,
                                  tri_d)
@@ -184,11 +194,41 @@ class GammapMapper:
             m = (cb == key[None, :]).all(1)
             csv[m] = cm.comp_ce(sv[m], cusp_weights=tuple(key))
 
-        # pass 1 (pass 2 measured as a no-op in colprof's configuration)
+        # pass 1 (pass 2 measured as a no-op in colprof's configuration).
+        # For expansion intents the optimisation target is the FULL dest
+        # (nearsmth.c: dst_gam = dc_gam when there is no image gamut).
+        opt_surf = ss_d if useexp else isect
         def obj1(dtp):
             return aerrf(dtp, csv, ra, w[:, ALXPOW], w[:, ALXTHR])
-        ang = _pattern_search(isect, _angles_of(csv), obj1, iters=30)
-        aodv = _points_of(isect, ang)
+        ang = _pattern_search(opt_surf, _angles_of(csv), obj1, iters=30)
+        aodv = _points_of(opt_surf, ang)
+        if useexp:
+            # expansion swap (nearsmth.c L2410+): where the radial dest
+            # lies beyond the source, the roles swap — the guide SOURCE
+            # becomes the weighted-nearest point on the source surface
+            # seen from the radial dest point, and the target is that
+            # radial dest point itself
+            drv = ss_d.radial(csv)
+            r_c = np.linalg.norm(csv - CENT[None, :], axis=1)
+            r_d = np.linalg.norm(drv - CENT[None, :], axis=1)
+            swap = r_d > r_c + 1e-9
+            if swap.any():
+                tgt = drv[swap]
+                ras, pows, thrs = (ra[swap], w[swap, ALXPOW],
+                                   w[swap, ALXTHR])
+                def objx(dtp):
+                    return aerrf(dtp, tgt, ras, pows, thrs)
+                angx = _pattern_search(ss_ps, _angles_of(tgt), objx,
+                                       iters=30)
+                new_sv = _points_of(ss_ps, angx)
+                sv[swap] = new_sv
+                cbx = np.round(w[swap][:, :5], 3)
+                csw = np.empty_like(new_sv)
+                for key in np.unique(cbx, axis=0):
+                    m = (cbx == key[None, :]).all(1)
+                    csw[m] = cm.comp_ce(new_sv[m], cusp_weights=tuple(key))
+                csv[swap] = csw
+                aodv[swap] = tgt
 
         # exact shrunk-gamut evector field
         def cvect(p):
@@ -336,7 +376,7 @@ class GammapMapper:
         RSPLPASSES, RSPLSCALE = (4 if _RSPLPASSES_ON else 0), 1.8
         for it in range(RSPLPASSES):
             m1 = Rspl3(sv, anv, np.ones(len(sv)), map_il, map_ih,
-                       gres=mapres, smooth=2.0)
+                       gres=mapres, smooth=smooth)
             temp = m1.interp(sv)
             evi = evect_fn(temp)
             clen = ((tdst - temp) * evi).sum(1)
@@ -369,17 +409,21 @@ class GammapMapper:
         dv = anv
         if lastmap is None:      # RSPLPASSES disabled: plain guide fit
             lastmap = Rspl3(sv, dv, np.ones(len(sv)), map_il, map_ih,
-                            gres=mapres, smooth=2.0)
+                            gres=mapres, smooth=smooth)
 
         # sub-surface rows (nearsmth.c L3390–3685, CYLIN_SUBVEC +
         # SUBVEC_SMOOTHING both defined — validated vs the in-frame nsm
         # dump: sd3 exact, dv2 0.15 median, vflag 93.8% agreement)
         # line∩intersection-gamut as interval intersection of the exact
         # per-surface crossings: inside(isect) = inside(src) ∧ inside(dst)
-        mint_s, maxt_s, _, _ = tri_ps.vector_isect(sv, dv)
-        mint_d, maxt_d, _, _ = tri_d.vector_isect(sv, dv)
-        i_mint = np.fmax(mint_s, mint_d)
-        i_maxt = np.fmin(maxt_s, maxt_d)
+        if useexp:
+            # dgam is the FULL dest for expansion intents
+            i_mint, i_maxt, _, _ = tri_d.vector_isect(sv, dv)
+        else:
+            mint_s, maxt_s, _, _ = tri_ps.vector_isect(sv, dv)
+            mint_d, maxt_d, _, _ = tri_d.vector_isect(sv, dv)
+            i_mint = np.fmax(mint_s, mint_d)
+            i_maxt = np.fmin(maxt_s, maxt_d)
         got_iv = np.isfinite(i_mint) & np.isfinite(i_maxt)
         wp_g = np.asarray(dst_gam_wp if dst_gam_wp is not None
                           else dst_cs_wp, float)
@@ -389,8 +433,12 @@ class GammapMapper:
         sub2_s = np.zeros_like(sv)
         sub2_t = np.zeros_like(sv)
         sub3 = np.zeros_like(sv)
+        sub_w2 = np.zeros(nsub)
+        sub_w3 = np.zeros(nsub)
         sub_valid = np.zeros(nsub, bool)
-        rr_dst = np.linalg.norm(isect.radial(dv) - CENT[None, :], axis=1)
+        sub_surf = ss_d if useexp else isect
+        rr_dst = np.linalg.norm(sub_surf.radial(dv) - CENT[None, :],
+                                axis=1)
         rr_src = np.linalg.norm(ss_ps.radial(dv) - CENT[None, :], axis=1)
         mvl = np.linalg.norm(dv - sv, axis=1)
         u_ax = wp_g - bp_g
@@ -409,15 +457,18 @@ class GammapMapper:
             s_ax = ((a12 * (mv @ w0) - a22 * (u_ax @ w0)) / den
                     if abs(den) > 1e-12 else 0.0)
             nap = bp_g + s_ax * u_ax
-            # J half-blended toward dv (compression), then clipped to the
-            # bp..wp range by REPLACING with the endpoint
+            comp = ((mi > 1e-8 and ma > -1e-8)
+                    or (mi < -1e-8 and ma > -1e-8
+                        and abs(mi) < abs(ma) - 1e-8))
             nap = nap.copy()
-            nap[0] = 0.5 * nap[0] + 0.5 * dv[i][0]
+            # J half-blended toward dv (compression) / sv (expansion),
+            # then clipped by REPLACING with the endpoint
+            nap[0] = 0.5 * nap[0] + 0.5 * (dv[i][0] if comp else sv[i][0])
             if nap[0] < bp_g[0]:
                 nap = bp_g.copy()
             elif nap[0] > wp_g[0]:
                 nap = wp_g.copy()
-            adepth2 = np.linalg.norm(nap - dv[i])
+            adepth2 = np.linalg.norm(nap - (dv[i] if comp else sv[i]))
             if mi >= -1e-8 and ma > 1e-8:
                 if (abs(mi - 1.0) < abs(ma) - 1.0
                         and rr_dst[i] < rr_src[i]):
@@ -434,8 +485,27 @@ class GammapMapper:
                     nat = nap - sub2_s[i]
                     nn = max(np.linalg.norm(nat), 1e-9)
                     sub2_t[i] = sub2_s[i] + nat / nn * sml
+                    sub_w2[i] = 0.7
                     sub3[i] = 0.4 * sub2_t[i] + 0.6 * nap
-            elif not (mi < -1e-8 and ma > 1e-8):
+                    sub_w3[i] = 0.4 * gamcknf
+            elif mi < -1e-8 and ma > 1e-8:
+                # gamut expansion & vector expansion (nearsmth.c L3555+)
+                adepth1 = ml * 0.5 * -mi
+                adepth = adepth2 * 0.9          # CYLIN_SUBVEC
+                if adepth1 < 0.6 * adepth2:
+                    continue
+                sub_valid[i] = True
+                sub2_t[i] = sv[i]               # sub DEST is guide src
+                ml2 = ml * (1.0 - gamxknf)
+                adepth *= (1.0 - gamxknf)
+                sml = min(ml2, adepth)
+                nat = sub2_t[i] - nap
+                nn = max(np.linalg.norm(nat), 1e-9)
+                sub2_s[i] = sub2_t[i] - nat / nn * sml   # CYLIN direction
+                sub_w2[i] = 0.8
+                sub3[i] = 0.5 * sub2_s[i] + 0.5 * nap
+                sub_w3[i] = 0.3 * gamcknf
+            else:
                 dv[i] = aodv[i]          # nonsense vector: clip to aodv
         # SUBVEC_SMOOTHING: neighbour-filtered dv2 with cylindrical
         # feature scaling; invalid neighbours contribute zeros (the C
@@ -457,10 +527,10 @@ class GammapMapper:
         for i in np.flatnonzero(sub_valid):
             sub_s.append(sub2_s[i])
             sub_t.append(sub2_t_s[i])
-            sub_w.append(0.7)
+            sub_w.append(sub_w2[i])
             sub_s.append(sub3[i])        # identity row (gammap.c L1694)
             sub_t.append(sub3[i])
-            sub_w.append(0.4 * gamcknf)
+            sub_w.append(sub_w3[i])
 
         # ---- gammap.c final row assembly ----
         # surface grid anchor rows (nearsmth.c L3746+): outer two layers
@@ -504,7 +574,7 @@ class GammapMapper:
             rw.append(ws)
         self._map = Rspl3(np.vstack(train), np.vstack(target),
                           np.concatenate(rw), map_il, map_ih,
-                          gres=mapres, smooth=2.0)
+                          gres=mapres, smooth=smooth)
 
         # white/black fine-tune (gammap.c L1799–1856): rigid rotate/scale
         # taking the map's ACTUAL white/black to the exact targets
@@ -514,8 +584,41 @@ class GammapMapper:
         a_bp = self._map.interp(ga.pre_map(ga.s_mt_bp[None, :]))[0]
         self._wbmat = vec_rot_mat(a_wp, a_bp, ga.d_mt_wp, ga.d_mt_bp)
         self._apply_3x4 = apply_3x4
+        # satenh (gammap.c: satenh applied BEFORE the wb fine-tune, with
+        # wp/bp = the map's own W/B; here both compose at eval time)
+        self._satenh = satenh
+        self._sat_wp, self._sat_bp = a_wp, a_bp
+        self._sat_dst = tri_d
+
+    def _adjust_sat(self, out: np.ndarray) -> np.ndarray:
+        """adjust_sat_func (gammap.c L2745+): radially push values toward
+        the dest surface, blended to spare near-neutrals."""
+        wp, bp, se = self._sat_wp, self._sat_bp, self._satenh
+        rr = (out[:, 0] - bp[0]) / (wp[0] - bp[0])
+        cp = np.stack([out[:, 0], bp[1] + rr * (wp[1] - bp[1]),
+                       bp[2] + rr * (wp[2] - bp[2])], 1)
+        mint, maxt, _, _ = self._sat_dst.vector_isect(cp, out)
+        ok = np.isfinite(maxt) & (maxt > 1.0)
+        p1 = np.where(ok, 1.0 / np.where(ok, maxt, 1.0), 0.0)
+        ep1 = (p1 + se * p1) / (1.0 + se * p1)
+        pp, g0 = 4.0, 2.0
+        vv = p1 / (pp - pp * p1 + 1.0)
+        vv = vv * 2.0
+        sec = np.floor(vv)
+        g = np.where((sec.astype(int) & 1) == 1, -g0, g0)
+        vv = vv - sec
+        vv = np.where(g >= 0.0, vv / (g - g * vv + 1.0),
+                      (vv - g * vv) / (1.0 - g * vv))
+        vv = (vv + sec) * 0.5
+        bf = (vv + pp * vv) / (1.0 + pp * vv)
+        p1n = (1.0 - bf) * p1 + bf * ep1
+        t1 = cp + maxt[:, None] * (out - cp)     # surface point
+        adj = cp + (t1 - cp) * p1n[:, None]
+        return np.where(ok[:, None], adj, out)
 
     def map_lab(self, lab: np.ndarray) -> np.ndarray:
         out = self._map.interp(
             self._ga.pre_map(np.atleast_2d(np.asarray(lab, float))))
+        if self._satenh > 0.0:
+            out = self._adjust_sat(out)
         return np.atleast_2d(self._apply_3x4(self._wbmat, out))

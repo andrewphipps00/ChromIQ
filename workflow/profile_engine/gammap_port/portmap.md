@@ -531,3 +531,30 @@ UI #43, #44.
   BASE.icc: 0.87 / 1.29 / 2.02 (quality mismatch inflates it more).
   Gate = port vs domap directly (e2e_gate_domap.py); domap_ref.npy has
   (jab_in, domap) for the standard 200 probes.
+
+## Stage 6 wiring + saturation first pass (2026-07-15, latest)
+
+- **cam02.py**: xicc/cam02.c literal port (NOTE: SYMETRICJ IS defined
+  despite its "[Undef]" comment). Appearance = rel Lab → Bradford
+  D50→media-white (icclib 'arts') → cam02(vc 'd', media white).
+  EXACT vs xicclu -ir -pj: 0.0001 median both profiles. Media whites
+  from wtpt tags (ClayRGB=D65! printer=paper white).
+- **wire.py**: fit_gammap_port_mappers — source gamut via iccgamut -pj
+  -d10 on the source profile; DEST gamut via a minimal temp model-only
+  ICC handed to the same iccgamut (Argyll's gamut construction on the
+  engine model; the UV-mesh approach measured 3.2 — scrapped).
+  PortMapper = Ap_dst.jab_to_lab ∘ GammapMapper ∘ Ap_src.lab_to_jab.
+  Engine E2E vs colprof realized: **0.907 / 2.16 / 5.23** (= compound
+  floor). build_mapped_b2a chain: port (B2A0 perceptual, default intent
+  only; -t/-c/-d/-nP → oracle) → colprof oracle → family.
+- **Saturation extension** (intent="s"): gmi verbatim (gamexf 1.0,
+  gamcknf 1.1, gamxknf 0.5, smooth=ssmooth=4.0, satenh 0.9), expansion
+  target = FULL dest (no image gamut → dst_gam = dc_gam), pass-1
+  radial swap (approx: radial for the C's nearest in the swap test),
+  expansion knee sub-rows, satenh post-step (adjust_sat_func with the
+  section-alternating blend, applied before wb-tune at eval time).
+  gmdump_s harness (gmdump.c + intent arg 's', links instrumented
+  nearsmth/gammap → in-frame dumps available for the s-run too).
+  First gate: **0.953 / 7.71 / 13.2** vs domap(s); perceptual
+  regression unchanged (0.340). B2A2 stays on the oracle until the
+  tail converges (#45) — iterate with nsm_dump/nspasses like P4b.
