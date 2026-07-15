@@ -63,3 +63,37 @@ oracle rig stays as the CI cross-check.
 - end-to-end: engine build with port vs colprof build — realized maps at
   250 real-content probes ≤ the 0.5/1.65 floor; then a 6CLR build sanity
   (smooth tables, sips/iccdump clean, neutrals monotone).
+
+## Stage-2 working notes (init_ce/comp_ce, from reading L596–1105)
+
+- `src_adj[]` (L606–625): obfuscated anti-tamper canary; the log-sum
+  resolves to exactly **1.0** (computed) — port as constant 1.0 with a
+  comment; it scales the rotation target white L=100 (i.e. no-op).
+- `init_ce` structure: per side (src=0/dst=1): (a) white/black points from
+  the gamut (`getwb`), fallback W=100/K=0/grey=50 with `donaxis=0`;
+  (b) rotation matrix `rot[sd]` mapping black→white segment onto 0→100 L
+  axis (`icmVecRotMat(m, s1, s2, t1, t2)` maps segment s1–s2 to t1–t2:
+  rotation+translation, icclib icm.c — port as standard rigid transform);
+  `irot` = inverse; (c) grey = blend(white, black, param) with param =
+  cusp-average-L normalised (docusp) else 0.5; (d) per cusp k∈0..5:
+  rotated Lab (`cusp_lab`), LCh (`cusp_lch`); (e) per cusp pair (k, k+1):
+  plane through (grey, cusp_m, cusp_k) → `cusp_pe` (light/dark cone
+  decision); barycentric matrices `cusp_bc[sd][k][n]` with columns
+  (cusp_k−grey, cusp_m−grey, {white|black}−grey), transposed; src side
+  inverted. n=0 uses white ([6+0]... note: comment says [7]&[8] but code
+  uses index 6+n → n=0 white[6], n=1 black[7]).
+- `comp_ce` (L842–974): out=in; if wt: cw_l/c/h from cusp-align block,
+  ctw=twist power, ccx=chroma expansion. Rotate input by rot[0]; find hue
+  segment k (via cusp_lch hue angles), light/dark side n via plane
+  distance sign (cusp_pe); barycentric coords b = cusp_bc[0][k][n] · (p −
+  grey_src); apply per-component weights: scale barycentric components by
+  cusp weights (cw_*) toward destination cusp frame; chroma expansion ccx
+  on the cusp-plane components with twist power ctw shaping how alignment
+  fades toward neutral; reconstruct p' = cusp_bc[1][k][n]ᵀ · b + grey_dst;
+  un-rotate via irot[1]. EXACT formulas still to transcribe from
+  L860–974 — read before writing cusps.py.
+- `comp_naxbf` (L974–1010): neutral-axis blend factor; `comp_lvc`
+  (L1010–1105): L-value-of-cusp measure. Read fully before port.
+- icm helpers needed: icmVecRotMat, icmPlaneEqn3/icmPlaneDist3,
+  icmInverse3x3/icmTranspose3x3, icmLab2LCh, icmBlend3 — all standard
+  geometry; write numpy equivalents in gammap_port/geom.py with tests.
