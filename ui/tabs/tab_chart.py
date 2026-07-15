@@ -3811,6 +3811,10 @@ class TabChart(QWidget):
         self._switch_mode("guided")
         self._guided_precond_path.setText(str(profile_path))
         self._guided_precond_check.setChecked(True)
+        # mirror into the Manual module's targen expert option (-c) so the
+        # profile is pre-filled there too if the user flips to Manual
+        if self._manual_targen_c_pw is not None:
+            self._manual_targen_c_pw.set_value(str(profile_path))
         self._preconditioning_from_dialog = True
         try:
             self._precond_parent_run_id = self._file_mgr.project().current_run().id
