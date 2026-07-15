@@ -709,3 +709,37 @@ code (arm's-length helper, like colprof/iccgamut) gives BIT-EXACT Argyll
 for RGB, CMYK **and +N**, and is FASTER than the Python exact-geometry
 port (17 s C vs 380 s Python). Proposed: exact/slow mode = this helper;
 fast mode = the Python port. Ship cost: bundle+sign the helper binary.
+
+## VERIFIED end-to-end: +N ICC validity, and stock-Argyll refusal (2026-07-15)
+
+User constraint clarified: exact mode must use the user's DETECTED/SET
+Argyll install (not always /Applications/Argyll), and work on Win/Linux.
+That RULES OUT a bundled Argyll-linked helper (the gmcloud route) — it
+only ever existed as a custom compiled binary, not a stock CLI.
+
+Verification battery (user's installed /Applications/Argyll/bin):
+- STOCK colprof on a header-complete CMYKOG_XYZ .ti3:
+  "Error - Output device input file has unhandled color representation
+  'CMYKOG_XYZ'" — refusal is in colprof's colorspace dispatch, BEFORE any
+  gamut mapping. So there is NO cross-platform stock-Argyll path to a +N
+  ICC. Exact-via-Argyll for +N is infeasible under the user's constraints.
+- Python engine (fast path) built _verify_fast.icc from cmykog.ti3 in 10s.
+  Validated with Argyll's OWN library tools:
+    * iccdump: v2.2.0, all six tables present (A2B0/1/2 + B2A0/1/2).
+    * icclu -ff (plain icclib forward A2B): white→L100, cyan→L90 a-43 b-36,
+      orange→L78 b+48, M+Y→L64 a+76 b+34 — all colorimetrically correct.
+    * xicclu -fb (inverse B2A, Lab→6 inks): sensible ink mixes.
+    * round-trip Lab60/40/30 → inks → Lab58/41/26 (~ΔE4, near gamut edge).
+  NOTE: xicclu -ff (reverse-accelerated forward) errors "rev_set_lchw
+  can't handle di = 6" — that's Argyll's REVERSE-lookup accelerator cap,
+  a tooling limit, NOT our profile; plain icclu forward + the print
+  direction (B2A) both work.
+
+ARCHITECTURE CONFIRMED (keep it):
+- RGB/CMYK B2A → user's installed colprof (arm's-length oracle,
+  builder.py n<5 path) = bit-exact Argyll, already cross-platform.
+- CMY+N B2A → Python port (no colprof oracle possible) = VALID working
+  ICC per Argyll's own icclib.
+Recommendation: drop the bundled-helper idea; the "Most accurate (slower)"
+setting stays the Python exact-geometry path and matters only for +N
+(RGB/CMYK are already colprof-exact).
