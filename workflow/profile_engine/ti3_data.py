@@ -57,6 +57,8 @@ class Ti3Measurement:
     xyz: np.ndarray                   # (N, 3) absolute, Y=100 scale
     keywords: dict[str, str]
     text: str                         # full file text (embedded as 'targ')
+    spectral: np.ndarray | None = None      # (N, bands) reflectance
+    wavelengths: np.ndarray | None = None   # (bands,) nm
 
     @property
     def n_channels(self) -> int:
@@ -187,6 +189,21 @@ def read_ti3(path: Path | str) -> Ti3Measurement:
     else:
         raise Ti3Error(f"{p.name}: no XYZ or Lab columns in the measurement.")
 
+    spectral = wavelengths = None
+    spec_cols = [i for i, f in enumerate(fields) if f.startswith("SPEC_")]
+    if len(spec_cols) >= 3 and "SPECTRAL_BANDS" in keywords:
+        try:
+            bands = int(keywords["SPECTRAL_BANDS"])
+            lo = float(keywords["SPECTRAL_START_NM"])
+            hi = float(keywords["SPECTRAL_END_NM"])
+        except (KeyError, ValueError):
+            bands = -1
+        if bands == len(spec_cols):
+            spectral = np.array([[float(r[i]) for i in spec_cols]
+                                 for r in rows], float)
+            wavelengths = np.linspace(lo, hi, bands)
+
     return Ti3Measurement(path=p, color_rep=color_rep, device_rep=device_rep,
                           channel_letters=letters, device=device, xyz=xyz,
-                          keywords=keywords, text=text)
+                          keywords=keywords, text=text,
+                          spectral=spectral, wavelengths=wavelengths)

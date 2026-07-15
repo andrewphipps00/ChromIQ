@@ -72,6 +72,27 @@ def device_to_u16(dev: np.ndarray) -> np.ndarray:
     return np.clip(dev * 0xFFFF, 0, 0xFFFF).round().astype(">u2")
 
 
+# The ICC XYZ16 PCS encoding is u1.15: 1.0 → 0x8000, so the u16 range spans
+# 0 … 1.99997. XYZ PCS grids (B2A/gamt of an -a x profile) must be laid out
+# over this range.
+XYZ16_MAX = 0xFFFF / 0x8000            # 1.999969…
+
+
+def xyz_to_u16(xyz1: np.ndarray) -> np.ndarray:
+    """(N,3) XYZ on the 0..1 scale → big-endian u16 (u1.15 PCS encoding)."""
+    return np.clip(xyz1 * 0x8000, 0, 0xFFFF).round().astype(">u2")
+
+
+def u16_to_xyz(u: np.ndarray) -> np.ndarray:
+    return u.astype(float) / 0x8000
+
+
+def xyz_grid_axes(grid: int) -> np.ndarray:
+    """The XYZ axis values a ``grid``-point XYZ-PCS CLUT spans (all three
+    axes are identical, 0 … :data:`XYZ16_MAX`)."""
+    return np.linspace(0.0, XYZ16_MAX, grid)
+
+
 def lab_grid_axes(grid: int) -> tuple[np.ndarray, np.ndarray]:
     """The Lab values a ``grid``-point B2A/gamt CLUT axis actually spans.
 
@@ -194,9 +215,12 @@ class ProfileSpec:
     description: str
     color_rep: str = ""
     copyright: str = "Created with ChromIQ"
+    manufacturer: str = ""           # → 'dmnd' tag (colprof -A)
+    model: str = ""                  # → 'dmdd' tag (colprof -M)
     wtpt: tuple[float, float, float] = D50_XYZ     # media white, abs XYZ /1.0
     bkpt: tuple[float, float, float] | None = None
-    targ: str | None = None          # embedded CGATS (.ti3) text
+    targ: str | None = None          # embedded CGATS (.ti3) text; colprof
+    # writes the same text as targ + DevD + CIED — mirrored here as aliases
     device_class: bytes = b"prtr"
     pcs: bytes = b"Lab "
     rendering_intent: int = 1        # header default: relative colorimetric
@@ -224,10 +248,19 @@ def assemble_profile(spec: ProfileSpec,
         (b"cprt", make_text(spec.copyright)),
         (b"wtpt", make_xyz(spec.wtpt)),
     ]
+    if spec.manufacturer:
+        tags.append((b"dmnd", make_desc(spec.manufacturer)))
+    if spec.model:
+        tags.append((b"dmdd", make_desc(spec.model)))
     if spec.bkpt is not None:
         tags.append((b"bkpt", make_xyz(spec.bkpt)))
     if spec.targ is not None:
+        # colprof writes the .ti3 text three times (targ + DevD + CIED,
+        # byte-identical — verified on the trusted fixture); aliases give
+        # the same tag set without tripling the file size.
         tags.append((b"targ", make_text(spec.targ)))
+        tags.append((b"DevD", "targ"))
+        tags.append((b"CIED", "targ"))
     for name in ("A2B0", "A2B1", "A2B2", "B2A0", "B2A1", "B2A2", "gamt"):
         if name in luts:
             v = luts[name]

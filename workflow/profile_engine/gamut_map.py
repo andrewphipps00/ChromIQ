@@ -78,8 +78,8 @@ def source_kind(path: Path | str) -> str | None:
     return None
 
 
-def source_surface_from_profile(path: Path | str, mesh: int = 33
-                                ) -> np.ndarray:
+def source_surface_from_profile(path: Path | str, mesh: int = 33,
+                                intent: int = 1) -> np.ndarray:
     """Source-gamut boundary cloud in Lab, computed live from any ICC.
 
     The device-cube boundary is mapped through the profile with littleCMS
@@ -128,8 +128,11 @@ def source_surface_from_profile(path: Path | str, mesh: int = 33
             rng.integers(0, 2, m).astype(float)
     try:
         lab_prof = ImageCms.createProfile("LAB")
+        # intent: 0 perceptual / 1 rel col / 2 saturation — colprof samples
+        # the source through the matching intent per table (-nP/-nS switch
+        # to colorimetric); matrix-only profiles are intent-invariant.
         tf = ImageCms.buildTransform(prof, lab_prof, space, "LAB",
-                                     renderingIntent=1)
+                                     renderingIntent=intent)
         dev8 = np.clip(dev * 255.0, 0, 255).round().astype(np.uint8)
         img = Image.merge(space, [
             Image.fromarray(dev8[:, c].reshape(-1, 1), "L")
@@ -309,19 +312,133 @@ class GamutMapper:
         return out
 
 
+# colprof -t/-T gamut-mapping intent presets. The colorimetric-family codes
+# (r, rl, a, aw, al) are exact by construction — a colorimetric "mapping" is
+# the identity, so those tables alias the colorimetric B2A (verified in
+# colprof output: its default A2B0/A2B1/A2B2 are byte-identical the same
+# way). The perceptual/saturation-family codes tune the measured mapping
+# family; the appearance codes (pa, aa) run the mapping in CIECAM02 Jab.
+_INTENT_PRESETS: dict[str, dict] = {
+    "": {},                                       # default perceptual
+    "p": {},
+    "lp": {"cusp_blend": 0.3},                    # luminance-preserving
+    "ms": {"knee": 0.50, "chroma_boost": 1.03},   # moderate saturation
+    "s": {"knee": 0.45, "chroma_boost": 1.06},    # enhanced saturation
+    "pa": {"jab": True},                          # perceptual appearance
+    "aa": {"jab": True, "absolute": True},        # absolute appearance
+}
+_COLORIMETRIC_INTENTS = {"r", "rl", "a", "aw", "al"}
+_SAT_DEFAULT = {"knee": 0.45, "chroma_boost": 1.06}
+
+
+def _mapper_for(intent: str, default_kw: dict, src: np.ndarray,
+                dst: np.ndarray, settings) -> "GamutMapper | None":
+    """A mapper for a -t/-T intent code; None = alias the colorimetric B2A."""
+    if intent in _COLORIMETRIC_INTENTS:
+        return None
+    kw = dict(_INTENT_PRESETS.get(intent, default_kw or {}))
+    if not kw and default_kw:
+        kw = dict(default_kw)
+    jab = kw.pop("jab", False)
+    kw.pop("absolute", False)
+    if settings is not None and (settings.src_viewing or settings.dst_viewing):
+        jab = True
+    if jab:
+        from workflow.profile_engine.cam02 import DEFAULT_VC, VIEWING_PRESETS
+        vc_s = VIEWING_PRESETS.get(getattr(settings, "src_viewing", ""),
+                                   DEFAULT_VC)
+        vc_d = VIEWING_PRESETS.get(getattr(settings, "dst_viewing", ""),
+                                   DEFAULT_VC)
+        return JabGamutMapper(src, dst, vc_s, vc_d, **kw)
+    return GamutMapper(src, dst, **kw)
+
+
+class JabGamutMapper:
+    """The same radial mapping run in CIECAM02 Jab under viewing conditions.
+
+    Source colours are taken to appearance space under the *source* viewing
+    conditions, mapped between the Jab gamut surfaces, and brought back
+    under the *destination* conditions — the appearance-match construction
+    colprof's CAM-based mapping uses. The CAM code is round-trip gated at
+    construction (inverse must reproduce XYZ to < 1e-4).
+    """
+
+    def __init__(self, src_lab: np.ndarray, dst_lab: np.ndarray,
+                 vc_src, vc_dst, **mapper_kw) -> None:
+        from workflow.profile_engine.cam02 import Cam02
+        from workflow.profile_engine.ti3_data import lab_to_xyz
+        self._cam_s = Cam02(vc_src)
+        self._cam_d = Cam02(vc_dst)
+        probe = np.array([[50.0, 20.0, -30.0], [80.0, 0.0, 0.0],
+                          [20.0, 40.0, 30.0]])
+        err = self._cam_d.roundtrip_error(lab_to_xyz(probe))
+        if err > 1e-4:
+            raise RuntimeError(f"CAM02 inverse round-trip failed ({err})")
+        src_jab = self._cam_s.xyz_to_jab(lab_to_xyz(src_lab))
+        dst_jab = self._cam_d.xyz_to_jab(lab_to_xyz(dst_lab))
+        self._inner = GamutMapper(src_jab, dst_jab, **mapper_kw)
+
+    def map_lab(self, lab: np.ndarray) -> np.ndarray:
+        from workflow.profile_engine.ti3_data import lab_to_xyz, xyz_to_lab
+        jab = self._cam_s.xyz_to_jab(lab_to_xyz(lab))
+        mapped = self._inner.map_lab(jab)
+        return xyz_to_lab(np.clip(self._cam_d.jab_to_xyz(mapped),
+                                  0.0, None))
+
+
+def invert_mapping(mapper, mapped_lab: np.ndarray, iters: int = 20
+                   ) -> np.ndarray:
+    """Numeric inverse of a gamut map (colprof -nI: the perceptual A2B gets
+    the inverse mapping applied so A2B0∘B2A0 ≈ identity in gamut).
+
+    Damped fixed-point iteration — the map is a contraction near identity
+    in the protected core and monotone along its rays, so this converges
+    for the in-gamut colours the A2B actually carries.
+    """
+    lab0 = mapped_lab.copy()
+    for _ in range(iters):
+        err = mapped_lab - mapper.map_lab(lab0)
+        lab0 = lab0 + 0.7 * err
+        if np.abs(err).max() < 1e-3:
+            break
+    return lab0
+
+
 def build_mapped_b2a(model: ForwardModel, meas: Ti3Measurement, grid: int,
                      source_gamut: Path, *, channel_letters: list[str],
                      is_additive: bool, ink_limit: float | None,
-                     entries: int) -> tuple[bytes, bytes]:
-    """The perceptual (B2A0) and saturation (B2A2) mft2 tags."""
-    src = source_surface_from_profile(source_gamut)
+                     entries: int, codec=None, settings=None,
+                     a2b_grid: int | None = None,
+                     a2b_entries: int | None = None) -> dict:
+    """Mapped tables per intent → dict of mft2 tags/aliases for the writer.
+
+    Returns entries for ``B2A0``/``B2A2`` (bytes or the alias string
+    ``"B2A1"``) and, with colprof's ``-nI``, inverse-mapped ``A2B0``/``A2B2``.
+    """
+    from workflow.profile_engine.pcs import LabPcs
+    codec = codec or LabPcs
+    # colprof default computes the source surface through the source
+    # profile's perceptual/saturation intent per table; -nP/-nS switch that
+    # table's source to the colorimetric intent (xicc: noptop/nostos).
+    perc_int = 1 if getattr(settings, "perc_src_colorimetric", False) else 0
+    sat_int = 1 if getattr(settings, "sat_src_colorimetric", False) else 2
     dst = destination_surface_lab(model, ink_limit=ink_limit,
                                   is_additive=is_additive)
-    node_lab = b2a_mod.lab_grid(grid)
-    tags = []
-    for intent_kw in (dict(),                                    # perceptual
-                      dict(knee=0.45, chroma_boost=1.06)):       # saturation
-        mapper = GamutMapper(src, dst, **intent_kw)
+    node_lab = codec.node_lab(grid)
+    inv_curves = b2a_mod.inverse_curves(model.curves)
+    out: dict[str, bytes | str] = {}
+    mappers: dict[str, object] = {}
+
+    for tag, intent, s_int, default_kw in (
+            ("B2A0", getattr(settings, "perc_intent", ""), perc_int, {}),
+            ("B2A2", getattr(settings, "sat_intent", ""), sat_int,
+             _SAT_DEFAULT)):
+        src = source_surface_from_profile(source_gamut, intent=s_int)
+        mapper = _mapper_for(intent, default_kw, src, dst, settings)
+        if mapper is None:
+            out[tag] = "B2A1"          # colorimetric-family intent: exact
+            continue
+        mappers[tag] = mapper
         mapped = mapper.map_lab(node_lab)
         # Mapped targets land inside (or at) the gamut surface, so per-node
         # inversion converges everywhere — the boundary-cell kink that makes
@@ -330,9 +447,25 @@ def build_mapped_b2a(model: ForwardModel, meas: Ti3Measurement, grid: int,
             model, mapped, channel_letters=channel_letters,
             is_additive=is_additive, ink_limit=ink_limit)
         shaped = model.shape_device(dev)
-        inv = b2a_mod.inverse_curves(model.curves)
-        tags.append(icw.make_mft2(
+        out[tag] = icw.make_mft2(
             3, model.n_channels, grid, icw.device_to_u16(shaped),
             in_tables=np.tile(icw._identity_table(entries), (3, 1)),
-            out_tables=icw.curves_to_tables(inv, entries)))
-    return tags[0], tags[1]
+            out_tables=icw.curves_to_tables(inv_curves, entries))
+
+    if getattr(settings, "inverse_gamut_a2b", False) and mappers \
+            and a2b_grid is not None:
+        # colprof -nI: perceptual/saturation A2B tables carry the INVERSE
+        # gamut mapping, so table pairs round-trip to identity in gamut.
+        n = model.n_channels
+        for a2b_tag, b2a_tag in (("A2B0", "B2A0"), ("A2B2", "B2A2")):
+            mapper = mappers.get(b2a_tag)
+            if mapper is None:
+                continue
+            inv_lab = invert_mapping(mapper, model.clut_lab())
+            out[a2b_tag] = icw.make_mft2(
+                n, 3, a2b_grid, codec.encode(inv_lab),
+                in_tables=icw.curves_to_tables(model.curves,
+                                               a2b_entries or entries),
+                out_tables=np.tile(icw._identity_table(a2b_entries or entries),
+                                   (3, 1)))
+    return out

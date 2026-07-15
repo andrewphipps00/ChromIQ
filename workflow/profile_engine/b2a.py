@@ -199,9 +199,14 @@ def invert_to_device(model: ForwardModel, target: np.ndarray, *,
 def build_b2a_clut(model: ForwardModel, grid: int, *,
                    channel_letters: list[str], is_additive: bool,
                    ink_limit: float | None = None,
+                   node_lab: np.ndarray | None = None,
                    ) -> tuple[np.ndarray, np.ndarray]:
-    """Full B2A CLUT: (grid³, n) device fractions + (grid³,) OOG distance."""
-    target = lab_grid(grid)
+    """Full B2A CLUT: (grid³, n) device fractions + (grid³,) OOG distance.
+
+    ``node_lab`` overrides the CLUT node targets (the XYZ-PCS grid of an
+    ``-a x`` profile, expressed in Lab); default = the legacy Lab16 grid.
+    """
+    target = lab_grid(grid) if node_lab is None else node_lab
     return invert_to_device(model, target, channel_letters=channel_letters,
                             is_additive=is_additive, ink_limit=ink_limit)
 
@@ -212,7 +217,9 @@ def refine_b2a_clut(model: ForwardModel, dev_clut: np.ndarray,
                     is_additive: bool = True,
                     channel_letters: list[str] | None = None,
                     samples: int = 30000, lam: float = 0.03,
-                    deep_oog: float = 5.0) -> np.ndarray:
+                    deep_oog: float = 5.0,
+                    node_lab: np.ndarray | None = None,
+                    lab_to01=None) -> np.ndarray:
     """Refit the B2A CLUT as one smooth field over exact inverse samples.
 
     Every random device point is an *exact* sample of the inverse function
@@ -264,18 +271,22 @@ def refine_b2a_clut(model: ForwardModel, dev_clut: np.ndarray,
         keep = res_s < 1.0
         dev_s, lab_s = dev_s[keep], lab_targets[keep]
 
-    ls, ab = lab_grid_axes(grid)
-    span = np.array([ls[-1] - ls[0], ab[-1] - ab[0], ab[-1] - ab[0]])
-    origin = np.array([ls[0], ab[0], ab[0]])
+    if lab_to01 is None:
+        ls, ab = lab_grid_axes(grid)
+        span = np.array([ls[-1] - ls[0], ab[-1] - ab[0], ab[-1] - ab[0]])
+        origin = np.array([ls[0], ab[0], ab[0]])
 
-    def to01(lab: np.ndarray) -> np.ndarray:
-        return np.clip((lab - origin[None, :]) / span[None, :], 0.0, 1.0)
+        def to01(lab: np.ndarray) -> np.ndarray:
+            return np.clip((lab - origin[None, :]) / span[None, :], 0.0, 1.0)
+    else:
+        to01 = lab_to01
 
     # Anchor rows: every node contributes its v1 value — heavy anchors deep
     # out of gamut (their clamp IS the answer there), light anchors elsewhere
     # (keep the fit stable where samples are sparse, let data win).
     anchor_w = np.where(residual > deep_oog, 4.0, 0.05)
-    node_lab = lab_grid(grid)
+    if node_lab is None:
+        node_lab = lab_grid(grid)
     # Fit in *curve space* — the CLUT stores shaped device values (the output
     # shaper tables undo them), so interpolation accuracy must be optimised
     # in the space the CMM actually interpolates in.
