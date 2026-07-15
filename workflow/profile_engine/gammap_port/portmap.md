@@ -153,3 +153,34 @@ compression-only v1 (printer gamuts ⊂ typical source), guides = dest-
 projected optimum per passes 1–2 with the neighbour-smoothing iteration;
 sub-surface/grid points replaced by the maths-A warp fit over guide
 displacements (gammap.c does exactly this via rspl with PSMOOTH).
+
+## Gate status + measured diagnosis (2026-07-15, end of first assembly)
+
+Validation runs (ET-8550 AdobeRGB oracle, 200 real-content probes,
+port-vs-colprof realized perceptual):
+- assembly v1 (pre-align + naxbf-scales-vector): 4.96 / 11.96 / 19.98
+- naxbf fixed to smoothing-only + deep-core anchors: 5.03 / 12.07 / 19.97
+- raw-source guides (no pre-align): 6.73 / 14.89 / 22.18 ← worse: the
+  warp must then carry the W/B alignment; revert consideration pending.
+- guide targets themselves vs colprof at guide sources: median 7.6 —
+  the gap is IN THE GUIDES, not the warp.
+
+Identified structural gaps to close (in this order, each with an
+instrumented check — no more blind knob-turning):
+1. **gamcknf knee surface is absent**: gammap.c maps to a knee-adjusted
+   compression target (dst expanded/blended by gamcknf per intent — read
+   gammap.c intent table entries for gamcknf/gamxknf values), NOT the raw
+   dest surface. All guide radii are systematically off without it.
+2. depth ratios once-per-iteration instead of per objective evaluation.
+3. The C's second pass optimises from the pass-1 point with the FULL
+   comperr including relative-error terms to neighbour targets inside the
+   objective (my loop applies smoothing outside the objective).
+4. Fine-tune + evector correction phases (+1077, +1273) unported.
+5. Instrumentation plan: modify a local Argyll build to print guide
+   (sv, dv) pairs from near_smooth (gammap.c GAMMAP_DEBUG / dump flags
+   exist), diff against the port's guides point-by-point — replaces
+   probe-level guessing with per-stage ground truth.
+
+Shipping behaviour remains: oracle path (0.78/0.59 = inside colprof's own
+noise) for everything colprof can build; proxy-anchored family for +N.
+The port stays unwired until the ≤0.5 gate passes.

@@ -160,14 +160,16 @@ def near_smooth_guides(src_cloud: np.ndarray, dst_cloud: np.ndarray,
         ang = _pattern_search(dst_surf, ang, obj2, step0=0.2, iters=25)
         dv_new = _points_of(dst_surf, ang)
 
-        # neighbour smoothing of the mapping vectors (degree dsm)
+        # neighbour smoothing of the mapping vectors (degree dsm); the
+        # naxbf factor fades ONLY the smoothing adjustment near W/K
+        # (C L3037: blend of dv vs smoothed target by naxbf — the mapping
+        # itself is never scaled).
         vec = dv_new - sv
         sm_vec = np.empty_like(vec)
         for j in range(len(sv)):
             sm_vec[j] = vec[nbr[j]].mean(0)
-        vec = (1.0 - dsm[:, None]) * vec + dsm[:, None] * sm_vec
-        # white/black pinning: fade the whole mapping near W/K
-        dv = sv + vec * naxbf[:, None]
+        adj = dsm[:, None] * (sm_vec - vec)
+        dv = sv + vec + naxbf[:, None] * adj
         # keep targets on/inside the destination
         out = dst_surf.nradial(dv) > 1.0
         if out.any():

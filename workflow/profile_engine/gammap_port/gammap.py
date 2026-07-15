@@ -51,17 +51,12 @@ class GammapMapper:
                          dst_white=dst_w, dst_black=dst_k)
         self._cm = cm
 
-        # 1. grey-axis alignment: rot[0] (src axis → 0..100) then irot[1]
-        #    (0..100 → dest axis) — source W/B land exactly on dest W/B.
-        def align(pts: np.ndarray) -> np.ndarray:
-            return np.atleast_2d(apply_3x4(
-                cm.irot[1], np.atleast_2d(apply_3x4(cm.rot[0], pts))))
-
-        self._align = align
-        asrc = align(src_cloud)
-
-        # 2. guide vectors on the aligned source
-        sv, dv = near_smooth_guides(asrc, dst_cloud, xw, cm,
+        # Guide vectors on the RAW source cloud — the grey-axis/cusp
+        # alignment happens inside via the rotation frames (comp_ce), as in
+        # the C: gammap.c hands near_smooth the unaligned source gamut.
+        # (Pre-aligning too applied the axis transform twice — measured:
+        # guide error 7.6 median.)
+        sv, dv = near_smooth_guides(src_cloud, dst_cloud, xw, cm,
                                     smooth_iters=smooth_iters)
 
         # 3. smooth displacement warp through the guides (rspl / PSMOOTH
@@ -70,12 +65,15 @@ class GammapMapper:
         #    the same role as rspl's smoothness prior over the grid.
         from workflow.profile_engine.gamut_map import WarpMapper
         rng = np.random.default_rng(11)
-        core = 0.55 * (sv - np.array([50.0, 0.0, 0.0])) \
+        # Deep-core anchors only (0.35 radius): identity there is safe —
+        # colprof's own map leaves the protected core untouched; anchoring
+        # further out fights the guides (measured: over-stiff interior).
+        core = 0.35 * (sv - np.array([50.0, 0.0, 0.0])) \
             + np.array([50.0, 0.0, 0.0])
-        idx = rng.choice(len(core), min(len(core), 800), replace=False)
+        idx = rng.choice(len(core), min(len(core), 400), replace=False)
         train = np.vstack([sv, core[idx]])
         target = np.vstack([dv, core[idx]])
         self._warp = WarpMapper(train, target)
 
     def map_lab(self, lab: np.ndarray) -> np.ndarray:
-        return self._warp.map_lab(self._align(lab))
+        return self._warp.map_lab(np.atleast_2d(np.asarray(lab, float)))
