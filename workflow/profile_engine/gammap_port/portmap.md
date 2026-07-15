@@ -246,3 +246,26 @@ header cusps/wb):
   (+1077), depth compensation (+1273)), each validated by adding printf
   dumps to smthdump at that phase. All tooling in place (compile line
   above; add dumps to the smthdump.c copy, not the pristine source).
+
+## VECADJ loop ported + validated (2026-07-15)
+
+- smthdump now dumps nrdv too → decomposition: pass-2 ≈ no-op for this
+  pair (|nrdv−aodv| 0.012 median); ALL loop movement is the smoothing
+  stages (|dv−nrdv| 2.40 median / 95% 9.09).
+- Faithful VECADJ port (build_neighbours + vecadj_loop in nearsmth.py):
+  neighbour ellipse metric with per-point radii + opposite-hue exclusion +
+  ×1.5 growth (≥8), smoothstep weights normalised; nscale = ddev/sdev with
+  the C's guards; per pass: dav mixes dv-L (not iterated) with anv-a/b;
+  rdsm = 1−sqrt(dsm) blend; clip against FULL dest along evector
+  direction; naxbf pinning blend. Validated on all 26,850 guides with
+  Argyll's nrdv as input: **0.909 median / 3.84 95%** vs their final dv
+  (keeping nrdv = 2.40). evect_fn is still the cvect-essence
+  approximation (toward neutral at own L) — the C fits an rspl of
+  directions to a SHRINK=5 shrunk gamut via optfunc1a.
+- REMAINING to gate: (1) RSPLPASSES stage (L3150–3360): per pass fit
+  map rspl (_sv→anv, mapsmooth), evaluate at _sv, evect-projected error
+  clen vs tdst, local weighted-max correction with gain schedule
+  (icgain 1.4 → fcgain 0.5·, expansion gain × wt.f.x, tt=it/(P−1)),
+  rext target set on it 0 (RSPLSCALE 1.8·maxext); adjust anv. Port with
+  WarpMapper playing the rspl role. (2) exact evect via shrunk gamut.
+  (3) find tdst setting (grep) — the aim point of corrections.

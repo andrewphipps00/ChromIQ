@@ -252,3 +252,98 @@ def near_smooth_guides(src_cloud: np.ndarray, dst_cloud: np.ndarray,
     w_all = np.concatenate([np.ones(len(sv) + len(null_sv)),
                             np.array(sub_w) if sub_w else np.empty(0)])
     return sv_all, dv_all, w_all
+
+
+def build_neighbours(sv: np.ndarray, rdl: np.ndarray, rdh: np.ndarray):
+    """Gaussian-filter neighbourhoods (C +350, exact): ellipse metric with
+    per-point radii, opposite-hue exclusion, radius growth ×1.5 until ≥8
+    neighbours, smoothstep weights normalised to 1."""
+    n = len(sv)
+    idx_list = []
+    w_list = []
+    for i in range(n):
+        il = max(rdl[i], 1e-3)
+        ih = max(rdh[i], 1e-3)
+        for _ in range(10):
+            dot = sv[:, 1] * sv[i, 1] + sv[:, 2] * sv[i, 2]
+            dd = (((sv[:, 0] - sv[i, 0]) / il) ** 2
+                  + ((sv[:, 1] - sv[i, 1]) / ih) ** 2
+                  + ((sv[:, 2] - sv[i, 2]) / ih) ** 2)
+            m = (dot >= 0.0) & (dd <= 1.0)
+            if m.sum() >= 8:
+                break
+            il *= 1.5
+            ih *= 1.5
+        r = np.sqrt(dd[m])
+        w = 1.0 - r
+        w = w * w * (3.0 - 2.0 * w)
+        tw = w.sum()
+        idx_list.append(np.flatnonzero(m))
+        w_list.append(w / max(tw, 1e-12))
+    return idx_list, w_list
+
+
+def vecadj_loop(sv: np.ndarray, dv0: np.ndarray, naxbf: np.ndarray,
+                dsm: np.ndarray, nbr_idx, nbr_w, dest_surf, evect_fn,
+                passes: int = 8) -> np.ndarray:
+    """The VECADJPASSES smoothing loop (C +2970, exact translation).
+
+    ``dv0``: pass-2 result (nrdv); ``dest_surf``: FULL destination surface
+    (clipping happens against dc_gam, not the intersection); ``evect_fn``:
+    inward clip-direction field (the evectmap rspl equivalent).
+    """
+    n = len(sv)
+    dv = dv0.copy()
+    anv = dv0.copy()
+
+    # nscale (C 2900–2956): per-component ddev/sdev with the C's guards
+    nscale = np.ones_like(sv)
+    for i in range(n):
+        j = nbr_idx[i]
+        w = nbr_w[i][:, None]
+        sav = (w * sv[j]).sum(0)
+        dav = (w * dv0[j]).sum(0)
+        sdev = (np.abs(sav[None, :] - sv[j]) * w).sum(0)
+        ddev = (np.abs(dav[None, :] - dv0[j]) * w).sum(0)
+        scev = (np.linalg.norm(sav[None, :] - sv[j], axis=1) * nbr_w[i]).sum()
+        dcev = (np.linalg.norm(dav[None, :] - dv0[j], axis=1) * nbr_w[i]).sum()
+        if scev < 1e-3 or dcev < 1e-3:
+            scev = dcev = 1e-3
+        low = (sdev < 1e-3) | (ddev < 1e-3)
+        sdev[low] = scev
+        ddev[low] = dcev
+        nscale[i] = ddev / sdev
+
+    rdsm = 1.0 - np.sqrt(dsm)
+    for _ in range(passes):
+        new_anv = anv.copy()
+        for i in range(n):
+            j = nbr_idx[i]
+            w = nbr_w[i][:, None]
+            sav = (w * sv[j]).sum(0)
+            # L is not iterated (uses dv); a/b use the iterating anv
+            dav = (w * np.stack([dv[j][:, 0], anv[j][:, 1],
+                                 anv[j][:, 2]], 1)).sum(0)
+            tmp = (sv[i] - sav) * nscale[i] + dav
+            tmp = (1.0 - rdsm[i]) * tmp + rdsm[i] * dv[i]
+            new_anv[i] = tmp
+        # clip against the FULL destination along the evector direction
+        nr = dest_surf.nradial(new_anv)
+        out = nr > 1.0 + 1e-6
+        if out.any():
+            dirs = evect_fn(new_anv[out])
+            mint, maxt, _, _ = dest_surf.vector_isect(
+                new_anv[out], new_anv[out] + dirs)
+            clip = new_anv[out].copy()
+            hit = ~np.isnan(mint)
+            # nearest intersection along the direction
+            tt = np.where(np.isnan(maxt), mint, np.where(
+                np.abs(mint) < np.abs(maxt), mint, maxt))
+            clip[hit] = new_anv[out][hit] + tt[hit][:, None] * dirs[hit]
+            miss = ~hit
+            if miss.any():
+                clip[miss] = dest_surf.radial(new_anv[out][miss])
+            new_anv[out] = clip
+        # W/K pinning blend, then iterate
+        anv = (1.0 - naxbf[:, None]) * dv + naxbf[:, None] * new_anv
+    return anv
