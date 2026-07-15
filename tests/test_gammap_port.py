@@ -197,3 +197,72 @@ def test_inv_comp_ce_roundtrip():
     fwd = cm.comp_ce(pts, w)
     back = cm.inv_comp_ce(fwd, w)
     assert np.abs(cm.comp_ce(back, w) - fwd).max() < 1e-4
+
+
+# ---------------------------------------------------------------------------
+# stage 3: weight expansion / interpolation / error functions
+# ---------------------------------------------------------------------------
+
+def test_expand_weights_light_yellow_override():
+    from workflow.profile_engine.gammap_port.xweights import (CWL, RDSM,
+                                                              expand_weights)
+    xw = expand_weights(weights.PERCEPTUAL_WEIGHTS)
+    assert xw.shape == (14, 23)
+    # slot 1 = light_yellow: cusp l overridden to 0.9, smoothing degree 0.5;
+    # -1 fields inherit the default (e.g. depth weights stay 5.0)
+    assert xw[1][CWL] == 0.9 and xw[1][RDSM] == 0.5
+    assert xw[1][20] == 5.0 and xw[1][21] == 5.0
+    # every other slot = pure default
+    assert xw[0][CWL] == 0.1 and xw[13][RDSM] == 0.9
+
+
+def test_comp_iweight_matches_c():
+    from workflow.profile_engine.gammap_port.xweights import comp_iweight
+    o, h, l = 1.0, 0.8, 0.45
+    lc = 1.0 - h
+    c = (1.0 - l) * lc
+    ll = l * lc
+    oo = o / np.sqrt(ll*ll + c*c + h*h)
+    wl, wc, wh = comp_iweight(np.array([o]), np.array([h]), np.array([l]))
+    assert abs(wl[0] - oo*ll) < 1e-12
+    assert abs(wc[0] - oo*c) < 1e-12
+    assert abs(wh[0] - oo*h) < 1e-12
+
+
+def test_interp_xweights_structure():
+    from workflow.profile_engine.gammap_port.xweights import interp_xweights, expand_weights
+    cm = _make_cusp_mapping()
+    xw = expand_weights(weights.PERCEPTUAL_WEIGHTS)
+    pts = np.array([[95.0, 1.0, 1.0],     # near white
+                    [50.0, 60.0, 10.0],   # saturated mid
+                    [10.0, 3.0, -2.0]])   # near black
+    out = interp_xweights(pts, xw, cm)
+    assert out["w"].shape == (3, 23) and out["ra"].shape == (3, 3)
+    # near-white point gets higher L-dominance than the mid grey one
+    # (a.wl 0.8 vs a.gl 0.45): ra_l/(ra_l+ra_c) larger at white
+    frac = out["ra"][:, 0] / (out["ra"][:, 0] + out["ra"][:, 1])
+    assert frac[0] > frac[1]
+
+
+def test_aerrf_and_comperr_match_c_expressions():
+    from workflow.profile_engine.gammap_port.error import aerrf, comperr
+    dv = np.array([[52.0, 12.0, -8.0]])
+    sv = np.array([[50.0, 20.0, -10.0]])
+    ra = np.array([[0.5, 0.3, 0.9]])
+    # literal C: diffLChsq then the powered-L sum
+    dl = 2.0; dlsq = dl*dl
+    c1 = np.hypot(12.0, -8.0); c2 = np.hypot(20.0, -10.0)
+    dcsq = (c1-c2)**2
+    desq = dlsq + 8.0**2 + 2.0**2
+    dhsq = max(desq - dlsq - dcsq, 0.0)
+    expo = 1.0 + (1.5-1.0)*dl/(dl+10.0)
+    want = 0.5*dlsq**expo + 0.3*dcsq + 0.9*dhsq
+    got = aerrf(dv, sv, ra, np.array([1.5]), np.array([10.0]))[0]
+    assert abs(got - want) < 1e-9
+    # comperr sums absolute + radial + depth
+    got = comperr(dv, sv, sv, np.array([1.0]), np.array([[0.2, 0.3, 0.4]]),
+                  np.array([5.0]), np.array([5.0]),
+                  np.array([0.1]), np.array([0.0]))[0]
+    va = 1.0*dlsq + 1.0*dcsq + 1.0*dhsq
+    vr = 0.2*dlsq + 0.3*dcsq + 0.4*dhsq
+    assert abs(got - (va + vr + 5.0*0.01)) < 1e-9
