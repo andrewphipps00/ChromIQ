@@ -266,3 +266,43 @@ def test_aerrf_and_comperr_match_c_expressions():
     va = 1.0*dlsq + 1.0*dcsq + 1.0*dhsq
     vr = 0.2*dlsq + 0.3*dcsq + 0.4*dhsq
     assert abs(got - (va + vr + 5.0*0.01)) < 1e-9
+
+
+# ---------------------------------------------------------------------------
+# gamut surface substrate (stage 4 support)
+# ---------------------------------------------------------------------------
+
+def _sphere_cloud(radius=40.0, n=4000):
+    rng = np.random.default_rng(3)
+    v = rng.normal(size=(n, 3))
+    v /= np.linalg.norm(v, axis=1)[:, None]
+    from workflow.profile_engine.gammap_port.gamutsurf import CENT
+    return CENT[None, :] + radius * v
+
+
+def test_gamut_surface_radial_on_sphere():
+    from workflow.profile_engine.gammap_port.gamutsurf import (CENT,
+                                                               GamutSurface)
+    gs = GamutSurface(_sphere_cloud())
+    pts = np.array([[50.0, 60.0, 0.0], [80.0, 5.0, -5.0], [50.0, 0.0, 10.0]])
+    out = gs.radial(pts)
+    r = np.linalg.norm(out - CENT[None, :], axis=1)
+    assert np.abs(r - 40.0).max() < 1.5          # binning tolerance
+    # direction preserved
+    d0 = (pts - CENT[None, :]); d1 = (out - CENT[None, :])
+    cos = (d0 * d1).sum(1) / (np.linalg.norm(d0, axis=1)
+                              * np.linalg.norm(d1, axis=1))
+    assert cos.min() > 0.9999
+
+
+def test_gamut_surface_vector_isect_sphere():
+    from workflow.profile_engine.gammap_port.gamutsurf import GamutSurface
+    gs = GamutSurface(_sphere_cloud())
+    sv = np.array([[50.0, 0.0, 0.0]])            # centre
+    dv = np.array([[50.0, 80.0, 0.0]])           # outside along +a
+    mint, maxt, n_min, n_max = gs.vector_isect(sv, dv)
+    # ray leaves the sphere at |a| = 40 → t = 0.5 both directions
+    assert abs(maxt[0] - 0.5) < 0.05
+    assert abs(mint[0] + 0.5) < 0.05
+    # outward normal at the +a crossing points along +a
+    assert n_max[0][1] > 0.9
