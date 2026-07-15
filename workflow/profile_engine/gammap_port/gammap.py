@@ -48,31 +48,66 @@ from workflow.profile_engine.gammap_port.xweights import (ALXPOW, ALXTHR,
 _RSPLPASSES_ON = True      # nearsmth.c RSPLPASSES fine-tune stage
 
 
-def _sobol2(n: int) -> np.ndarray:
-    """First n points of the 2-D Sobol sequence (dim 1 = van der Corput,
-    dim 2 = Sobol direction numbers m = 1,3,5,15,17,51…)."""
-    pts = np.empty((n, 2))
-    x = np.zeros(2, dtype=np.uint32)
-    # direction numbers (32-bit) for the two dimensions
-    v1 = np.array([1 << (31 - k) for k in range(32)], dtype=np.uint32)
-    m2 = [1, 3, 5, 15, 17, 51, 85, 255, 257, 771, 1285, 3855, 4369,
-          13107, 21845, 65535]
-    v2 = np.zeros(32, dtype=np.uint32)
-    for k in range(32):
-        if k < len(m2):
-            v2[k] = np.uint32(m2[k]) << np.uint32(31 - k)
+_SOBOL_MAXBIT = 30                 # numlib/sobol.h
+_SOBOL_POLY = (1, 3)               # sobol_poly[0..1]
+_SOBOL_VINIT0 = (0, 1)            # vinit[0][0..1] (only row 0 needed, m≤1)
+
+
+def _sobol2_dir() -> list[list[int]]:
+    """Build Argyll's 2-D Sobol direction table (numlib/sobol.c new_sobol,
+    dims 0 and 1), including the ×2^k column scaling."""
+    mb = _SOBOL_MAXBIT
+    d = [[0, 0] for _ in range(mb)]
+    for i in range(2):
+        if i == 0:
+            for j in range(mb):
+                d[j][0] = 1
         else:
-            v2[k] = v2[k - 16] ^ (v2[k - 16] >> np.uint32(16))
-    for i in range(n):
-        c = 0                       # index of lowest zero bit of i
-        ii = i
-        while ii & 1:
-            ii >>= 1
-            c += 1
-        x[0] ^= v1[c]
-        x[1] ^= v2[c]
-        pts[i] = x / 2.0 ** 32
-    return pts
+            m, pm = 0, _SOBOL_POLY[i] >> 1
+            while pm:
+                m += 1
+                pm >>= 1
+            for j in range(m):
+                d[j][i] = _SOBOL_VINIT0[i]      # vinit[0][i] (m == 1)
+            pm = _SOBOL_POLY[i]
+            for j in range(m, mb):
+                newv = d[j - m][i]
+                for k in range(m):
+                    if pm & (1 << (m - k - 1)):
+                        newv ^= d[j - k - 1][i] << (k + 1)
+                d[j][i] = newv
+    p = 2
+    for j in range(mb - 2, -1, -1):
+        d[j][0] *= p
+        d[j][1] *= p
+        p <<= 1
+    return d
+
+
+_SOBOL_DIR = _sobol2_dir()
+
+
+def _sobol2(n: int) -> np.ndarray:
+    """First n points of Argyll's 2-D Sobol sequence — a faithful port of
+    numlib/sobol.c next_sobol (reset state: count=0, lastq=0), so the
+    stratified guide-vertex positions match Argyll's exactly. Per call:
+    count++, p = trailing-zero count of the (1-based) counter, lastq ^=
+    dir[p], value = lastq · 2^−30."""
+    recipd = 1.0 / (1 << _SOBOL_MAXBIT)
+    lastq = [0, 0]
+    out = np.empty((n, 2))
+    count = 0
+    for idx in range(n):
+        count += 1
+        c, p = count, 0
+        while (c & 1) == 0:
+            p += 1
+            c >>= 1
+        lastq[0] ^= _SOBOL_DIR[p][0]
+        lastq[1] ^= _SOBOL_DIR[p][1]
+        out[idx, 0] = lastq[0] * recipd
+        out[idx, 1] = lastq[1] * recipd
+    return out
 
 
 def _ss_verts(verts: np.ndarray, tris: np.ndarray, xvra: float
