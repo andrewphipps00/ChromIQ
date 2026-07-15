@@ -192,6 +192,51 @@ class TriSurface:
     def _ray_ts(self, orig: np.ndarray, d: np.ndarray):
         return self._ray_hits(orig, d)
 
+    def nearest(self, pts: np.ndarray, chunk: int = 256) -> np.ndarray:
+        """Closest point on the mesh surface to each query point.
+
+        Argyll's ``gamut->nearest`` (Ericson closest-point-on-triangle over all
+        triangles, per query). Used by near_smooth's expansion swap test
+        (``dr = |nearest(dgam, sv)|``), which the radial approximation
+        over-triggered for saturated colours.
+        """
+        pts = np.atleast_2d(np.asarray(pts, float))
+        a, ab, ac = self.v0[None], self.e1[None], self.e2[None]  # (1,M,3)
+        b, c = a + ab, a + ac
+        tiny = 1e-30
+        out = np.empty((len(pts), 3))
+        for lo in range(0, len(pts), chunk):
+            P = pts[lo:lo + chunk][:, None, :]              # (C,1,3)
+            ap, bp, cp = P - a, P - b, P - c
+            d1 = (ab * ap).sum(-1); d2 = (ac * ap).sum(-1)  # (C,M)
+            d3 = (ab * bp).sum(-1); d4 = (ac * bp).sum(-1)
+            d5 = (ab * cp).sum(-1); d6 = (ac * cp).sum(-1)
+            va = d3 * d6 - d5 * d4
+            vb = d5 * d2 - d1 * d6
+            vc = d1 * d4 - d3 * d2
+            denom = 1.0 / (va + vb + vc + tiny)
+            v = (vb * denom)[..., None]; w = (vc * denom)[..., None]
+            res = a + ab * v + ac * w                       # face (C,M,3)
+            # edges (override face)
+            mAB = ((vc <= 0) & (d1 >= 0) & (d3 <= 0))[..., None]
+            res = np.where(mAB, a + ab * (d1 / (d1 - d3 + tiny))[..., None], res)
+            mAC = ((vb <= 0) & (d2 >= 0) & (d6 <= 0))[..., None]
+            res = np.where(mAC, a + ac * (d2 / (d2 - d6 + tiny))[..., None], res)
+            mBC = ((va <= 0) & ((d4 - d3) >= 0) & ((d5 - d6) >= 0))[..., None]
+            tBC = ((d4 - d3) / ((d4 - d3) + (d5 - d6) + tiny))[..., None]
+            res = np.where(mBC, b + (c - b) * tBC, res)
+            # vertices (win)
+            res = np.where(((d1 <= 0) & (d2 <= 0))[..., None],
+                           np.broadcast_to(a, res.shape), res)
+            res = np.where(((d3 >= 0) & (d4 <= d3))[..., None],
+                           np.broadcast_to(b, res.shape), res)
+            res = np.where(((d6 >= 0) & (d5 <= d6))[..., None],
+                           np.broadcast_to(c, res.shape), res)
+            d2m = ((res - P) ** 2).sum(2)                   # (C,M)
+            j = d2m.argmin(1)
+            out[lo:lo + chunk] = res[np.arange(res.shape[0]), j]
+        return out
+
     def surface_radius(self, d: np.ndarray, chunk: int = 4096) -> np.ndarray:
         """Radius along unit directions from the centre (max ray crossing).
 

@@ -320,13 +320,14 @@ class GammapMapper:
             # becomes the weighted-nearest point on the source surface
             # seen from the radial dest point, and the target is that
             # radial dest point itself
-            drv = ss_d.radial(csv)
+            drv = ss_d.radial(csv)      # radial dest = the swap target
             r_c = np.linalg.norm(csv - CENT[None, :], axis=1)
-            # the C's swap test compares |nearest(dgam, sv)| with sr; the
-            # radial-point radius approximates that better than the
-            # nearest VERTEX on a -d10 mesh (both measured — vertex
-            # variant scored 0.81 vs 0.66 at the domap gate)
-            r_d = np.linalg.norm(drv - CENT[None, :], axis=1)
+            # Argyll's exact swap test (nearsmth.c L2410): dr = |nearest(dgam,
+            # sv)| > sr = |sv|. The radial-point radius the port used before
+            # over-triggered the swap for saturated colours (radial overshoots
+            # the true nearest point), inflating the saturation-intent tail.
+            ndv = tri_d.nearest(csv)
+            r_d = np.linalg.norm(ndv - CENT[None, :], axis=1)
             swap = r_d > r_c + 1e-9
             if swap.any():
                 tgt = drv[swap]
