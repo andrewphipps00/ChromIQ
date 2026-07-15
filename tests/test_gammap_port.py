@@ -419,4 +419,5 @@ def test_cam02_printer_white_roundtrip():
     labs = labs[(lab_to_xyz(labs) >= 0.0).all(1)]
     assert len(labs) > 200
     back = ap.jab_to_lab(ap.lab_to_jab(labs))
-    assert np.abs(back - labs).max() < 1e-4
+    # bluelin's backward hue inverse iterates to ~0.02 in c1 (like the C)
+    assert np.abs(back - labs).max() < 2e-3
