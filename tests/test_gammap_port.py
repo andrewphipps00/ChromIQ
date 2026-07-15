@@ -123,3 +123,77 @@ def test_lab_lch_roundtrip():
     lab = np.array([[50.0, -20.0, 30.0], [10.0, 0.0, -5.0]])
     back = lch_to_lab(lab_to_lch(lab))
     assert np.allclose(back, lab, atol=1e-12)
+
+
+# ---------------------------------------------------------------------------
+# cusp machinery (stage 2) — invariants from the C's own sanity checks
+# ---------------------------------------------------------------------------
+
+def _make_cusp_mapping(scale=0.8):
+    from workflow.profile_engine.gammap_port.cusps import CuspMapping
+    # source: idealised cusps at 60° spacing; dest: same, chroma scaled,
+    # slightly compressed L range — a clean synthetic pair
+    hues = np.radians([30, 90, 150, 210, 270, 330])
+    src = np.stack([np.array([55 + 15*np.cos(3*h), 70*np.cos(h),
+                              70*np.sin(h)]) for h in hues])
+    dst = np.stack([np.array([53 + 12*np.cos(3*h), scale*70*np.cos(h),
+                              scale*70*np.sin(h)]) for h in hues])
+    return CuspMapping(src, dst,
+                       src_white=np.array([100.0, 0.0, 0.0]),
+                       src_black=np.array([2.0, 1.0, -1.0]),
+                       dst_white=np.array([96.0, 0.5, -0.5]),
+                       dst_black=np.array([8.0, 0.0, 2.0]))
+
+
+def test_comp_ce_full_weights_maps_cusps_to_cusps():
+    """C sanity check (nearsmth.c #ifdef NEVER, L797): at 100% weights each
+    source cusp maps (close) to the corresponding destination cusp."""
+    cm = _make_cusp_mapping()
+    out = cm.comp_ce(cm.cusps[0][:6], cusp_weights=(1, 1, 1, 0, 1))
+    d = np.linalg.norm(out - cm.cusps[1][:6], axis=1)
+    assert d.max() < 1e-6, d
+
+
+def test_comp_ce_zero_weights_is_identity():
+    cm = _make_cusp_mapping()
+    pts = np.array([[50.0, 20.0, -30.0], [70.0, -40.0, 10.0]])
+    out = cm.comp_ce(pts, cusp_weights=(0.0, 0.0, 0.0, 2.0, 0.0))
+    assert np.allclose(out, pts)
+
+
+def test_comp_ce_neutral_axis_stays_put_under_twist():
+    """With twist power > 0 the mapping fades to nothing at the neutral
+    axis (tww → 0 ⇒ tpw → 0 and ccx → 1)."""
+    cm = _make_cusp_mapping()
+    grey = cm.cusps[0][8][None, :]
+    out = cm.comp_ce(grey, cusp_weights=(1.0, 1.0, 1.0, 2.0, 1.4))
+    # at grey: mapping weight ~0 → result = grey in dest-aligned frame,
+    # i.e. the unchanged source point
+    assert np.linalg.norm(out - grey) < 0.75
+
+
+def test_comp_naxbf_bounds():
+    cm = _make_cusp_mapping()
+    # at the white point: 0.0; near grey: → 1.0 (C comment)
+    w = cm.comp_naxbf(cm.cusps[0][6][None, :])
+    g = cm.comp_naxbf(cm.cusps[0][8][None, :])
+    assert w[0] < 1e-6
+    assert g[0] > 0.99
+
+
+def test_comp_lvc_signs():
+    cm = _make_cusp_mapping()
+    # +1 at white L, −1 at black L, ~0 at grey (C comment L1012–1014)
+    assert abs(cm.comp_lvc(cm.cusps[0][6][None, :])[0] - 1.0) < 1e-9
+    assert abs(cm.comp_lvc(cm.cusps[0][7][None, :])[0] + 1.0) < 1e-9
+    assert abs(cm.comp_lvc(cm.cusps[0][8][None, :])[0]) < 0.35
+
+
+def test_inv_comp_ce_roundtrip():
+    cm = _make_cusp_mapping()
+    pts = np.array([[60.0, 30.0, 20.0], [40.0, -25.0, -35.0],
+                    [75.0, 5.0, 60.0]])
+    w = (0.8, 0.6, 0.7, 2.0, 1.2)
+    fwd = cm.comp_ce(pts, w)
+    back = cm.inv_comp_ce(fwd, w)
+    assert np.abs(cm.comp_ce(back, w) - fwd).max() < 1e-4
