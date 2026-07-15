@@ -115,6 +115,9 @@ class BuildSettings:
     argyll_bin: Path | str | None = None
     timestamp: datetime | None = None        # fixed → byte-reproducible
     progress: Callable[[str], None] | None = None
+    # ported gamut mapping: exact triangle geometry (most faithful to
+    # Argyll, slower) vs sampled-table surfaces (near-identical, fast)
+    gammap_exact_geometry: bool = True
 
 
 @dataclass

@@ -298,6 +298,8 @@ class EngineProfileBuilder:
             if self._app_settings is not None:
                 settings.argyll_bin = self._app_settings.get(
                     "argyll_bin_path", "/Applications/Argyll/bin")
+                settings.gammap_exact_geometry = bool(
+                    self._app_settings.get("gammap_exact_geometry", False))
         except (ExtraArgsError, ValueError) as exc:
             self._last_error = str(exc)
             on_line(tr("[ERROR] {msg}").format(msg=exc))

@@ -194,6 +194,9 @@ def fit_gammap_port_mappers(model, meas, source_gamut: Path | str,
 
     bin_dir = Path(argyll_bin) if argyll_bin else Path(
         "/Applications/Argyll/bin")
+    # exact triangle geometry (most faithful, slower) vs sampled-table
+    # surfaces (near-identical, fast) — user setting, default exact
+    exact = bool(getattr(settings, "gammap_exact_geometry", True))
     if progress:
         progress("Gamut mapping: reading the source colour space…")
 
@@ -242,7 +245,7 @@ def fit_gammap_port_mappers(model, meas, source_gamut: Path | str,
                       dst.triangles, dst.cs_white, dst.cs_black,
                       dst.cusps, intent="p", dst_gam_wp=dst.white,
                       dst_gam_bp=dst.black, progress=progress,
-                      surf_cache=surf_cache)
+                      surf_cache=surf_cache, exact_geometry=exact)
     out = {"B2A0": PortMapper(gm, ap_src, ap_dst)}
 
     # Saturation table. For RGB/CMYK we leave B2A2 to the colprof-matched
@@ -258,6 +261,7 @@ def fit_gammap_port_mappers(model, meas, source_gamut: Path | str,
                            src.cs_black, src.cusps, dst.vertices,
                            dst.triangles, dst.cs_white, dst.cs_black,
                            dst.cusps, intent="s", dst_gam_wp=dst.white,
-                           dst_gam_bp=dst.black, surf_cache=surf_cache)
+                           dst_gam_bp=dst.black, surf_cache=surf_cache,
+                           exact_geometry=exact)
         out["B2A2"] = PortMapper(gms, ap_src, ap_dst)
     return out

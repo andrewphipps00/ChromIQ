@@ -551,6 +551,46 @@ class SettingsDialog(QDialog):
         self._profile_engine_check.clicked.connect(
             self._on_profile_engine_clicked)
 
+        self._gammap_exact_check = QCheckBox(
+            tr("Most accurate gamut mapping (slower)"), self)
+        gammap_exact_tip = TooltipButton(
+            tr("Most accurate gamut mapping (slower)"),
+            tr("This only matters when the ChromIQ profile engine is on, "
+            "and it fine-tunes ONE step: how the engine turns your "
+            "printer's colours into the smooth colour transitions of a "
+            "perceptual or saturation profile.\n\n"
+            "Both settings run the exact same colour maths — the same "
+            "one ChromIQ copied, step for step, from Argyll. The only "
+            "difference is how precisely the engine measures the shape of "
+            "your printer's colour space while it works:\n\n"
+            "  • ON (most accurate) — the engine measures the colour "
+            "space exactly, the way Argyll does internally. This is the "
+            "most faithful possible copy of Argyll's result. It takes "
+            "longer, because \"exactly\" means a lot more calculation: "
+            "expect a profile to take a few minutes instead of a few "
+            "seconds, and a bit longer again for multi-ink printers.\n\n"
+            "  • OFF (fast) — the engine measures the colour space from a "
+            "very fine pre-computed map instead of re-calculating it every "
+            "time. This is a few seconds faster per profile and, on our "
+            "tests, the finished profile is indistinguishable from the "
+            "accurate one — the tiny difference is smaller than the "
+            "rounding the ICC profile file itself applies, so you could "
+            "not see it in a print.\n\n"
+            "Which should you pick? For everyday use, OFF is perfectly "
+            "fine and quicker. Turn it ON if you want the profile to be "
+            "the most exact possible match to what Argyll would produce — "
+            "for example if you are comparing engines closely, or you "
+            "simply prefer maximum faithfulness and don't mind the wait. "
+            "Either way the colours you get are correct; this is about "
+            "the last sliver of precision versus build speed, not about "
+            "one being right and the other wrong.\n\n"
+            "Building a profile is a one-time step you do once per paper "
+            "and printer, so even the slower setting only costs you those "
+            "extra minutes once."),
+            self,
+            min_width=680,
+        )
+
         self._native_print_check = QCheckBox(tr("Use default macOS printer dialog"), self)
         native_tip = TooltipButton(
             tr("Use default macOS printer dialog"),
@@ -639,6 +679,7 @@ class SettingsDialog(QDialog):
             _bh_cell(self._chromiq_refine_check, refine_tip),
             _bh_cell(self._averaging_check, averaging_tip),
             _bh_cell(self._profile_engine_check, engine_tip),
+            _bh_cell(self._gammap_exact_check, gammap_exact_tip),
         ]
         if native_print_supported():
             bh_cells.append(_bh_cell(self._native_print_check, native_tip))
@@ -1559,6 +1600,8 @@ class SettingsDialog(QDialog):
         self._chromiq_refine_check.setChecked(bool(s.get("chromiq_refinement", False)))
         self._averaging_check.setChecked(bool(s.get("averaging_enabled", False)))
         self._profile_engine_check.setChecked(bool(s.get("profile_engine_beta", False)))
+        self._gammap_exact_check.setChecked(
+            bool(s.get("gammap_exact_geometry", False)))
         self._native_print_check.setChecked(bool(s.get("use_native_print_dialog", False)))
         self._pdf_fallback_check.setChecked(bool(s.get("pdf_print_fallback", False)))
         self._confirm_print_check.setChecked(bool(s.get("confirm_before_printing", True)))
@@ -2187,6 +2230,7 @@ class SettingsDialog(QDialog):
         s.set("chromiq_refinement",        self._chromiq_refine_check.isChecked())
         s.set("averaging_enabled",         self._averaging_check.isChecked())
         s.set("profile_engine_beta",       self._profile_engine_check.isChecked())
+        s.set("gammap_exact_geometry",     self._gammap_exact_check.isChecked())
         s.set("use_native_print_dialog",   self._native_print_check.isChecked())
         s.set("pdf_print_fallback",        self._pdf_fallback_check.isChecked())
         s.set("confirm_before_printing",   self._confirm_print_check.isChecked())

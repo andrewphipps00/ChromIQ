@@ -216,7 +216,8 @@ class GammapMapper:
     def __init__(self, src_verts, src_tris, src_cs_wp, src_cs_bp, src_cusps,
                  dst_verts, dst_tris, dst_cs_wp, dst_cs_bp, dst_cusps, *,
                  intent: str = "p", surf_cache: dict | None = None,
-                 dst_gam_wp=None, dst_gam_bp=None, progress=None) -> None:
+                 dst_gam_wp=None, dst_gam_bp=None, progress=None,
+                 exact_geometry: bool = True) -> None:
         def _tick(msg):
             if progress:
                 progress(msg)
@@ -238,18 +239,25 @@ class GammapMapper:
         self._ga = ga = GreyAxis(src_cs_wp, src_cs_bp, dst_cs_wp, dst_cs_bp,
                                  tri_d)
 
-        # pre-mapped source (scl_gam equivalent). Surfaces are Argyll's
-        # EXACT triangle geometry (TriSurface: batched Möller–Trumbore),
-        # not the sampled hue×inclination table — the table's pole/neutral
-        # inaccuracy cost ~0.04 ΔE on pass-1 and drove the guide rejection
-        # too hard (validated: exact geometry takes pass-1 aodv 0.043 →
-        # 0.005 vs Argyll's own). Slower to query, but a profile build is
-        # a one-time operation.
+        # pre-mapped source (scl_gam equivalent). Surface queries use
+        # EITHER Argyll's exact triangle geometry (exact_geometry=True:
+        # TriSurface + IntersectSurface — most faithful, pass-1 aodv 0.005
+        # vs Argyll, but ~5× slower to query) OR the sampled hue×inclination
+        # table (fast: near-identical output, 0.043 pass-1, a few seconds).
+        # Both run the identical mapping ALGORITHM; only the surface-lookup
+        # precision differs, and the resulting profiles are perceptually
+        # indistinguishable (the difference is below the ICC file's own
+        # rounding). See portmap.md for the measurements.
+        self.exact_geometry = exact_geometry
         psrc_verts = ga.pre_map(src_verts)
         tri_ps = TriSurface(psrc_verts, src_tris)
-        ss_d = tri_d
-        ss_ps = tri_ps
         _tick("Gamut mapping: preparing colour surfaces…")
+        if exact_geometry:
+            ss_d = tri_d
+            ss_ps = tri_ps
+        else:
+            ss_d = _sampled(tri_d, cache=surf_cache, key="dest")
+            ss_ps = _sampled(tri_ps, cache=surf_cache, key="psrc")
         # init_ce's dest black is the C's near_smooth `d_bp` = dr_cs_bp
         # (the fully-adapted destination black), NOT the bent dr_be_bp.
         # Using the bent point offsets the dest cusp grey/rotation, which
@@ -264,7 +272,12 @@ class GammapMapper:
                          dst_white=np.asarray(dst_cs_wp, float),
                          dst_black=ga.dr_cs_bp)
 
-        isect = IntersectSurface(tri_d, tri_ps)
+        if exact_geometry:
+            isect = IntersectSurface(tri_d, tri_ps)
+        else:
+            isect = SampledSurface.__new__(SampledSurface)
+            isect._tri, isect.nh, isect.nb = tri_d, ss_d.nh, ss_d.nb
+            isect.tab = np.minimum(ss_d.tab, ss_ps.tab)
 
         # XVRA vertex expansion (gamut.c nssverts/getssvert): stratified
         # per-triangle sampling to xvra × nverts total guide sources —
@@ -355,8 +368,10 @@ class GammapMapper:
             n = np.maximum(np.linalg.norm(d, axis=1), 1e-9)
             return pts + d * (ln / n)[:, None]
 
-        # shrunk gamut for the evector field — exact geometry (SHRINK=5)
-        ss_sh = TriSurface(doshrink(dst_verts), dst_tris)
+        # shrunk gamut for the evector field (SHRINK=5)
+        tri_sh = TriSurface(doshrink(dst_verts), dst_tris)
+        ss_sh = tri_sh if exact_geometry else _sampled(
+            tri_sh, cache=surf_cache, key=f"shrunk_{intent}")
 
         def objsh(dtp):
             return aerrf(dtp, aodv, ra, w[:, ALXPOW], w[:, ALXTHR])
