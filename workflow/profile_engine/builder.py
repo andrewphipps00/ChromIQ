@@ -115,9 +115,17 @@ class BuildSettings:
     argyll_bin: Path | str | None = None
     timestamp: datetime | None = None        # fixed → byte-reproducible
     progress: Callable[[str], None] | None = None
-    # ported gamut mapping: exact triangle geometry (most faithful to
-    # Argyll, slower) vs sampled-table surfaces (near-identical, fast)
-    gammap_exact_geometry: bool = True
+    # Gamut-mapping engine for the perceptual/saturation B2A tables:
+    #   "fast"   — ChromIQ's built-in Python mapper (colprof's algorithm,
+    #              validated against Argyll; a few seconds).
+    #   "argyll" — the bundled chromiq-gammap helper running Argyll's REAL
+    #              gamut mapper (bit-exact; a little slower). Falls back to
+    #              "fast" if the helper binary isn't present.
+    gammap_mode: str = "fast"
+    # Internal lever for the Python mapper: exact triangle geometry vs the
+    # fast sampled-table surfaces. Retained for reference/fallback; not
+    # exposed in the UI now that "argyll" is the accurate option.
+    gammap_exact_geometry: bool = False
 
 
 @dataclass

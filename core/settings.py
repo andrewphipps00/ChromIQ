@@ -147,6 +147,11 @@ DEFAULTS: dict[str, Any] = {
     # ChromIQ-style refinement: merge a pre-conditioning profile's measurement
     # data into the freshly measured chart before building (see workflow/ti3_merge.py)
     "chromiq_refinement":        False,
+    # Gamut-mapping engine for the profile engine's perceptual/saturation B2A
+    # tables: "fast" = ChromIQ's built-in Python mapper; "argyll" = the bundled
+    # chromiq-gammap helper running Argyll's real gamut mapper (bit-exact,
+    # slower). Falls back to "fast" when the helper binary isn't present.
+    "gammap_mode":               "fast",
     # "Read again & average" — master switch. OFF (default) restores the classic
     # behaviour: a finished full read proceeds straight to Build Profile. ON adds
     # the post-read completion dialog offering measure-again / average.
@@ -414,7 +419,7 @@ def thresholds_for_combo(
 # Bump when a shipped default changes in a way that must reach users who have
 # the OLD default persisted. Settings → Save writes every key, so a stored
 # value otherwise pins a user to the old behaviour for good.
-SETTINGS_SCHEMA = 5
+SETTINGS_SCHEMA = 6
 
 # key → the old default(s) it must no longer be stuck on. Only a stored value
 # EQUAL to one of the old defaults is dropped (so it falls through to the new
@@ -440,6 +445,14 @@ _SUPERSEDED_DEFAULTS: dict[str, tuple[float, ...]] = {
     "scanner_flank_min_boxes": (3,),
 }
 
+# Keys removed outright — replaced by a new setting, so any stored value is
+# obsolete regardless of what it was.
+_OBSOLETE_KEYS: tuple[str, ...] = (
+    # schema 6: the boolean "most accurate gamut mapping" toggle became the
+    # gammap_mode picker ("fast" / "argyll"); everyone defaults to "fast".
+    "gammap_exact_geometry",
+)
+
 
 class AppSettings:
     def __init__(self) -> None:
@@ -462,6 +475,10 @@ class AppSettings:
                     dropped.append(key)
             except (TypeError, ValueError):
                 continue
+        for key in _OBSOLETE_KEYS:
+            if self._qs.value(key, None) is not None:
+                self._qs.remove(key)
+                dropped.append(key)
         self._qs.setValue("settings_schema", SETTINGS_SCHEMA)
         if dropped:
             log.info("Settings migrated to schema %d; dropped stale defaults: %s",

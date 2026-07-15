@@ -16,14 +16,19 @@
  * exact call colprof makes — so "bit-exact" means literally Argyll's defaults.
  *
  * Usage:
- *   chromiq-gammap --src SRC.gam --dst-cloud CLOUD.txt
+ *   chromiq-gammap --src SRC.gam (--dst-gam DST.gam | --dst-cloud CLOUD.txt)
  *                  --wp L a b --bp L a b
  *                  --intent p|s --mapres N
  *                  --query QUERY.txt --out OUT.txt
  *
  *   SRC.gam    : source colourspace gamut (Jab), e.g. iccgamut of ClayRGB.
- *   CLOUD.txt  : destination shell, one "L a b" (Jab) per line.
- *   --wp/--bp  : destination white/black point (Jab); required.
+ *   --dst-gam  : destination gamut as an Argyll .gam (Jab) — used for <=4 ink,
+ *                where iccgamut can build it, giving the byte-identical gamut
+ *                object colprof would feed new_gammap.
+ *   --dst-cloud: destination shell as a point cloud, one "L a b" (Jab) per
+ *                line — the only route for CMY+N, built via gamut->expand.
+ *   --wp/--bp  : destination white/black point (Jab). Required with
+ *                --dst-cloud; with --dst-gam they override the file's wb.
  *   --query    : lattice to map, one "L a b" (Jab) per line.
  *   --out      : mapped lattice, one "x y z" per line, in query order.
  *
@@ -48,14 +53,14 @@
 
 static void usage(const char *prog) {
 	fprintf(stderr,
-		"usage: %s --src SRC.gam --dst-cloud CLOUD.txt "
+		"usage: %s --src SRC.gam (--dst-gam DST.gam | --dst-cloud CLOUD.txt) "
 		"--wp L a b --bp L a b --intent p|s --mapres N "
 		"--query QUERY.txt --out OUT.txt\n", prog);
 	exit(2);
 }
 
 int main(int argc, char *argv[]) {
-	const char *src_path = NULL, *cloud_path = NULL;
+	const char *src_path = NULL, *cloud_path = NULL, *dstgam_path = NULL;
 	const char *query_path = NULL, *out_path = NULL;
 	char intent = 'p';
 	int mapres = 33;
@@ -71,6 +76,8 @@ int main(int argc, char *argv[]) {
 			src_path = argv[++i];
 		} else if (strcmp(argv[i], "--dst-cloud") == 0 && i + 1 < argc) {
 			cloud_path = argv[++i];
+		} else if (strcmp(argv[i], "--dst-gam") == 0 && i + 1 < argc) {
+			dstgam_path = argv[++i];
 		} else if (strcmp(argv[i], "--query") == 0 && i + 1 < argc) {
 			query_path = argv[++i];
 		} else if (strcmp(argv[i], "--out") == 0 && i + 1 < argc) {
@@ -89,9 +96,12 @@ int main(int argc, char *argv[]) {
 			usage(argv[0]);
 		}
 	}
-	if (src_path == NULL || cloud_path == NULL || query_path == NULL
-	 || out_path == NULL || !have_wp || !have_bp)
+	if (src_path == NULL || query_path == NULL || out_path == NULL)
 		usage(argv[0]);
+	if ((cloud_path == NULL) == (dstgam_path == NULL))
+		error("exactly one of --dst-gam / --dst-cloud is required");
+	if (cloud_path != NULL && (!have_wp || !have_bp))
+		error("--wp and --bp are required with --dst-cloud");
 	if (intent != 'p' && intent != 's')
 		error("intent must be 'p' or 's'");
 	if (mapres < 2)
@@ -102,24 +112,33 @@ int main(int argc, char *argv[]) {
 	if (gin == NULL || gin->read_gam(gin, (char *)src_path))
 		error("reading source gamut %s failed", src_path);
 
-	/* Destination gamut (Jab) built from the cloud via Argyll's own code.
-	 * Hand-built meshes fail vector_isect(); expand() triangulates. */
+	/* Destination gamut (Jab). <=4 ink: read the iccgamut .gam directly
+	 * (byte-identical to colprof's gout). CMY+N: build it from the cloud
+	 * via Argyll's own gamut->expand — hand-built meshes fail
+	 * vector_isect(); expand() triangulates. */
 	gamut *gout = new_gamut(0.0, 1, 0);
-	FILE *cf = fopen(cloud_path, "r");
-	if (cf == NULL)
-		error("opening cloud %s failed", cloud_path);
-	double p[3];
 	int nc = 0;
-	while (fgets(line, sizeof(line), cf) != NULL) {
-		if (sscanf(line, "%lf %lf %lf", &p[0], &p[1], &p[2]) == 3) {
-			gout->expand(gout, p);
-			nc++;
+	if (dstgam_path != NULL) {
+		if (gout->read_gam(gout, (char *)dstgam_path))
+			error("reading dest gamut %s failed", dstgam_path);
+		if (have_wp && have_bp)
+			gout->setwb(gout, wp, bp, NULL);
+	} else {
+		FILE *cf = fopen(cloud_path, "r");
+		if (cf == NULL)
+			error("opening cloud %s failed", cloud_path);
+		double p[3];
+		while (fgets(line, sizeof(line), cf) != NULL) {
+			if (sscanf(line, "%lf %lf %lf", &p[0], &p[1], &p[2]) == 3) {
+				gout->expand(gout, p);
+				nc++;
+			}
 		}
+		fclose(cf);
+		if (nc < 4)
+			error("cloud %s had only %d points", cloud_path, nc);
+		gout->setwb(gout, wp, bp, NULL);
 	}
-	fclose(cf);
-	if (nc < 4)
-		error("cloud %s had only %d points", cloud_path, nc);
-	gout->setwb(gout, wp, bp, NULL);
 
 	/* Gamut-mapping intent: Argyll's own defaults, exactly as colprof sets
 	 * them (profile/colprof.c). */
@@ -152,8 +171,12 @@ int main(int argc, char *argv[]) {
 	}
 	fclose(qf);
 	fclose(of);
-	fprintf(stderr, "mapped %d query points (%d cloud, intent %c, mapres %d)\n",
-	        nq, nc, intent, mapres);
+	if (dstgam_path != NULL)
+		fprintf(stderr, "mapped %d query points (dst .gam, intent %c, "
+		        "mapres %d)\n", nq, intent, mapres);
+	else
+		fprintf(stderr, "mapped %d query points (%d-point cloud, intent %c, "
+		        "mapres %d)\n", nq, nc, intent, mapres);
 
 	map->del(map);
 	gin->del(gin);

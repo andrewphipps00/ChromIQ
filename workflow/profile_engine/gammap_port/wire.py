@@ -25,6 +25,8 @@ from pathlib import Path
 
 import numpy as np
 
+from workflow.profile_engine.gammap_helper import (
+    HelperUnavailable, gres_mapres_for_quality, is_available, run_gammap)
 from workflow.profile_engine.gammap_port.cam02 import (Appearance,
                                                        lab_to_xyz)
 from workflow.profile_engine.gammap_port.cusps import cusps_from_cloud
@@ -173,6 +175,138 @@ class PortMapper:
         return self._dst.jab_to_lab(self._gm.map_lab(jab))
 
 
+class ArgyllHelperMapper:
+    """Bit-exact mapper: Argyll's real gamut mapper via the native helper.
+
+    Holds the source/destination gamuts as files/clouds and shells out to
+    ``chromiq-gammap`` for the Jab→Jab map, with the CIECAM02 conversions on
+    either side done in Python (identical framing to :class:`PortMapper`).
+    """
+
+    def __init__(self, *, src_gam: Path, intent: str, mapres: int,
+                 ap_src: Appearance, ap_dst: Appearance,
+                 wp_jab, bp_jab, dst_gam: Path | None,
+                 dst_cloud_jab, td) -> None:
+        self._src_gam = src_gam
+        self._intent = intent
+        self._mapres = mapres
+        self._ap_src = ap_src
+        self._ap_dst = ap_dst
+        self._wp_jab = wp_jab
+        self._bp_jab = bp_jab
+        self._dst_gam = dst_gam
+        self._dst_cloud = dst_cloud_jab
+        self._td = td            # keep the TemporaryDirectory alive
+
+    def map_lab(self, lab: np.ndarray) -> np.ndarray:
+        jab = self._ap_src.lab_to_jab(np.atleast_2d(np.asarray(lab, float)))
+        out = run_gammap(jab, src_gam=self._src_gam, intent=self._intent,
+                         mapres=self._mapres, wp_jab=self._wp_jab,
+                         bp_jab=self._bp_jab, dst_gam=self._dst_gam,
+                         dst_cloud_jab=self._dst_cloud)
+        return self._ap_dst.jab_to_lab(out)
+
+
+def _iccgamut_to(path: Path, work_icc: Path, bin_dir: Path,
+                 detail: float) -> Path:
+    """Run ``iccgamut -ff -ir -pj -d<detail>`` on ``work_icc`` → persistent
+    ``.gam`` at ``path``. Raises :class:`PortUnavailable` on failure."""
+    iccgamut = bin_dir / "iccgamut"
+    if not iccgamut.exists():
+        raise PortUnavailable("iccgamut not found")
+    r = subprocess.run([str(iccgamut), "-ff", "-ir", "-pj",
+                        f"-d{detail:g}", work_icc.name],
+                       capture_output=True, text=True, cwd=work_icc.parent)
+    gam = work_icc.with_suffix(".gam")
+    if r.returncode != 0 or not gam.exists():
+        raise PortUnavailable(
+            f"iccgamut failed: {(r.stderr or r.stdout)[:160]}")
+    if gam != path:
+        shutil.move(str(gam), str(path))
+    return path
+
+
+def fit_gammap_argyll_mappers(model, meas, source_gamut: Path | str,
+                              settings, bin_dir: Path, progress=None, *,
+                              is_additive: bool = True,
+                              ink_limit: float | None = None) -> dict:
+    """Bit-exact B2A0/B2A2 mappers backed by Argyll's real gamut mapper.
+
+    <=4-ink: destination is the iccgamut ``.gam`` colprof itself would map
+    (byte-identical). CMY+N: destination is Argyll's own ``expand`` of the
+    engine model's Jab surface cloud. Raises :class:`HelperUnavailable` when
+    the native binary is absent so callers fall back to the fast mapper.
+    """
+    if not is_available():
+        raise HelperUnavailable("bit-exact helper binary not bundled")
+
+    gres, mapres = gres_mapres_for_quality(getattr(settings, "quality", "m"))
+    if progress:
+        progress("Gamut mapping (bit-exact): reading the source colour "
+                 "space…")
+
+    # Persistent working dir shared by both intents; kept alive on the mappers.
+    td = tempfile.TemporaryDirectory(prefix="chromiq-gammap-job-")
+    tdp = Path(td.name)
+
+    src = Path(source_gamut)
+    if not src.exists():
+        raise PortUnavailable(f"source profile not found: {src}")
+    work_src = tdp / ("src" + src.suffix)
+    shutil.copy(src, work_src)
+    src_gam = _iccgamut_to(tdp / "src.gam", work_src, bin_dir, gres)
+
+    src_white_xyz = read_icc_wtpt(source_gamut)
+    ap_src = Appearance(src_white_xyz)
+
+    white_lab = model.predict(np.ones((1, model.n_channels))
+                              if is_additive
+                              else np.zeros((1, model.n_channels)))[0]
+    black_lab = model.predict(np.zeros((1, model.n_channels))
+                              if is_additive
+                              else np.ones((1, model.n_channels)))[0]
+    paper_xyz = lab_to_xyz(white_lab[None, :])[0]
+    ap_dst = Appearance(paper_xyz)
+    wp_jab = ap_dst.lab_to_jab(white_lab[None, :])[0]
+    bp_jab = ap_dst.lab_to_jab(black_lab[None, :])[0]
+
+    dst_gam: Path | None = None
+    dst_cloud_jab = None
+    if model.n_channels <= 4:
+        if progress:
+            progress("Gamut mapping (bit-exact): building the destination "
+                     "gamut…")
+        from workflow.profile_engine import icc_writer as icw
+        n = model.n_channels
+        a2b = icw.make_mft2(
+            n, 3, model.grid, icw.lab_to_u16(model.clut_lab()),
+            in_tables=icw.curves_to_tables(model.curves, 2048),
+            out_tables=np.tile(icw._identity_table(2048), (3, 1)))
+        spec = icw.ProfileSpec(n_channels=n, description="chromiq-dest-gamut",
+                               color_rep=getattr(meas, "color_rep", ""),
+                               wtpt=tuple(np.asarray(paper_xyz, float)))
+        work_dst = tdp / "dest.icc"
+        icw.write_profile(work_dst, spec, {"A2B0": a2b, "A2B1": "A2B0",
+                                           "A2B2": "A2B0"})
+        dst_gam = _iccgamut_to(tdp / "dest.gam", work_dst, bin_dir, gres)
+    else:
+        if progress:
+            progress("Gamut mapping (bit-exact): meshing the printer's "
+                     "colour shell…")
+        from workflow.profile_engine.gamut_map import destination_surface_lab
+        dst_lab = destination_surface_lab(model, mesh=33, ink_limit=ink_limit,
+                                          is_additive=is_additive)
+        dst_cloud_jab = ap_dst.lab_to_jab(dst_lab)
+
+    def _mk(intent: str) -> ArgyllHelperMapper:
+        return ArgyllHelperMapper(
+            src_gam=src_gam, intent=intent, mapres=mapres, ap_src=ap_src,
+            ap_dst=ap_dst, wp_jab=wp_jab, bp_jab=bp_jab, dst_gam=dst_gam,
+            dst_cloud_jab=dst_cloud_jab, td=td)
+
+    return {"B2A0": _mk("p"), "B2A2": _mk("s")}
+
+
 def fit_gammap_port_mappers(model, meas, source_gamut: Path | str,
                             settings, argyll_bin: Path | str | None,
                             progress=None, *, is_additive: bool = True,
@@ -194,9 +328,24 @@ def fit_gammap_port_mappers(model, meas, source_gamut: Path | str,
 
     bin_dir = Path(argyll_bin) if argyll_bin else Path(
         "/Applications/Argyll/bin")
+
+    # Bit-exact mode: run Argyll's real gamut mapper via the native helper
+    # (handles RGB/CMYK and CMY+N). If the binary isn't bundled, fall through
+    # to the fast Python mapper below — a build never fails for a missing
+    # helper.
+    if getattr(settings, "gammap_mode", "fast") == "argyll":
+        try:
+            return fit_gammap_argyll_mappers(
+                model, meas, source_gamut, settings, bin_dir, progress,
+                is_additive=is_additive, ink_limit=ink_limit)
+        except HelperUnavailable as exc:
+            if progress:
+                progress(f"Bit-exact Argyll helper unavailable ({exc}); "
+                         "using the fast built-in mapper.")
+
     # exact triangle geometry (most faithful, slower) vs sampled-table
-    # surfaces (near-identical, fast) — user setting, default exact
-    exact = bool(getattr(settings, "gammap_exact_geometry", True))
+    # surfaces (near-identical, fast) — retained internal lever, default fast
+    exact = bool(getattr(settings, "gammap_exact_geometry", False))
     if progress:
         progress("Gamut mapping: reading the source colour space…")
 
