@@ -270,9 +270,26 @@ def fit_gammap_argyll_mappers(model, meas, source_gamut: Path | str,
     wp_jab = ap_dst.lab_to_jab(white_lab[None, :])[0]
     bp_jab = ap_dst.lab_to_jab(black_lab[None, :])[0]
 
+    from workflow.profile_engine.gamut_map import destination_surface_lab
+
+    def _dest_cloud():
+        """Destination shell sampled from the model — the same thing colprof's
+        own get_gamut does, and the only route for CMY+N."""
+        if progress:
+            progress("Gamut mapping (bit-exact): meshing the printer's "
+                     "colour shell…")
+        dst_lab = destination_surface_lab(model, mesh=33, ink_limit=ink_limit,
+                                          is_additive=is_additive)
+        return ap_dst.lab_to_jab(dst_lab)
+
     dst_gam: Path | None = None
     dst_cloud_jab = None
     if model.n_channels <= 4:
+        # <=4 ink: prefer the iccgamut .gam colprof itself would map (byte-
+        # identical geometry). iccgamut builds a forward gamut fine for RGB,
+        # but for 4-channel devices xicc needs an inverse the A2B-only temp
+        # profile doesn't have ("Unable to locate usable conversion") — so on
+        # any iccgamut failure, fall back to the model-sampled cloud.
         if progress:
             progress("Gamut mapping (bit-exact): building the destination "
                      "gamut…")
@@ -288,15 +305,12 @@ def fit_gammap_argyll_mappers(model, meas, source_gamut: Path | str,
         work_dst = tdp / "dest.icc"
         icw.write_profile(work_dst, spec, {"A2B0": a2b, "A2B1": "A2B0",
                                            "A2B2": "A2B0"})
-        dst_gam = _iccgamut_to(tdp / "dest.gam", work_dst, bin_dir, gres)
+        try:
+            dst_gam = _iccgamut_to(tdp / "dest.gam", work_dst, bin_dir, gres)
+        except PortUnavailable:
+            dst_cloud_jab = _dest_cloud()
     else:
-        if progress:
-            progress("Gamut mapping (bit-exact): meshing the printer's "
-                     "colour shell…")
-        from workflow.profile_engine.gamut_map import destination_surface_lab
-        dst_lab = destination_surface_lab(model, mesh=33, ink_limit=ink_limit,
-                                          is_additive=is_additive)
-        dst_cloud_jab = ap_dst.lab_to_jab(dst_lab)
+        dst_cloud_jab = _dest_cloud()
 
     # For a .gam destination the iccgamut file already carries the profile's
     # white/black (exactly colprof's), so leave it untouched; only the cloud

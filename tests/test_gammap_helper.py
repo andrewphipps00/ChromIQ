@@ -106,6 +106,49 @@ def _built_binary() -> str | None:
     return None
 
 
+# --- CMYK dest-gamut fallback: iccgamut can't read an A2B-only 4-ink ICC ----
+
+def test_argyll_cmyk_falls_back_to_cloud(monkeypatch, tmp_path):
+    """<=4-ink argyll path: when iccgamut fails on the temp CMYK ICC (xicc
+    needs an inverse for 4 channels), the destination gamut is sampled from the
+    model cloud instead of silently deferring to the colprof oracle."""
+    from workflow.profile_engine.gammap_port import wire
+    from workflow.profile_engine.forward_model import fit_forward_model
+
+    fake = tmp_path / "chromiq-gammap"
+    fake.write_text("#!/bin/sh\n")
+    monkeypatch.setenv("CHROMIQ_GAMMAP", str(fake))
+
+    rng = np.random.default_rng(0)
+    dev = rng.random((80, 4))
+    lab = np.column_stack([
+        100 - 60 * dev[:, 3] - 20 * dev[:, 0],
+        40 * (dev[:, 1] - dev[:, 0]),
+        40 * (dev[:, 2] - dev[:, 1])])
+    model = fit_forward_model(dev, lab, grid=5, lam=0.05, curve_rounds=0)
+
+    clay = Path(__file__).resolve().parent.parent / "assets/profiles/ClayRGB1998.icm"
+
+    def fake_iccgamut(path, work_icc, bin_dir, detail):
+        if "dest" in Path(path).name:           # simulate the CMYK failure
+            raise wire.PortUnavailable("simulated iccgamut CMYK failure")
+        return Path(path)                        # pretend the source .gam built
+
+    monkeypatch.setattr(wire, "_iccgamut_to", fake_iccgamut)
+
+    meas = type("M", (), {"color_rep": "CMYK_XYZ", "n_channels": 4})()
+    settings = type("S", (), {"quality": "l"})()
+    out = wire.fit_gammap_argyll_mappers(
+        model, meas, clay, settings, Path("/Applications/Argyll/bin"),
+        is_additive=False, ink_limit=None)
+
+    assert set(out) == {"B2A0", "B2A2"}
+    m = out["B2A0"]
+    assert m._dst_gam is None            # not the .gam path
+    assert m._dst_cloud is not None      # the model-sampled cloud instead
+    assert m._wp_jab is not None         # cloud path needs explicit wp/bp
+
+
 # --- Settings dialog: the mode combo loads and saves gammap_mode -----------
 
 def test_settings_dialog_mode_combo_roundtrip():
