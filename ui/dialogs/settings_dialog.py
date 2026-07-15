@@ -19,6 +19,7 @@ from PyQt6.QtWidgets import (
     QLabel,
     QLineEdit,
     QPushButton,
+    QSizePolicy,
     QTabWidget,
     QVBoxLayout,
     QWidget,
@@ -554,9 +555,16 @@ class SettingsDialog(QDialog):
         self._gammap_mode_combo = NoScrollComboBox(self)
         self._gammap_mode_combo.addItem(tr("Fast"), "fast")
         self._gammap_mode_combo.addItem(tr("Bit-exact"), "argyll")
-        # Compact: size to the current item rather than a fixed wide box.
+        # Compact: size to the current item (not a fixed wide box) and drop the
+        # global 26px input min-height so it doesn't tower over the checkbox
+        # rows it sits among (CSS min-height overrides setMaximumHeight, so it
+        # has to be lowered in the stylesheet).
         self._gammap_mode_combo.setSizeAdjustPolicy(
             NoScrollComboBox.SizeAdjustPolicy.AdjustToContents)
+        self._gammap_mode_combo.setStyleSheet(
+            "QComboBox { min-height: 16px; padding: 1px 28px 1px 6px; }")
+        self._gammap_mode_combo.setSizePolicy(
+            QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed)
         gammap_mode_tip = TooltipButton(
             tr("Gamut mapping"),
             tr("This chooses how the profile engine builds the perceptual "
