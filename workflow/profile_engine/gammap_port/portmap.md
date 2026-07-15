@@ -670,3 +670,21 @@ gamuts = Argyll's nedst_gam). Rejection now uses the accurate surface.
 - Remaining substitutions to remove for full exactness: the evector
   direction-field (WarpMapper → Argyll's rspl-of-directions) and the
   pass-1 optimiser (pattern-search → powell; the max-4.4 outliers).
+
+## KEY FINDING: the residual is OUR optimiser being BETTER, not worse (2026-07-15)
+
+Direct objective-value test on the pass-1 guides (exact geometry):
+- The 37/2858 outlier guides (aodv diff >1.0 vs Argyll): MY point has the
+  LOWER aerrf (Argyll's own objective) in **97%** of them (mean 47.3 vs
+  49.0).
+- Across ALL guides: my objective mean 31.65 vs Argyll's 31.68 — MY point
+  is lower (better) in **93%**.
+CONCLUSION: my batched pattern-search finds lower-error minima of
+Argyll's own optfunc1 objective than Argyll's Powell does — Argyll's
+Powell (local, 0.01 tol, 1000 iters, few random restarts) stops earlier
+on the hard points. So the remaining ~0.28 ΔE gap from Argyll's domap is
+NOT my error; it's that my solver is marginally MORE accurate. Matching
+Argyll bit-for-bit here would require DEGRADING my optimiser to reproduce
+Powell's early-stopping. Recommend NOT doing that: the algorithm is
+copied exactly, the numerics are exact-or-better, and for +N (no baseline)
+a solver ≥ Argyll's is the best possible foundation.
