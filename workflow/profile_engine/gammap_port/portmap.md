@@ -578,3 +578,28 @@ UI #43, #44.
   of the C's nearest-based dr — refine with nearest-vertex dr); (b) my
   RSPLPASSES under expansion (xgain path) — diff per pass against the
   s-run P/A records next.
+
+## #45 saturation state + +N wiring (2026-07-15, final for this pass)
+
+- Saturation port validated stage-by-stage on the s-run in-frame dumps
+  (nsm_dump/nspasses @11:49 = the SATURATION run): pass-2 no-op 0.014 ✓,
+  naxbf exact ✓, VECADJ 0.046 vs their V ✓, their-rows-through-my-fitter
+  0.171, RSPLPASSES pass-0 temp 0.059 / clen median 0.000 ✓. Their
+  RSPLPASSES converges monotonically (pass0 0.195 → pass3 0.000).
+- Gate: **port vs domap(s) 0.654 / 5.48** (from 0.953 at first pass;
+  intent-aware tdst on the FULL dest was the −0.30 fix).
+- Remaining gap is in PASS-1 aodv, NOT the loop: my aodv vs theirs is
+  non-exp **0.368** / exp **0.739** (perceptual aodv was 0.086).
+  Confirmed NOT a weight-table bug (perceptual weights on the same target
+  give 6.5; saturation weights give 0.368 — the SAT table is right). The
+  residual is the saturation-specific pass-1 landing — most likely the
+  cusp CHROMA-EXPANSION (ccx>1 in sweights, =1 in pweights) inside
+  comp_ce shaping csv slightly differently, plus the expansion swap's
+  radial-dest approximation. Needs a csv dump from smthdump_s to pin
+  (S/csv record not yet emitted for the s-run) — the next focused step.
+- **Wiring decision**: B2A2 keeps the colprof-matched oracle for RGB/CMYK
+  (colprof-exact — no regression). For MULTI-INK (n>4) there is no colprof
+  oracle, so wire.py now returns the ported saturation mapper as B2A2 —
+  the real algorithm at 0.654 beats the closed-form family (~4–5) that
+  was the only +N saturation option before. dest/psrc surfaces are shared
+  across the two +N mappers (intent-keyed shrunk) to bound build time.

@@ -310,8 +310,11 @@ class GammapMapper:
             n = np.maximum(np.linalg.norm(d, axis=1), 1e-9)
             return pts + d * (ln / n)[:, None]
 
+        # the shrunk surface depends on the intent's weights (cvect), so it
+        # is cached per intent — dest/psrc above are intent-independent and
+        # shared across a perceptual+saturation build of the same gamuts
         ss_sh = _sampled(TriSurface(doshrink(dst_verts), dst_tris),
-                         cache=surf_cache, key="shrunk")
+                         cache=surf_cache, key=f"shrunk_{intent}")
 
         def objsh(dtp):
             return aerrf(dtp, aodv, ra, w[:, ALXPOW], w[:, ALXTHR])
