@@ -269,3 +269,28 @@ header cusps/wb):
   rext target set on it 0 (RSPLSCALE 1.8·maxext); adjust anv. Port with
   WarpMapper playing the rspl role. (2) exact evect via shrunk gamut.
   (3) find tdst setting (grep) — the aim point of corrections.
+
+### RSPLPASSES full transcription (L3100–3360) — ready to implement
+
+Setup: per point, if sv AND dv inside FULL dest → tdst=dv, nott=1 (never
+tuned); else evect=evectmap(dv) normalised, tdst = vintersect2(dest, evect,
+from dv) if sane (dist ≤ nearest+5) else nearest-on-dest. coff=0, rext=0.
+
+Per pass it∈0..3 (RSPLPASSES=4, mapsmooth=1.0, GAMMAP_RSPLAVGDEV):
+1. fit rspl `map` over (_sv → anv) at mapres;
+2. per point: temp = map(_sv); evect = evectmap(temp) norm;
+   clen = evect · (tdst − temp);
+3. per point: maxext = max_j(rw_j·(clen_j − (−20))) + (−20) over
+   neighbours (rw = UNnormalised weights!); it==0: rext += maxext if
+   rext ≤ 0 else RSPLSCALE(1.8)·maxext;
+4. tpoint = tdst + rext·evect; gains icgain=1.4, ixgain=wt.f.x·1.4,
+   fc=0.5·ic, fx=0.5·ix, tt=it/3, cgain/xgain lerp, xgain=0 for it>0;
+   gain = cgain if rext>0 else xgain;
+   cvect = gain·(tpoint − temp); coff += cvect;
+5. smooth corrections: fit rspl over (dv → coff) [gpnts p=dv v=coff...
+   verify at L3280-3320: p=dv, v=coff accumulated]; then per point:
+   coff = map2(dv) (filtered), anv = dv + naxbf·coff (L3325: cp.v scaled
+   by naxbf then anv = dv + cp.v; RSPLUSEPOW off).
+Final guides: dv_final = anv after last pass.
+Port: WarpMapper (value-field mode: target = train + field) plays both
+rspl roles; ~2 fits × 4 passes on 26k pts, grid 13–17³.
