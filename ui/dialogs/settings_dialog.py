@@ -552,10 +552,11 @@ class SettingsDialog(QDialog):
             self._on_profile_engine_clicked)
 
         self._gammap_mode_combo = NoScrollComboBox(self)
-        self._gammap_mode_combo.addItem(tr("Fast (built-in)"), "fast")
-        self._gammap_mode_combo.addItem(
-            tr("Bit-exact (Argyll's engine)"), "argyll")
-        self._gammap_mode_combo.setMinimumWidth(220)
+        self._gammap_mode_combo.addItem(tr("Fast"), "fast")
+        self._gammap_mode_combo.addItem(tr("Bit-exact"), "argyll")
+        # Compact: size to the current item rather than a fixed wide box.
+        self._gammap_mode_combo.setSizeAdjustPolicy(
+            NoScrollComboBox.SizeAdjustPolicy.AdjustToContents)
         gammap_mode_tip = TooltipButton(
             tr("Gamut mapping"),
             tr("This chooses how the profile engine builds the perceptual "
@@ -600,7 +601,7 @@ class SettingsDialog(QDialog):
         self._gammap_mode_cell = gammap_mode_cell = QWidget(self)
         _gm_row = QHBoxLayout(gammap_mode_cell)
         _gm_row.setContentsMargins(0, 0, 0, 0)
-        _gm_row.addWidget(QLabel(tr("Gamut mapping:"), self))
+        _gm_row.addWidget(QLabel(tr("Gamut mapping"), self))
         _gm_row.addWidget(self._gammap_mode_combo)
         _gm_row.addStretch()
         _gm_row.addWidget(gammap_mode_tip)
@@ -710,10 +711,10 @@ class SettingsDialog(QDialog):
 
         for i, cell in enumerate(bh_cells):
             bh.addWidget(cell, i // 2, i % 2)
-        # The gamut-mapping engine picker is a labelled combo, so it gets its
-        # own full-width row under the two-per-row checkbox grid.
+        # The gamut-mapping picker sits in the left column of its own row, so
+        # its tooltip lines up with the column-0 checkbox tooltips above it.
         _gm_row_idx = (len(bh_cells) + 1) // 2
-        bh.addWidget(gammap_mode_cell, _gm_row_idx, 0, 1, 2)
+        bh.addWidget(gammap_mode_cell, _gm_row_idx, 0)
 
         # The platform-gated print options above are constructed unconditionally
         # (their attributes are referenced by _load_settings / _save_and_close /
