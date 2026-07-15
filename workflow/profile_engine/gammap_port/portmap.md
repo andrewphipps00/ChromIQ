@@ -775,3 +775,21 @@ Argyll source root: ~/Downloads/Argyll_V3.5.0_orig
   h/numlib/icc/cgats/rspl/gamut/xicc/spectro/plot. Minimal + precise.
 - gmcloud CLI (proof): `src.gam cloud.txt mapres [wp0 wp1 wp2 bp0 bp1 bp2]`.
   Productionized contract → --src/--dst-cloud/--wp/--bp/--intent/--query/--out.
+
+## #45 pass-2 (nrdv depth-room) — PORTED then REVERTED (2026-07-16)
+
+Ported near_smooth's SECOND pass into GammapMapper: optfunc2 = comperr(dtp,
+aodv, drv, a_o, rl, dco, dxo, dcr, dxr) with comp_depth's ratios recomputed
+PER pattern-search eval (fixing them makes vd a constant → no-op, which is why
+the reference nearsmth.py's pass-2 was a no-op). Added the EXPANSION dxr branch
+the reference dropped (dxratio = (nv·maxtri_normal)² · 2/-mint, C L540).
+RESULT: it DEGRADES the saturation gate, doesn't help — median 0.574→0.637 (csv
+depth source) / 0.669 (raw sv source); 95% ~unchanged (5.54). REVERTED.
+Cause: GammapMapper reaches 0.574 via a DIFFERENT tuned pipeline (VECADJ +
+RSPL + knee sub-rows) than the C's pass1→pass2→smooth order, so slotting the
+literal pass-2 into the middle disrupts the downstream instead of helping.
+Closing the saturation tail would need restructuring the whole guide pipeline
+to the C's exact order — a large rewrite, not a slot-in. KEPT: the exact
+nearest-point swap test (TriSurface.nearest) — correct, metric-neutral. Residual
+saturation tail (95% ~5.5, fast mode +N only) stands; bit-exact +N uses the
+helper (exact). Don't re-attempt the slot-in pass-2.
