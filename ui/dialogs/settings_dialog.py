@@ -826,8 +826,11 @@ class SettingsDialog(QDialog):
                           tr("Scanner Limits"))
         self._tabs.addTab(self._scroll_wrap(self._build_paths_tab()),
                           tr("Paths"))
-        self._tabs.addTab(self._scroll_wrap(self._beta_page),
-                          tr("Beta features"))
+        self._tabs.addTab(self._scroll_wrap(self._beta_page), tr("Beta"))
+        # Six tabs don't fit at the global 130px min-width / 20px padding, so
+        # trim this tab bar's tabs enough that they all show without a scroller.
+        self._tabs.tabBar().setStyleSheet(
+            "QTabBar::tab { min-width: 78px; padding: 9px 12px; }")
 
         # ---- About / Updates (below the tabs) ----
         credit1 = QLabel(tr("ChromIQ v{APP_VERSION} · Created by Sebastian Reiprich").format(APP_VERSION=APP_VERSION), self)

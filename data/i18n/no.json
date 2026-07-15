@@ -2814,6 +2814,6 @@
   "[INFO] Bit-exact gamut mapping on a standard (≤4-ink) measurement — building with ArgyllCMS colprof directly, for a profile identical to Argyll.": "[INFO] Bit-exact gamut mapping on a standard (≤4-ink) measurement — building with ArgyllCMS colprof directly, for a profile identical to Argyll.",
   "Bit-exact": "Bit-exact",
   "Fast": "Fast",
-  "Beta features": "Beta features",
-  "Experimental features — enabled at your own risk. Verify every result before you rely on it.": "Experimental features — enabled at your own risk. Verify every result before you rely on it."
+  "Experimental features — enabled at your own risk. Verify every result before you rely on it.": "Experimental features — enabled at your own risk. Verify every result before you rely on it.",
+  "Beta": "Beta"
 }
