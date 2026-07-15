@@ -511,52 +511,43 @@ class SettingsDialog(QDialog):
         )
         engine_tip = TooltipButton(
             tr("ChromIQ Profile Engine (beta)"),
-            tr("Adds a second way to turn a measured chart into an ICC profile: "
-            "a profile builder that lives inside ChromIQ itself, next to the "
-            "proven Argyll colprof.\n\n"
-            "Why would you want that? One reason above all: printers with EXTRA "
-            "INKS. colprof can build profiles for RGB and CMYK printers, but not "
-            "for a CMYK printer with orange, green or violet channels. The "
-            "ChromIQ engine can. Together with the multi-ink charts from Create "
-            "Chart, this closes the loop: print a multi-ink chart, measure it, "
-            "and build a working profile for that printer — entirely inside "
-            "ChromIQ.\n\n"
-            "What changes when this option is ON:\n\n"
-            "  • The Build Profile tab gets a small \"Profile engine\" choice "
-            "above the Build button: Argyll colprof (still the default) or "
-            "ChromIQ engine (beta). Your saved defaults and presets remember "
-            "the choice.\n\n"
-            "  • Measurements from multi-ink charts are built with the ChromIQ "
-            "engine automatically — colprof cannot process them at all.\n\n"
-            "  • For RGB and CMYK measurements you can pick either engine and "
-            "compare: same measurement, one profile from each, nothing is "
-            "overwritten unless the file names collide.\n\n"
-            "The engine takes every build this tab can set up — the same "
-            "quality levels, gamut sources and rendering choices, spectral "
-            "illuminants and observers, paper-whitener compensation, ICC "
-            "attributes and all the expert switches. Where colprof refuses "
-            "something (a matrix profile type for a printer, whitener "
-            "compensation with an instrument that has no UV light), the "
-            "engine explains the same limit. Only a hand-typed extra "
-            "command-line flag the engine doesn't recognise sends that build "
-            "to colprof, and the log names the flag.\n\n"
-            "Honest expectations while this is beta: colour accuracy measures "
-            "at the same level as colprof on our test data — often slightly "
-            "better. The perceptual and saturation renderings are matched to "
-            "colprof's own: for RGB and CMYK measurements the engine runs "
-            "colprof quietly in the background and reproduces its rendering "
-            "(the difference measures within colprof's own build-to-build "
-            "variation). Multi-ink profiles anchor their tone reproduction "
-            "and black usage the same way, through the printer's CMYK "
-            "behaviour; only the extra-ink colour range — which colprof has "
-            "never seen — follows the engine's own maths. Treat the first "
-            "multi-ink profiles as working profiles: verify with a test "
-            "print before a big production run.\n\n"
-            "When this option is OFF (the default), ChromIQ behaves exactly as "
-            "it always has — every profile is built by Argyll colprof."),
+            tr("A profile builder that lives inside ChromIQ itself.\n\n"
+            "While this option is ON, clicking Build Profile runs the "
+            "ChromIQ engine instead of Argyll colprof — same tab, same "
+            "buttons, same options, nothing new to learn. Turn the option "
+            "OFF and every profile is built by colprof again, exactly as "
+            "before.\n\n"
+            "Why would you want it? One reason above all: printers with "
+            "EXTRA INKS. colprof can build profiles for RGB and CMYK "
+            "printers, but not for a CMYK printer with orange, green or "
+            "violet channels. The ChromIQ engine can. Together with the "
+            "multi-ink charts from Create Chart this closes the loop "
+            "entirely inside ChromIQ: print a multi-ink chart, measure "
+            "it, build a working profile.\n\n"
+            "What to expect:\n\n"
+            "  • The engine understands every option on the Build Profile "
+            "tab — quality levels, gamut sources, rendering intents, "
+            "spectral illuminants and observers, paper-whitener "
+            "compensation, ICC attributes and all the expert switches.\n\n"
+            "  • Its colour rendering is computed by ChromIQ's own port "
+            "of Argyll's gamut-mapping algorithm. On our test data the "
+            "results measure within colprof's normal build-to-build "
+            "variation — you should not be able to tell the profiles "
+            "apart in print.\n\n"
+            "  • If a build needs something only colprof has (for example "
+            "a hand-typed extra flag the engine doesn't recognise), that "
+            "build is quietly handed to colprof and the log tells you "
+            "why.\n\n"
+            "  • Your measurement files are never changed by either "
+            "engine.\n\n"
+            "Turning the option on shows this information once more and "
+            "asks you to confirm — it is still a beta, so please verify "
+            "your first profiles with a test print."),
             self,
             min_width=680,
         )
+        self._profile_engine_check.clicked.connect(
+            self._on_profile_engine_clicked)
 
         self._native_print_check = QCheckBox(tr("Use default macOS printer dialog"), self)
         native_tip = TooltipButton(
@@ -835,6 +826,83 @@ class SettingsDialog(QDialog):
     _MARGIN_INSTRUMENTS = ("i1Pro", "i1Pro 3+", "ColorMunki", "SpectroScan")
     _MARGIN_PAPERS = ("A4", "Letter", "Legal", "A3", "A3+", "A2", "Tabloid")
     _MARGIN_ORIENTS = ("Portrait", "Landscape")
+
+    def _on_profile_engine_clicked(self, checked: bool) -> None:
+        """Friendly beta consent dialog when the engine is switched on."""
+        if not checked:
+            return
+        from PyQt6.QtWidgets import QMessageBox, QSpacerItem, QSizePolicy
+        box = QMessageBox(self)
+        box.setWindowTitle(tr("ChromIQ Profile Engine (beta)"))
+        box.setIcon(QMessageBox.Icon.NoIcon)   # no exclamation mark
+        box.setText(tr(
+            "Great choice — you're switching on the ChromIQ profile "
+            "engine. Here's exactly what that does, in plain terms, so "
+            "there are no surprises.\n\n"
+            "The short version: from now on, when you click Build Profile, "
+            "ChromIQ builds the ICC profile itself instead of handing the "
+            "job to Argyll colprof. Everything else stays where it is — "
+            "the same tab, the same buttons, the same options. You don't "
+            "have to change how you work.\n\n"
+            "The big new thing this unlocks:\n\n"
+            "•  Printers with extra inks. colprof can only build profiles "
+            "for RGB and CMYK printers. If your printer adds orange, "
+            "green, violet or other inks on top of CMYK, colprof simply "
+            "can't make a profile for it — but the ChromIQ engine can. "
+            "Print one of the multi-ink charts from Create Chart, measure "
+            "it, and build a real, working profile for that printer, all "
+            "without leaving ChromIQ.\n\n"
+            "What stays exactly the same:\n\n"
+            "•  Every option on the Build Profile tab still works — the "
+            "quality levels, the gamut source, the rendering intents, "
+            "spectral illuminants and observers, paper-whitener "
+            "compensation, the ICC attributes and all the expert "
+            "switches. Nothing is taken away.\n\n"
+            "•  The colours match colprof. The engine's perceptual "
+            "rendering is ChromIQ's own careful port of Argyll's "
+            "gamut-mapping maths, and on our test charts the two build "
+            "profiles that measure so close you shouldn't be able to tell "
+            "them apart in a print.\n\n"
+            "•  Your measurements are never touched. If a particular build "
+            "needs something only colprof has, ChromIQ quietly lets "
+            "colprof handle that one and writes the reason in the log — "
+            "you don't have to do anything.\n\n"
+            "•  You're always one click from going back. Switch this "
+            "option off and ChromIQ returns to building every profile "
+            "with colprof, exactly as before.\n\n"
+            "One honest note: this engine is still in beta. It's held up "
+            "well in our testing, but please treat your first few profiles "
+            "as trial runs — check them with a test print before you "
+            "commit to a big or important job. If anything ever looks "
+            "off, just turn the option back off and tell us what you saw; "
+            "every report genuinely helps make it better.\n\n"
+            "Ready to give it a go?"))
+        box.setStandardButtons(QMessageBox.StandardButton.Ok
+                               | QMessageBox.StandardButton.Cancel)
+        ok_btn = box.button(QMessageBox.StandardButton.Ok)
+        cancel_btn = box.button(QMessageBox.StandardButton.Cancel)
+        ok_btn.setText(tr("Enable the engine"))
+        cancel_btn.setText(tr("Keep using colprof"))
+        # Size each button to its own label so the text never clips
+        # (QMessageBox default min-width is too narrow for wide labels).
+        from PyQt6.QtGui import QFontMetrics
+        from PyQt6.QtWidgets import QDialogButtonBox
+        for b in (ok_btn, cancel_btn):
+            w = QFontMetrics(b.font()).horizontalAdvance(b.text()) + 44
+            b.setMinimumWidth(w)
+        bbox = box.findChild(QDialogButtonBox)
+        if bbox is not None:
+            bbox.setCenterButtons(True)
+        grid = box.layout()
+        if grid is not None:
+            # widen the box: a full-width spacer row under the text
+            spacer = QSpacerItem(620, 1, QSizePolicy.Policy.Minimum,
+                                 QSizePolicy.Policy.Minimum)
+            grid.addItem(spacer, grid.rowCount(), 0, 1,
+                         grid.columnCount())
+        box.setDefaultButton(QMessageBox.StandardButton.Ok)
+        if box.exec() != QMessageBox.StandardButton.Ok:
+            self._profile_engine_check.setChecked(False)
 
     def _build_paths_tab(self) -> QWidget:
         """Every folder ChromIQ reads or writes, in one place (Knut, #108):

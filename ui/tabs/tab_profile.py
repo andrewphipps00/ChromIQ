@@ -462,47 +462,6 @@ class TabProfile(QWidget):
         self._build_state_box = build_box
         cc.addWidget(build_box)
 
-        # --- Profile engine selector (#122) — only visible when the beta
-        # setting is on; colprof stays the default in every state. ---------
-        self._engine_row_widget = QWidget(colprof_container)
-        engine_row = QHBoxLayout(self._engine_row_widget)
-        engine_row.setContentsMargins(0, 4, 0, 0)
-        engine_row.setSpacing(6)
-        engine_row.addStretch()
-        engine_row.addWidget(QLabel(tr("Profile engine:"),
-                                    self._engine_row_widget))
-        self._engine_combo = NoScrollComboBox(self._engine_row_widget)
-        self._engine_combo.addItem(tr("Argyll colprof (default)"), "colprof")
-        self._engine_combo.addItem(tr("ChromIQ engine (beta)"), "engine")
-        engine_row.addWidget(self._engine_combo)
-        engine_tip = TooltipButton(
-            tr("Profile Engine"),
-            tr("Chooses the maths that turns your measurement into the ICC "
-            "profile.\n\n"
-            "• Argyll colprof (default) — the proven engine behind every "
-            "ChromIQ profile so far.\n\n"
-            "• ChromIQ engine (beta) — built into the app. It accepts every "
-            "option on this tab, matches colprof's accuracy AND its "
-            "perceptual/saturation rendering on our test data, and adds "
-            "what colprof can't do: profiles for multi-ink printers (CMYK "
-            "plus orange, green, violet…) — those measurements use it "
-            "automatically.\n\n"
-            "Pick it here to compare engines on the same measurement: one "
-            "profile from each, nothing overwritten unless the file names "
-            "collide. Only a hand-typed extra colprof flag the engine "
-            "doesn't recognise sends that build back to colprof (the log "
-            "names it), and where colprof would refuse an option — a matrix "
-            "profile type for a printer, whitener compensation without a "
-            "UV-capable instrument — the engine explains the same limit.\n\n"
-            "Switching engines never changes your measurement files, and "
-            "\"Save as Defaults\" plus your presets remember the choice."),
-            self._engine_row_widget,
-            min_width=560,
-        )
-        engine_row.addWidget(engine_tip)
-        engine_row.addStretch()
-        self._engine_row_widget.setVisible(False)
-        cc.addWidget(self._engine_row_widget)
 
         btn_row = QHBoxLayout()
         self._build_btn = QPushButton(tr("Build Profile"), colprof_container)
@@ -545,17 +504,6 @@ class TabProfile(QWidget):
     # Calibration mode
     # ------------------------------------------------------------------
 
-    def refresh_profile_engine_option(self) -> None:
-        """Show/hide the engine selector per the beta setting (#122)."""
-        beta = bool(self._settings.get("profile_engine_beta", False))
-        self._engine_row_widget.setVisible(beta)
-        if not beta:
-            self._engine_combo.setCurrentIndex(0)   # back to colprof
-        else:
-            saved = self._settings.get("profile_engine_choice", "colprof")
-            idx = self._engine_combo.findData(saved)
-            self._engine_combo.setCurrentIndex(max(idx, 0))
-
     def _resolve_engine(self, params: ProfileParams) -> str:
         """Which engine builds this measurement: ``"colprof"``, ``"engine"``,
         or ``"blocked"`` (multi-ink without the beta setting)."""
@@ -567,7 +515,7 @@ class TabProfile(QWidget):
                     "build these, using the ChromIQ engine."))
                 return "engine"
             return "blocked"
-        if beta and self._engine_combo.currentData() == "engine":
+        if beta:
             ok, why = engine_support(params)
             if ok:
                 return "engine"
@@ -1842,7 +1790,6 @@ class TabProfile(QWidget):
             "no_output_shaper":    self._m_no_output_cb.isChecked(),
             "no_grid_pos":         self._m_no_grid_pos_cb.isChecked(),
             "no_embedded":         self._m_no_embedded_cb.isChecked(),
-            "profile_engine":      self._engine_combo.currentData() or "colprof",
         }
 
     def _m_apply_preset_data(self, data: dict) -> None:
@@ -1891,12 +1838,6 @@ class TabProfile(QWidget):
         self._m_no_output_cb.setChecked(bool(data.get("no_output_shaper", False)))
         self._m_no_grid_pos_cb.setChecked(bool(data.get("no_grid_pos",   False)))
         self._m_no_embedded_cb.setChecked(bool(data.get("no_embedded",   False)))
-        # Engine choice (#122): honoured only while the beta setting is on —
-        # with it off the selector is hidden and colprof always builds.
-        if bool(self._settings.get("profile_engine_beta", False)):
-            idx = self._engine_combo.findData(
-                data.get("profile_engine", "colprof"))
-            self._engine_combo.setCurrentIndex(max(idx, 0))
 
     def _on_m_preset_selected(self, index: int) -> None:
         self._m_preset_del_btn.setEnabled(index > 0)
@@ -4086,8 +4027,6 @@ class TabProfile(QWidget):
             s.set("manual2_colprof_no_output_shaper",   self._m_no_output_cb.isChecked())
             s.set("manual2_colprof_no_grid_pos",        self._m_no_grid_pos_cb.isChecked())
             s.set("manual2_colprof_no_embedded",        self._m_no_embedded_cb.isChecked())
-        # Shared between both modes (#122): the engine choice.
-        s.set("profile_engine_choice", self._engine_combo.currentData() or "colprof")
         self._log.appendPlainText("Profile settings saved as defaults.")
         self._log.ensureCursorVisible()
 
