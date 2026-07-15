@@ -480,18 +480,21 @@ class TabProfile(QWidget):
             tr("Chooses the maths that turns your measurement into the ICC "
             "profile.\n\n"
             "• Argyll colprof (default) — the proven engine behind every "
-            "ChromIQ profile so far. The best choice for RGB and CMYK "
-            "measurements, and the only one for advanced options like "
-            "spectral illuminants or FWA.\n\n"
-            "• ChromIQ engine (beta) — built into the app. Its strength is "
-            "multi-ink printers (CMYK plus orange, green, violet…), which "
-            "colprof cannot profile at all — those measurements use it "
-            "automatically. For RGB and CMYK you can pick it here and "
-            "compare engines on the same measurement.\n\n"
-            "The ChromIQ engine only takes a build it can do without losing "
-            "anything: if an option on this tab needs colprof, ChromIQ says "
-            "so in the log and builds with colprof instead.\n\n"
-            "Switching engines never changes your measurement files."),
+            "ChromIQ profile so far.\n\n"
+            "• ChromIQ engine (beta) — built into the app. It accepts every "
+            "option on this tab, matches colprof's accuracy on our test "
+            "data, and adds what colprof can't do: profiles for multi-ink "
+            "printers (CMYK plus orange, green, violet…) — those "
+            "measurements use it automatically.\n\n"
+            "Pick it here to compare engines on the same measurement: one "
+            "profile from each, nothing overwritten unless the file names "
+            "collide. Only a hand-typed extra colprof flag the engine "
+            "doesn't recognise sends that build back to colprof (the log "
+            "names it), and where colprof would refuse an option — a matrix "
+            "profile type for a printer, whitener compensation without a "
+            "UV-capable instrument — the engine explains the same limit.\n\n"
+            "Switching engines never changes your measurement files, and "
+            "\"Save as Defaults\" plus your presets remember the choice."),
             self._engine_row_widget,
             min_width=560,
         )
@@ -547,6 +550,10 @@ class TabProfile(QWidget):
         self._engine_row_widget.setVisible(beta)
         if not beta:
             self._engine_combo.setCurrentIndex(0)   # back to colprof
+        else:
+            saved = self._settings.get("profile_engine_choice", "colprof")
+            idx = self._engine_combo.findData(saved)
+            self._engine_combo.setCurrentIndex(max(idx, 0))
 
     def _resolve_engine(self, params: ProfileParams) -> str:
         """Which engine builds this measurement: ``"colprof"``, ``"engine"``,
@@ -1834,6 +1841,7 @@ class TabProfile(QWidget):
             "no_output_shaper":    self._m_no_output_cb.isChecked(),
             "no_grid_pos":         self._m_no_grid_pos_cb.isChecked(),
             "no_embedded":         self._m_no_embedded_cb.isChecked(),
+            "profile_engine":      self._engine_combo.currentData() or "colprof",
         }
 
     def _m_apply_preset_data(self, data: dict) -> None:
@@ -1882,6 +1890,12 @@ class TabProfile(QWidget):
         self._m_no_output_cb.setChecked(bool(data.get("no_output_shaper", False)))
         self._m_no_grid_pos_cb.setChecked(bool(data.get("no_grid_pos",   False)))
         self._m_no_embedded_cb.setChecked(bool(data.get("no_embedded",   False)))
+        # Engine choice (#122): honoured only while the beta setting is on —
+        # with it off the selector is hidden and colprof always builds.
+        if bool(self._settings.get("profile_engine_beta", False)):
+            idx = self._engine_combo.findData(
+                data.get("profile_engine", "colprof"))
+            self._engine_combo.setCurrentIndex(max(idx, 0))
 
     def _on_m_preset_selected(self, index: int) -> None:
         self._m_preset_del_btn.setEnabled(index > 0)
@@ -4071,6 +4085,8 @@ class TabProfile(QWidget):
             s.set("manual2_colprof_no_output_shaper",   self._m_no_output_cb.isChecked())
             s.set("manual2_colprof_no_grid_pos",        self._m_no_grid_pos_cb.isChecked())
             s.set("manual2_colprof_no_embedded",        self._m_no_embedded_cb.isChecked())
+        # Shared between both modes (#122): the engine choice.
+        s.set("profile_engine_choice", self._engine_combo.currentData() or "colprof")
         self._log.appendPlainText("Profile settings saved as defaults.")
         self._log.ensureCursorVisible()
 

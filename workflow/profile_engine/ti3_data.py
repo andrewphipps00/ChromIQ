@@ -158,9 +158,14 @@ def read_ti3(path: Path | str) -> Ti3Measurement:
     if not device_rep:
         raise Ti3Error(f"{p.name}: no COLOR_REP keyword — cannot identify "
                        "the device channels.")
-    prefix = device_rep + "_"
+    if device_rep in ("K", "W"):
+        # Grayscale charts (targen -d0): COLOR_REP "K"/"W" with GRAY_* fields.
+        prefix = "GRAY_"
+        letters = [device_rep]
+    else:
+        prefix = device_rep + "_"
+        letters = split_rep_letters(device_rep)
     dev_fields = [f for f in fields if f.startswith(prefix)]
-    letters = split_rep_letters(device_rep)
     want = [prefix + letter for letter in letters]
     if dev_fields != want:
         # Order in the file is authoritative as long as the set matches.

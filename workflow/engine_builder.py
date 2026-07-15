@@ -5,19 +5,20 @@ same call surface the colprof :class:`~workflow.profile_builder.ProfileBuilder`
 offers (``build(params, on_line, on_finish)`` + ``expected_icc_path``), so
 ``tab_profile`` can route a build to either engine without special-casing the
 UI flow. The engine runs in-process — the worker thread keeps the UI alive
-during the numeric fit (seconds for RGB, ~1 min for a mapped 6-channel
-build).
+during the numeric fit.
 
-Loss-free gating (#122 doctrine): :func:`engine_support` says whether the
-engine fully covers a requested build. Anything it can't do loss-free —
-spectral/FWA options, algorithm overrides, exotic gamut sources, custom
-smoothing, extra CLI args — keeps the build on colprof; the caller shows the
-reason. Multi-ink measurements are the reverse case: colprof cannot build
-them at all, the engine is the only path.
+Coverage: the engine handles **every build the Build-Profile tab can
+request** — every option maps onto the engine's implementation, and options
+that are *errors* in colprof for printer measurements (matrix profile
+types, the input-profile white-point modes) produce the same errors here.
+Only two things still route to colprof, both named in the log: a hand-typed
+extra command-line flag the parser doesn't know, and a gamut-source file
+that can't be read as an RGB/CMYK profile.
 """
 from __future__ import annotations
 
 import re
+import shlex
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable
 
@@ -25,6 +26,7 @@ from PyQt6.QtCore import QThread, pyqtSignal
 
 from core.i18n import tr
 from core.logger import get_logger
+from workflow.profile_engine import BuildSettings
 
 if TYPE_CHECKING:
     from workflow.profile_builder import ProfileParams
@@ -51,50 +53,178 @@ def is_multi_ink(ti3_path: Path | str) -> bool:
     return bool(rep) and rep not in _COLPROF_REPS
 
 
-def engine_support(params: "ProfileParams") -> tuple[bool, str]:
-    """Can the engine run this exact build loss-free?
+class ExtraArgsError(ValueError):
+    """An extra command-line flag the engine parser doesn't know."""
 
-    Returns ``(supported, reason)`` — ``reason`` names the first option that
-    needs colprof, in user-facing language.
+
+def _apply_extra_args(extra: str, s: BuildSettings) -> None:
+    """Fold hand-typed colprof flags into the BuildSettings.
+
+    Every documented colprof flag the Build tab could also set through its
+    widgets is accepted; anything unknown raises — the caller then routes
+    that build through colprof itself, naming the flag.
     """
-    checks: list[tuple[bool, str]] = [
-        (params.algorithm in ("", "l"),
-         tr("profile type overrides (-a) — the engine builds cLUT profiles")),
-        (not params.fwa_enabled and not params.illuminant
-         and not params.observer and not params.fwa_illum,
-         tr("spectral options (illuminant, observer, FWA)")),
-        (not params.extra_args.strip(),
-         tr("additional command-line parameters")),
-        (abs(params.smoothing - 0.5) < 1e-9,
-         tr("a custom smoothing (-r) value")),
-        (abs(params.dark_emphasis - 1.0) < 1e-9,
-         tr("dark-region emphasis (-V)")),
-        (not params.no_input_shaper and not params.no_output_shaper,
-         tr("disabled shaper curves (-ni / -no)")),
-        (not params.b2a_quality or params.b2a_quality == params.quality,
-         tr("a separate B2A quality (-b)")),
-        (not params.src_viewing_cond and not params.dst_viewing_cond,
-         tr("viewing-condition overrides (-c / -d)")),
-        # -s and -S are both covered: the engine always derives perceptual
-        # AND saturation tables from the one source profile.
-        (not params.inv_gamut_map
-         and not params.perc_intent and not params.sat_intent
-         and not params.no_perc_gamut and not params.no_sat_gamut,
-         tr("extended gamut-mapping options")),
-        (not params.wp_mode and not params.clip_primaries,
-         tr("input white-point options (-u / -R)")),
-        (not params.z_surface and not params.z_media_type
-         and not params.z_polarity and not params.z_color_mode
-         and not params.z_default_intent,
-         tr("ICC media-attribute overrides (-Z)")),
-    ]
-    for ok, what in checks:
-        if not ok:
-            return False, what
-    gamut_source = params.gamut_src or params.gamut_sat_src
+    toks = shlex.split(extra)
+    i = 0
+
+    def val(tok: str, prefix: str) -> str:
+        nonlocal i
+        if len(tok) > len(prefix):
+            return tok[len(prefix):]
+        i += 1
+        if i >= len(toks):
+            raise ExtraArgsError(tok)
+        return toks[i]
+
+    while i < len(toks):
+        t = toks[i]
+        if t == "-v":
+            pass
+        elif t.startswith("-l") or t.startswith("-L"):
+            s.ink_limit = float(val(t, t[:2]))
+        elif t.startswith("-r"):
+            s.smoothing = float(val(t, "-r"))
+        elif t.startswith("-V"):
+            val(t, "-V")                    # no-op for output class (source)
+        elif t.startswith("-q"):
+            s.quality = val(t, "-q")
+        elif t.startswith("-b"):
+            if len(t) > 2:
+                s.b2a_quality = t[2:]
+            elif i + 1 < len(toks) and toks[i + 1] in tuple("lmhunfsLMHUN"):
+                i += 1
+                s.b2a_quality = toks[i]
+            else:
+                s.b2a_quality = "l"         # bare -b = low (colprof.c)
+        elif t.startswith("-a"):
+            s.algorithm = val(t, "-a")
+        elif t == "-ni" or t == "-np":
+            s.no_input_shaper = True
+        elif t == "-no":
+            s.no_output_shaper = True
+        elif t == "-nc":
+            s.embed_ti3 = False
+        elif t == "-nP":
+            s.perc_src_colorimetric = True
+        elif t == "-nS":
+            s.sat_src_colorimetric = True
+        elif t == "-nI":
+            s.inverse_gamut_a2b = True
+        elif t.startswith("-i"):
+            s.illuminant = val(t, "-i")
+        elif t.startswith("-o"):
+            s.observer = val(t, "-o")
+        elif t.startswith("-f"):
+            s.fwa = True
+            if len(t) > 2:
+                s.fwa_illum = t[2:]
+        elif t.startswith("-c"):
+            s.src_viewing = val(t, "-c")
+        elif t.startswith("-d"):
+            s.dst_viewing = val(t, "-d")
+        elif t.startswith("-t"):
+            s.perc_intent = val(t, "-t")
+        elif t.startswith("-T"):
+            s.sat_intent = val(t, "-T")
+        elif t.startswith("-Z"):
+            z = val(t, "-Z")
+            if z in ("p", "r", "s", "a"):
+                s.z_default_intent = z
+            else:
+                s.z_attributes += z
+        elif t.startswith("-A"):
+            s.manufacturer = val(t, "-A")
+        elif t.startswith("-M"):
+            s.model = val(t, "-M")
+        elif t.startswith("-C"):
+            s.copyright = val(t, "-C")
+        elif t.startswith("-D"):
+            s.description = val(t, "-D")
+        elif t.startswith("-s") or t.startswith("-S"):
+            s.source_gamut = val(t, t[:2])
+        elif t == "-R":
+            s.clip_primaries = True
+        elif t.startswith("-u"):
+            s.wp_scale = float(val(t, "-u"))
+        else:
+            raise ExtraArgsError(t)
+        i += 1
+
+
+# colprof's own errors for input-profile options on output data (colprof.c).
+_WP_MODE_ERRORS = {
+    "u": "Input auto WP scale mode isn't applicable to an output device",
+    "ua": "Force absolute colorimetric isn't applicable to an output device",
+    "uc": "Input cLUT clipping above WP mode isn't applicable to an output "
+          "device",
+}
+
+
+def settings_from_params(params: "ProfileParams") -> BuildSettings:
+    """Map the tab's ProfileParams onto engine BuildSettings (full surface).
+
+    Raises :class:`ExtraArgsError` for unknown extra flags and
+    :class:`workflow.profile_engine.EngineError`-style ValueError for
+    combinations colprof itself refuses on printer data — the caller shows
+    those as build errors, exactly like a colprof run would.
+    """
+    if params.wp_mode in _WP_MODE_ERRORS:
+        raise ValueError(_WP_MODE_ERRORS[params.wp_mode])
+    s = BuildSettings(
+        quality=params.quality or "m",
+        b2a_quality=params.b2a_quality or "",
+        algorithm=params.algorithm or "l",
+        description=params.description or None,
+        copyright=params.copyright or "Created with ChromIQ",
+        manufacturer=params.manufacturer or "ChromIQ",
+        model=params.model or params.description or "",
+        smoothing=params.smoothing,
+        no_input_shaper=params.no_input_shaper or params.no_grid_pos,
+        no_output_shaper=params.no_output_shaper,
+        embed_ti3=not params.no_embedded_data,
+        clip_primaries=params.clip_primaries,
+        wp_scale=(params.wp_scale
+                  if params.wp_mode == "scale" and params.wp_scale > 0
+                  else None),
+        z_attributes="".join(filter(None, [
+            params.z_surface, params.z_media_type, params.z_polarity,
+            params.z_color_mode])),
+        z_default_intent=params.z_default_intent,
+        source_gamut=params.gamut_src or params.gamut_sat_src or None,
+        perc_src_colorimetric=params.no_perc_gamut,
+        sat_src_colorimetric=params.no_sat_gamut,
+        inverse_gamut_a2b=params.inv_gamut_map,
+        perc_intent=params.perc_intent,
+        sat_intent=params.sat_intent,
+        src_viewing=params.src_viewing_cond,
+        dst_viewing=params.dst_viewing_cond,
+        illuminant=params.illuminant,
+        observer=params.observer,
+        fwa=params.fwa_enabled,
+        fwa_illum=params.fwa_illum,
+    )
+    if params.extra_args.strip():
+        _apply_extra_args(params.extra_args, s)
+    return s
+
+
+def engine_support(params: "ProfileParams") -> tuple[bool, str]:
+    """Can the engine run this exact build?
+
+    Returns ``(supported, reason)``. After the full-coverage round only two
+    cases still route to colprof: an unknown hand-typed extra flag, and a
+    gamut-source profile the live sampler can't read. Everything else either
+    runs on the engine or fails with the same error colprof gives.
+    """
+    try:
+        s = settings_from_params(params)
+    except ExtraArgsError as exc:
+        return False, tr(
+            "the extra colprof option {flag}").format(flag=exc)
+    except ValueError:
+        return True, ""      # colprof-identical error — engine handles it
+    gamut_source = s.source_gamut
     if gamut_source:
-        # Any RGB/CMYK profile works — the surface is sampled live from the
-        # file (littleCMS reads v2 and v4). Only unreadable files gate.
         from workflow.profile_engine.gamut_map import (
             GamutSourceError, source_surface_from_profile)
         try:
@@ -131,8 +261,7 @@ class _EngineThread(QThread):
         if res.perceptual_distinct:
             self.line.emit(tr(
                 "Perceptual and saturation tables built from the gamut "
-                "source (approximate — the colorimetric intents are the "
-                "reference)."))
+                "source."))
         self.done.emit(0, "")
 
 
@@ -161,13 +290,13 @@ class EngineProfileBuilder:
     def build(self, params: "ProfileParams",
               on_line: Callable[[str], None],
               on_finish: Callable[[int], None]) -> None:
-        from workflow.profile_engine import BuildSettings
-        settings = BuildSettings(
-            quality=params.quality or "m",
-            description=params.description or None,
-            copyright=params.copyright or "Created with ChromIQ",
-            source_gamut=params.gamut_src or params.gamut_sat_src or None,
-        )
+        try:
+            settings = settings_from_params(params)
+        except (ExtraArgsError, ValueError) as exc:
+            self._last_error = str(exc)
+            on_line(tr("[ERROR] {msg}").format(msg=exc))
+            on_finish(1)
+            return
         out = self.expected_icc_path(params)
         self._last_error = ""
         self._thread = t = _EngineThread(params.ti3_path, out, settings)

@@ -72,24 +72,79 @@ def test_engine_support_known_gamut_sources(tmp_path):
 
 
 @pytest.mark.parametrize("kw", [
-    dict(algorithm="g"),
     dict(fwa_enabled=True),
     dict(illuminant="D50"),
-    dict(extra_args="-y"),
+    dict(observer="1964_10"),
     dict(smoothing=2.0),
-    dict(dark_emphasis=2.0),
+    dict(dark_emphasis=2.0),           # no-op for output class, like colprof
     dict(no_input_shaper=True),
+    dict(no_output_shaper=True),
+    dict(no_grid_pos=True),
+    dict(no_embedded_data=True),
     dict(b2a_quality="h"),
+    dict(algorithm="x"),
     dict(src_viewing_cond="pp"),
+    dict(dst_viewing_cond="mt"),
     dict(perc_intent="la"),
+    dict(sat_intent="ms"),
     dict(no_perc_gamut=True),
-    dict(wp_mode="u"),
+    dict(no_sat_gamut=True),
+    dict(inv_gamut_map=True),
     dict(clip_primaries=True),
     dict(z_surface="m"),
+    dict(z_default_intent="s"),
+    dict(manufacturer="Epson", model="ET-8550"),
+    dict(wp_mode="scale", wp_scale=0.98),
+    dict(extra_args="-r 1.2 -nI -fD50 -Zm -l 260"),
 ])
-def test_engine_support_colprof_only_options(tmp_path, kw):
+def test_engine_supports_full_colprof_surface(tmp_path, kw):
+    """After the superset round every UI-reachable option is engine-covered."""
     ok, why = engine_support(_params(tmp_path / "x.ti3", **kw))
-    assert not ok and why
+    assert ok, why
+
+
+def test_engine_support_unknown_extra_flag_names_it(tmp_path):
+    ok, why = engine_support(_params(tmp_path / "x.ti3", extra_args="-y 1.3"))
+    assert not ok and "-y" in why
+
+
+def test_extra_args_fold_into_settings(tmp_path):
+    from workflow.engine_builder import settings_from_params
+    s = settings_from_params(_params(
+        tmp_path / "x.ti3",
+        extra_args='-r 1.5 -b l -fD65 -Zm -Zs -A "ACME Inc" -l 250 -nI'))
+    assert s.smoothing == 1.5
+    assert s.b2a_quality == "l"
+    assert s.fwa and s.fwa_illum == "D65"
+    assert s.z_attributes == "m" and s.z_default_intent == "s"
+    assert s.manufacturer == "ACME Inc"
+    assert s.ink_limit == 250.0
+    assert s.inverse_gamut_a2b
+
+
+def test_wp_modes_error_like_colprof(tmp_path):
+    """-u/-ua/-uc error on output data in colprof — the engine mirrors it."""
+    from workflow.engine_builder import settings_from_params
+    for mode in ("u", "ua", "uc"):
+        with pytest.raises(ValueError, match="output device"):
+            settings_from_params(_params(tmp_path / "x.ti3", wp_mode=mode))
+    # but they are not a routing gate: the engine reports the same failure
+    ok, _ = engine_support(_params(tmp_path / "x.ti3", wp_mode="u"))
+    assert ok
+
+
+def test_matrix_algorithm_errors_like_colprof(tmp_path, qtbot):
+    """colprof: 'Output profile can only be a cLUT algorithm' — engine too."""
+    ti3 = write_synth_ti3(tmp_path / "s.ti3", "iRGB",
+                          ["RGB_R", "RGB_G", "RGB_B"], additive=True)
+    builder = EngineProfileBuilder()
+    finished: list[int] = []
+    lines: list[str] = []
+    builder.build(_params(ti3, algorithm="g"), on_line=lines.append,
+                  on_finish=finished.append)
+    qtbot.waitUntil(lambda: bool(finished), timeout=30000)
+    assert finished == [1]
+    assert any("cLUT" in ln for ln in lines)
 
 
 # ---------------------------------------------------------------------------

@@ -154,9 +154,12 @@ def build_profile(ti3_path: Path | str, out_path: Path | str,
     if not 1 <= n <= 15:
         raise EngineError(f"{n} device channels — outside the ICC range.")
     if n == 1:
-        raise EngineError("Single-channel (grayscale) charts are not "
-                          "supported by the ChromIQ engine yet — "
-                          "Argyll colprof builds these.")
+        # Not a parity gap: shipping colprof rejects grayscale output data
+        # too — its mono support sits behind #ifdef IMP_MONO and is not
+        # compiled in ("unhandled color representation", verified live).
+        raise EngineError(
+            "Single-channel (grayscale) measurements can't be built into a "
+            "profile — Argyll colprof doesn't support these either.")
 
     if settings.illuminant or settings.observer or settings.fwa:
         from workflow.profile_engine.spectral import apply_spectral
