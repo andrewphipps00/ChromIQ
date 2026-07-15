@@ -212,3 +212,24 @@ sub-models); minimum: tune the sub-surface/knee composition until the
 port's NET map reproduces the 66%-inside distribution and the per-guide
 targets ≤0.5 median, THEN probe-level gate. No composite probe-level
 tuning — it measurably degrades (see history).
+
+## Instrumented campaign results (2026-07-15, smthdump)
+
+Built Argyll's own smthtest from source (deps: gamut/nearsmth/rspl/cgats/
+vrml/icc.c/numlib + CoreFoundation; -DUNIX, NO -DNT) → `smthdump` variant:
+colprof pweights + perceptual call (gamcknf 1.1, useexp 0, xvra 3.0,
+mapres 29) dumping per-guide sv/dv/aodv/drv text. Ground truth: 26,850
+records on ClayRGB1998.gam × pdiag.gam (compile line + harness in
+scratchpad/argbuild, regenerate as needed).
+
+Stage diffs (port vs Argyll internals, SAME inputs — .gam vertices,
+header cusps/wb):
+- drv radial on binned substrate: 0.82 median → **TriSurface (exact
+  Möller–Trumbore over .gam triangles, batched): 0.001 median** —
+  substrate divergence eliminated; intersection = per-ray min(src,dst).
+- PASS-1 aodv on tri isect surface: **0.006 median** (95% 1.1 = rare
+  multi-minima) — weights/cusps/aerrf/optimiser VALIDATED.
+- Next: final-dv diff (pass 2 + iteration incl. knee); then GammapMapper
+  consumes .gam-equivalent surfaces (engine generates its own vertex
+  clouds + triangulation OR uses iccgamut at build time for RGB/CMYK and
+  own mesh for +N), wire, probe gate, suite, UI task #43.
