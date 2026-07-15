@@ -82,6 +82,17 @@ else:
     _oc_datas = _oc_binaries = _oc_hiddenimports = []
     _ak_datas = _ak_binaries = _ak_hiddenimports = []
 
+# Bit-exact gamut-mapping helper (native/chromiq-gammap[.exe]). Built by the
+# CI CMake step before PyInstaller; bundled under native/ so resource_path()
+# finds it at runtime. Absent in a plain local `pyinstaller` run (the app then
+# just falls back to the fast Python mapper), so include it only when present.
+_gm_name = 'chromiq-gammap.exe' if sys.platform == 'win32' else 'chromiq-gammap'
+_gm_path = os.path.join('native', _gm_name)
+_gammap_datas = [(_gm_path, 'native')] if os.path.exists(_gm_path) else []
+if not _gammap_datas:
+    print(f"[ChromIQ.spec] {_gm_path} not built — bit-exact gamut helper "
+          f"will be unavailable in this bundle (fast mapper still works).")
+
 a = Analysis(
     ['main.py'],
     pathex=['.'],
@@ -93,6 +104,7 @@ a = Analysis(
         ('data/i18n',        'data/i18n'),
         ('data/scanner_targets', 'data/scanner_targets'),
         (certifi_where, 'certifi'),
+        *_gammap_datas,
         *_ic_datas,
         *_we_datas,
         *_oc_datas,

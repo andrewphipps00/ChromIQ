@@ -62,7 +62,20 @@ def helper_path() -> Path:
     p = resource_path("native/" + argyll_binary("chromiq-gammap"))
     if not p.exists():
         raise HelperUnavailable(f"bit-exact helper not found at {p}")
+    _ensure_executable(p)
     return p
+
+
+def _ensure_executable(p: Path) -> None:
+    """Best-effort +x — PyInstaller may bundle the helper without the exec
+    bit; the extracted copy lives in a writable temp dir, so restore it."""
+    if os.name == "nt":
+        return
+    try:
+        if not os.access(p, os.X_OK):
+            os.chmod(p, os.stat(p).st_mode | 0o111)
+    except OSError as exc:
+        log.debug("could not chmod helper %s: %s", p, exc)
 
 
 def is_available() -> bool:

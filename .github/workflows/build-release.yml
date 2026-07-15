@@ -169,6 +169,20 @@ jobs:
           # bundle has a fat libscipy_openblas64_.dylib.
           lipo_pkg scipy-openblas64     scipy_openblas64  py3-none
 
+      # Bit-exact gamut-mapping helper — ArgyllCMS's real gamut mapper compiled
+      # from the vendored subset (native/argyll). Built universal2 so it passes
+      # the fat-Mach-O check below and runs on both Intel and Apple Silicon.
+      # PyInstaller (ChromIQ.spec) bundles native/chromiq-gammap when present.
+      - name: Build bit-exact gamut helper (universal2)
+        run: |
+          set -euo pipefail
+          cmake -S native/gammap_helper -B build/gammap \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"
+          cmake --build build/gammap -j3
+          cp build/gammap/chromiq-gammap native/chromiq-gammap
+          echo "helper archs: $(lipo -archs native/chromiq-gammap)"
+
       - name: Build app bundle
         env:
           PYINSTALLER_TARGET_ARCH: ${{ matrix.target_arch_env }}
