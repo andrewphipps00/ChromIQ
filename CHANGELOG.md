@@ -1,5 +1,25 @@
 # Changelog
 
+## v3.13.7-beta.5
+
+Adds a bit-exact gamut-mapping option to the profile engine and extends the
+profile accuracy check to multi-ink profiles. Both are opt-in; the profile
+engine is still off by default.
+
+- **Bit-exact gamut mapping** (Settings → Beta → Gamut mapping). "Fast" uses
+  ChromIQ's built-in mapper. "Bit-exact" uses ArgyllCMS's own gamut-mapping
+  code instead: for RGB and CMYK printers the profile is built with colprof
+  directly, so it matches Argyll; for 6-ink and larger printers — which
+  colprof can't build — a bundled helper runs Argyll's gamut mapper on the
+  profile the engine builds. It takes a little longer than Fast.
+- **Accuracy check for multi-ink profiles**: Check & Refine now works on
+  6-ink and larger profiles, which stock profcheck won't read. The
+  illuminant, observer and paper-whitener (FWA) options are honoured,
+  computed from the measurement's spectral data.
+- **Settings**: the profile-engine toggle and the gamut-mapping option now
+  live on a separate "Beta" tab.
+- Fixes to the multi-ink build and the ≤4-ink destination-gamut step.
+
 ## v3.13.7-beta.4
 
 Profile engine (#122): the engine now covers colprof's full option
