@@ -408,9 +408,15 @@ def test_cam02_appearance_matches_xicclu_reference():
 
 
 def test_cam02_printer_white_roundtrip():
-    from workflow.profile_engine.gammap_port.cam02 import Appearance
+    """Roundtrip on PHYSICALLY VALID colours (XYZ ≥ 0). Impossible
+    colours (negative XYZ) hit Argyll's one-way COMPR soft-clip, which
+    deliberately has no inverse (ENABLE_DECOMPR is undef in the C)."""
+    from workflow.profile_engine.gammap_port.cam02 import (Appearance,
+                                                           lab_to_xyz)
     ap = Appearance([0.81098938, 0.84335327, 0.73251343])
     rng = np.random.default_rng(11)
-    labs = rng.uniform([2, -80, -80], [99, 80, 80], (200, 3))
+    labs = rng.uniform([2, -80, -80], [99, 80, 80], (400, 3))
+    labs = labs[(lab_to_xyz(labs) >= 0.0).all(1)]
+    assert len(labs) > 200
     back = ap.jab_to_lab(ap.lab_to_jab(labs))
     assert np.abs(back - labs).max() < 1e-4
