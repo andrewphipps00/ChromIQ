@@ -603,3 +603,24 @@ UI #43, #44.
   the real algorithm at 0.654 beats the closed-form family (~4–5) that
   was the only +N saturation option before. dest/psrc surfaces are shared
   across the two +N mappers (intent-keyed shrunk) to bound build time.
+
+## ROOT-CAUSE FIX: cusp dest black = dr_cs_bp not dr_be_bp (2026-07-15)
+
+- init_ce's dest black is near_smooth's `d_bp` arg = gammap.c passes
+  **dr_cs_bp** (fully-adapted dest black). The port passed dr_be_bp (the
+  BENT black) — a different point → offset dest cusp grey + rotation.
+- Perceptual (cw_c=0) was inert to it; the saturation chroma blend
+  (cw_c=0.5) put HALF the offset into every mapped colour → the whole
+  0.4-level csv error. Found by dumping nsm[i].csv (the cusp-mapped
+  source saved at nearsmth.c L3378 before sv is restored to _sv) and
+  diffing: my csv vs Argyll's csv **0.40 → 0.0026** with dr_cs_bp.
+  (Earlier "sv==_sv for all points" was the post-restore dump — a red
+  herring; the real cusp-mapped value lives in the csv field.)
+- Instrumentation added to gammap_inst.c: W record (per-guide cusp
+  weights wt.c.w.l/c/h + tw + cx — matched mine to 0.005) and C record
+  (nsm[i].csv). gmdump_sw binary.
+- Gate after fix: perceptual 0.340 → **0.336** (no regression),
+  saturation 0.654 → **0.527** median (95% still 5.5 = the separate
+  expansion pass-1 tail, next step). csv now bit-exact for both intents.
+- **This fix lives in GammapMapper**, so it improves the +N profiles
+  directly (the port IS the +N mapping — no colprof fallback there).

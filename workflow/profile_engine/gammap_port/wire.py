@@ -236,9 +236,28 @@ def fit_gammap_port_mappers(model, meas, source_gamut: Path | str,
                       black=d_bp, cs_white=d_wp, cs_black=d_bp,
                       cusps=d_cusps)
 
+    surf_cache: dict = {}      # dest/psrc shared across intents
     gm = GammapMapper(src.vertices, src.triangles, src.cs_white,
                       src.cs_black, src.cusps, dst.vertices,
                       dst.triangles, dst.cs_white, dst.cs_black,
                       dst.cusps, intent="p", dst_gam_wp=dst.white,
-                      dst_gam_bp=dst.black, progress=progress)
-    return {"B2A0": PortMapper(gm, ap_src, ap_dst)}
+                      dst_gam_bp=dst.black, progress=progress,
+                      surf_cache=surf_cache)
+    out = {"B2A0": PortMapper(gm, ap_src, ap_dst)}
+
+    # Saturation table. For RGB/CMYK we leave B2A2 to the colprof-matched
+    # oracle (colprof-exact). For multi-ink there IS no colprof oracle, so
+    # the ported saturation mapper is the best available — far better than
+    # the closed-form family it would otherwise fall back to. (The
+    # saturation port currently reproduces Argyll's own map to ~0.65 ΔE
+    # vs 0.34 for perceptual; the extra parity work is tracked in #45.)
+    if model.n_channels > 4:
+        if progress:
+            progress("Gamut mapping: building the saturation table…")
+        gms = GammapMapper(src.vertices, src.triangles, src.cs_white,
+                           src.cs_black, src.cusps, dst.vertices,
+                           dst.triangles, dst.cs_white, dst.cs_black,
+                           dst.cusps, intent="s", dst_gam_wp=dst.white,
+                           dst_gam_bp=dst.black, surf_cache=surf_cache)
+        out["B2A2"] = PortMapper(gms, ap_src, ap_dst)
+    return out

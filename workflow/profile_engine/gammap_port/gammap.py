@@ -209,13 +209,19 @@ class GammapMapper:
         ss_d = _sampled(tri_d, cache=surf_cache, key="dest")
         ss_ps = _sampled(tri_ps, cache=surf_cache, key="psrc")
         _tick("Gamut mapping: preparing colour surfaces…")
+        # init_ce's dest black is the C's near_smooth `d_bp` = dr_cs_bp
+        # (the fully-adapted destination black), NOT the bent dr_be_bp.
+        # Using the bent point offsets the dest cusp grey/rotation, which
+        # the saturation intent's chroma blend (cw_c) exposes as a ~0.4 ΔE
+        # error in the cusp-mapped source (validated: 0.40 → 0.003 vs
+        # Argyll's own csv dump). Perceptual (cw_c=0) barely notices.
         cm = CuspMapping(ga.pre_map(src_cusps), np.asarray(dst_cusps, float),
                          src_white=ga.pre_map(np.asarray(src_cs_wp,
                                                          float)[None, :])[0],
                          src_black=ga.pre_map(np.asarray(src_cs_bp,
                                                          float)[None, :])[0],
                          dst_white=np.asarray(dst_cs_wp, float),
-                         dst_black=ga.dr_be_bp)
+                         dst_black=ga.dr_cs_bp)
 
         isect = SampledSurface.__new__(SampledSurface)
         isect._tri, isect.nh, isect.nb = tri_d, ss_d.nh, ss_d.nb
