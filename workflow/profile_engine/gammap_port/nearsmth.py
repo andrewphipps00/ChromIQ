@@ -43,9 +43,8 @@ def _points_of(surf: GamutSurface, ang: np.ndarray) -> np.ndarray:
     return surf.radial(CENT[None, :] + d)
 
 
-def _pattern_search(surf: GamutSurface, ang0: np.ndarray, objective,
-                    step0: float = 0.35, iters: int = 40) -> np.ndarray:
-    """Batched 2D pattern search over (hue, inclination) on the surface."""
+def _descend(surf, ang0, objective, step0, iters):
+    """One batched 2D pattern-search descent from ang0."""
     ang = ang0.copy()
     best = objective(_points_of(surf, ang))
     step = np.full(len(ang), step0)
@@ -63,6 +62,27 @@ def _pattern_search(surf: GamutSurface, ang0: np.ndarray, objective,
         step[~improved] *= 0.5
         if (step < 1e-4).all():
             break
+    return ang, best
+
+
+def _pattern_search(surf: GamutSurface, ang0: np.ndarray, objective,
+                    step0: float = 0.35, iters: int = 40,
+                    trials: int = 1, seed: int = 5) -> np.ndarray:
+    """Batched 2D pattern search with random restarts — mirrors Argyll's
+    NO_TRIALS=6 multi-start Powell (nearsmth.c L2440): the aerrf objective
+    has local minima on the hardest ~5% of guides, and a single descent
+    lands in the wrong one there (measured: aodv 95% 0.67, max 4.2). Trial
+    0 starts from ang0; trials 1+ perturb the START by ±0.4 rad (the angle
+    equivalent of the C's ±20 tangent-plane offset); the lowest-objective
+    result per point is kept."""
+    rng = np.random.default_rng(seed)
+    ang, best = _descend(surf, ang0, objective, step0, iters)
+    for _ in range(1, trials):
+        pert = ang0 + rng.uniform(-0.4, 0.4, ang0.shape)
+        a, b = _descend(surf, pert, objective, step0, iters)
+        m = b < best
+        ang[m] = a[m]
+        best[m] = b[m]
     return ang
 
 

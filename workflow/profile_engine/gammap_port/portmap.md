@@ -624,3 +624,29 @@ UI #43, #44.
   expansion pass-1 tail, next step). csv now bit-exact for both intents.
 - **This fix lives in GammapMapper**, so it improves the +N profiles
   directly (the port IS the +N mapping — no colprof fallback there).
+
+## Perceptual error FULLY decomposed (2026-07-15) — root = guide SAMPLING
+
+Systematic bisection of the 0.336 perceptual gate (all vs Argyll domap):
+- **Fitter**: simplex now exact — their exact rows → 0.031.
+- **Grey-axis rows**: exact (swap to theirs → no change).
+- **Surface-anchor rows**: exact.
+- **Sub-surface rows**: secondary (their subs → 0.281).
+- **Guide rows**: DOMINANT — their guides → 0.098.
+Guide-chain diffs (at Argyll's guide sources, csv+simplex fixed):
+- pass-1 aodv 0.043 median (95% 0.67, max 4.2 — NOT local minima:
+  6-trial restarts gave identical result, so it's my objective's true
+  min, differing from theirs by surface/objective slivers);
+- VECADJ exact given input (0.033 vs their V);
+- **MY mapping VALUES at THEIR positions → 0.126** (≈ the 0.098 floor).
+- MY positions + MY values (real pipeline) → 0.336.
+CONCLUSION: the residual 0.34→0.13 is **guide POSITIONING** — my XVRA
+Sobol vertex expansion (_ss_verts, 2599 guides) samples different
+surface points than Argyll's nssverts/sobol.c (2858 guides), both from
+the same 1032 .gam verts. My mapping values are essentially exact; the
+gap is *which* points are chosen as guides — colorimetrically neutral
+(both are valid samplings of the same map), and it sits under the ICC
+file's own 0.41 quantisation floor. Closing it fully = a bit-exact
+sobol.c + getssvert port (large, neutral payoff) — an owner decision.
+Instrumentation banked: gammap._row_blocks; _pattern_search restarts
+(optional, default off — measured no help on the aodv tail).

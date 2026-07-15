@@ -664,6 +664,17 @@ class GammapMapper:
             target.append(sdv)
             rw.append(ws)
         _tick("Gamut mapping: building the final colour table…")
+        # row provenance for diagnostics: (kind, p, v, w) per block
+        self._row_blocks = {
+            "grey": (gp, gv, gw),
+            "guide": (sv, dv, np.full(len(sv), 1.01)),
+        }
+        if sub_s:
+            self._row_blocks["sub"] = (np.array(sub_s), np.array(sub_t),
+                                       np.array(sub_w))
+        if len(spts):
+            self._row_blocks["surf"] = (spts, sdv, ws)
+        self._map_il, self._map_ih, self._mapres = map_il, map_ih, mapres
         self._map = Rspl3(np.vstack(train), np.vstack(target),
                           np.concatenate(rw), map_il, map_ih,
                           gres=mapres, smooth=smooth)
