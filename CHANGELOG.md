@@ -1,5 +1,31 @@
 # Changelog
 
+## v3.13.7-beta.4
+
+Profile engine (#122): the engine now covers colprof's full option
+surface, and its perceptual rendering is built by ChromIQ's own port of
+Argyll's gamut-mapping algorithm. Still optional and off by default.
+
+- **Perceptual rendering, natively**: the engine's perceptual table is
+  computed by a line-by-line port of Argyll's gamut mapping (gammap /
+  nearsmth, AGPL-3.0, Graeme W. Gill — see workflow/profile_engine/
+  gammap_port/). It runs in the same CIECAM02 appearance space colprof
+  uses and was validated against Argyll's own mapping code to well
+  inside colprof's build-to-build variation. No background colprof run
+  is needed for the perceptual table any more; the saturation table
+  still uses the colprof-matched path while its port converges.
+- **Full colprof option surface**: spectral -i/-o illuminant/observer,
+  FWA compensation (-f), XYZ PCS (-a x), -r/-b/-ni/-np/-no/-nc/-nI/
+  -nP/-nS/-Z/-A/-M/-u/-R, -t/-T intent presets, -c/-d viewing
+  conditions, gamut source from any RGB/CMYK profile (including v4).
+  Unknown extra flags still route the build to colprof, named in the
+  log.
+- **Pre-conditioning hand-off (#44)**: the "Use as pre-conditioning
+  profile" button in the Build Profile and Check & Refine result
+  dialogs now also pre-fills the Manual module's targen expert option
+  (Pre-conditioning Profile, -c), so switching to Manual finds the
+  profile already in place.
+
 ## v3.13.7-beta.3
 
 The ChromIQ profile engine (#122) — a profile builder inside the app, next
