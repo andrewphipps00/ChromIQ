@@ -558,3 +558,23 @@ UI #43, #44.
   First gate: **0.953 / 7.71 / 13.2** vs domap(s); perceptual
   regression unchanged (0.340). B2A2 stays on the oracle until the
   tail converges (#45) — iterate with nsm_dump/nspasses like P4b.
+
+## #45 saturation convergence (2026-07-15, cont.)
+
+- Beta.4 tagged (v3.13.7-beta.4) with the perceptual port wired; builder
+  smoke: build_profile end-to-end OK, realized 0.910 vs colprof.
+- THEIR s-rows + my fitter/satenh/wbtune vs domap(s): **0.171 / 0.74**
+  — satenh port proven (without it: 1.77). Gap is guide construction.
+- RSPLPASSES tdst made intent-aware (dgam = FULL dest for useexp, isect
+  for compression): sat gate 0.953 → **0.657 / 5.48** (perc unchanged
+  0.340).
+- Stage diffs on the s-run in-frame dumps (nsm_dump/nspasses @11:49 are
+  the SATURATION run): pass-2 no-op 0.014 ✓, naxbf exact ✓, my
+  vecadj(s) vs their V **0.046** ✓; their rsplpasses net for s = 0.414
+  (2.3× the p case — expansion active). REMAINING: (a) my aodv(s) diff
+  0.406 — the stage script didn't replicate the swap (their aodv for
+  swapped guides = drv radial, not an aerrf optimum; the pipeline does
+  set aodv[swap]=radial but classifies swap by radial-vs-radial instead
+  of the C's nearest-based dr — refine with nearest-vertex dr); (b) my
+  RSPLPASSES under expansion (xgain path) — diff per pass against the
+  s-run P/A records next.

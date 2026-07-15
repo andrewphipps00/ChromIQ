@@ -336,16 +336,20 @@ class GammapMapper:
         if out_i.any():
             evo = evect_fn(dv[out_i])
             dvo = dv[out_i]
-            # tdst lives on the INTERSECTION gamut (smp[i].dgam), not the
-            # full dest. Nearest ≈ nearest vertex of the isect (source
-            # verts on/inside dest ∪ dest verts on/inside source).
-            iverts = np.vstack([
-                psrc_verts[ss_d.nradial(psrc_verts) <= 1.0 + 1e-3],
-                np.asarray(dst_verts, float)[
-                    ss_ps.nradial(np.asarray(dst_verts, float))
-                    <= 1.0 + 1e-3]])
-            if len(iverts) == 0:
+            # tdst lives on smp[i].dgam: the INTERSECTION gamut for
+            # compression intents, the FULL dest for expansion intents
+            # (dst_gam = dc_gam when useexp with no image gamut).
+            # Nearest ≈ nearest vertex of that gamut.
+            if useexp:
                 iverts = np.asarray(dst_verts, float)
+            else:
+                iverts = np.vstack([
+                    psrc_verts[ss_d.nradial(psrc_verts) <= 1.0 + 1e-3],
+                    np.asarray(dst_verts, float)[
+                        ss_ps.nradial(np.asarray(dst_verts, float))
+                        <= 1.0 + 1e-3]])
+                if len(iverts) == 0:
+                    iverts = np.asarray(dst_verts, float)
             d2 = ((dvo[:, None, :] - iverts[None, :, :]) ** 2).sum(2)
             nix = d2.argmin(1)
             near = iverts[nix]
@@ -353,12 +357,18 @@ class GammapMapper:
             # line ∩ isect via per-surface interval intersection, with
             # vintersect2 semantics: inside → segment ENTRY (behind, −ve
             # direction); outside → first +ve crossing
-            mint_s2, maxt_s2, _, _ = tri_ps.vector_isect(dvo, dvo + evo)
-            mint_d2, maxt_d2, _, _ = tri_d.vector_isect(dvo, dvo + evo)
-            t_in = np.fmax(mint_s2, mint_d2)
-            t_out = np.fmin(maxt_s2, maxt_d2)
+            if useexp:
+                t_in, t_out, _, _ = tri_d.vector_isect(dvo, dvo + evo)
+                p1_in = ss_d.nradial(dvo) <= 1.0 + 1e-6
+            else:
+                mint_s2, maxt_s2, _, _ = tri_ps.vector_isect(dvo,
+                                                             dvo + evo)
+                mint_d2, maxt_d2, _, _ = tri_d.vector_isect(dvo,
+                                                            dvo + evo)
+                t_in = np.fmax(mint_s2, mint_d2)
+                t_out = np.fmin(maxt_s2, maxt_d2)
+                p1_in = isect.nradial(dvo) <= 1.0 + 1e-6
             ok = np.isfinite(t_in) & np.isfinite(t_out) & (t_in <= t_out)
-            p1_in = isect.nradial(dvo) <= 1.0 + 1e-6
             tt2 = np.where(p1_in, t_in,
                            np.where(t_in >= -1e-8, t_in, t_out))
             tt2 = np.where(ok, tt2, np.nan)
