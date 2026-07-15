@@ -63,6 +63,34 @@ def test_read_ti3_nchannel_with_loc(tmp_path):
     assert d["device"][1, 0] == 100.0     # full cyan
 
 
+def test_read_ti3_irgb_maps_to_rgb_fields(tmp_path):
+    """iRGB / RGB / CMYK reps use fixed field names, not <REP>_<char>."""
+    p = tmp_path / "m.ti3"
+    p.write_text(
+        'CTI3\nCOLOR_REP "iRGB_XYZ"\n'
+        "BEGIN_DATA_FORMAT\n"
+        "SAMPLE_ID RGB_R RGB_G RGB_B XYZ_X XYZ_Y XYZ_Z\n"
+        "END_DATA_FORMAT\nBEGIN_DATA\n"
+        "1 100 100 100 96 100 82\nEND_DATA\n")
+    d = pn._read_ti3(p)
+    assert d["n"] == 3            # RGB, not 4 chars of "iRGB"
+    assert d["device"].shape == (1, 3)
+
+
+def test_recompute_needs_spectral_data(tmp_path):
+    """A non-default illuminant on a file without spectral data errors cleanly
+    rather than silently using the file's D50 values."""
+    p = tmp_path / "m.ti3"
+    p.write_text(
+        'CTI3\nCOLOR_REP "CMYKOG_XYZ"\n'
+        "BEGIN_DATA_FORMAT\n"
+        "SAMPLE_ID CMYKOG_C CMYKOG_M CMYKOG_Y CMYKOG_K CMYKOG_O CMYKOG_G "
+        "XYZ_X XYZ_Y XYZ_Z\nEND_DATA_FORMAT\nBEGIN_DATA\n"
+        "1 0 0 0 0 0 0 96 100 82\nEND_DATA\n")
+    with pytest.raises(pn.NChannelCheckError, match="spectral"):
+        pn.run_check(p, p, bin_dir="/nonexistent", illum="D65")
+
+
 def test_output_feeds_check_refine_pipeline():
     """A +N run's profcheck-format output must parse and flag strips exactly
     like real profcheck, so Check & Refine works unchanged."""

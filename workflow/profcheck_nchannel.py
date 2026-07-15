@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import re
 import subprocess
+import tempfile
 from pathlib import Path
 
 import numpy as np
@@ -58,8 +59,18 @@ def _read_ti3(ti3_path: Path) -> dict:
         except ValueError as exc:
             raise NChannelCheckError(f"missing field {name}") from exc
 
-    # device columns: <DEV>_<letter> for each ink letter in the rep
-    dev_cols = [col(f"{dev}_{ch}") for ch in dev]
+    # Device field names. The standard <=4-ink reps use fixed names that don't
+    # mirror the rep string (iRGB -> RGB_R/G/B, K -> GRAY_K …); the multi-ink
+    # reps this checker actually serves use <REP>_<letter> per ink.
+    _known = {
+        "RGB": ["RGB_R", "RGB_G", "RGB_B"],
+        "iRGB": ["RGB_R", "RGB_G", "RGB_B"],
+        "CMY": ["CMY_C", "CMY_M", "CMY_Y"],
+        "CMYK": ["CMYK_C", "CMYK_M", "CMYK_Y", "CMYK_K"],
+        "K": ["GRAY_K"], "W": ["GRAY_W"],
+    }
+    dev_names = _known.get(dev, [f"{dev}_{ch}" for ch in dev])
+    dev_cols = [col(name) for name in dev_names]
     sid_col = col("SAMPLE_ID")
     loc_col = fields.index("SAMPLE_LOC") if "SAMPLE_LOC" in fields else -1
     if is_lab:
@@ -80,7 +91,7 @@ def _read_ti3(ti3_path: Path) -> dict:
         devs.append([float(p[c]) for c in dev_cols])
         cies.append([float(p[c]) for c in cie_cols])
     return {
-        "dev": dev, "n": len(dev), "is_lab": is_lab,
+        "dev": dev, "n": len(dev_names), "is_lab": is_lab,
         "sid": sids, "loc": locs,
         "device": np.array(devs), "cie": np.array(cies),
     }
@@ -181,16 +192,123 @@ def _pdv(n: int, dev: np.ndarray) -> str:
     return " ".join(f"{v:.8f}" for v in dev[:n])
 
 
+def _recompute_spectral_xyz(ti3_path: Path, bin_dir: Path, *, illum: str,
+                            observer: str, fwa: bool, fwa_illum: str,
+                            brightness=None) -> dict:
+    """{SAMPLE_ID: XYZ} recomputed from the .ti3's spectral data under the
+    chosen illuminant / observer / FWA, using Argyll's own ``spec2cie``.
+
+    spec2cie refuses >4-ink colourspaces, but it only integrates the SPECTRAL
+    columns — so we hand it a relabelled RGB-with-dummy-device copy that keeps
+    the real spectral data, and read the recomputed XYZ back. Bit-exact Argyll
+    colorimetry (incl. FWA), no reimplementation.
+    """
+    text = Path(ti3_path).read_text(errors="replace")
+    if "SPECTRAL_BANDS" not in text or not re.search(r"\bSPEC_\d", text):
+        raise NChannelCheckError(
+            "the measurement has no spectral data, so a different "
+            "illuminant / observer / FWA can't be computed")
+    spec2cie = bin_dir / "spec2cie"
+    if not spec2cie.exists():
+        raise NChannelCheckError("spec2cie not found")
+
+    fmt = re.search(r"BEGIN_DATA_FORMAT\s*\n(.*?)\nEND_DATA_FORMAT",
+                    text, re.S).group(1).split()
+    spec_names = [f for f in fmt if re.match(r"SPEC_", f)]
+    spec_idx = [fmt.index(f) for f in spec_names]
+    sid_i = fmt.index("SAMPLE_ID")
+    body = [ln.split() for ln in re.search(
+        r"\nBEGIN_DATA\s*\n(.*?)\nEND_DATA", text, re.S).group(1).splitlines()
+        if ln.strip()]
+
+    # Preserve the original header keywords (TARGET_INSTRUMENT, spectral range,
+    # measurement mode …) — FWA needs the instrument illuminant — while
+    # dropping the ones we redefine.
+    header = text[:text.index("BEGIN_DATA_FORMAT")]
+    _drop = ("CTI3", "COLOR_REP", "NUMBER_OF_FIELDS", "NUMBER_OF_SETS",
+             "KEYWORD", "DESCRIPTOR")
+    kw = [ln.strip() for ln in header.splitlines()
+          if ln.strip() and not ln.startswith(_drop)]
+
+    with tempfile.TemporaryDirectory(prefix="chromiq-spec2cie-") as td:
+        rel, out = Path(td) / "rel.ti3", Path(td) / "out.ti3"
+        head = ['CTI3', '', 'DESCRIPTOR "spectral recompute"',
+                'COLOR_REP "RGB_XYZ"', *kw,
+                f"NUMBER_OF_FIELDS {7 + len(spec_names)}",
+                "BEGIN_DATA_FORMAT",
+                "SAMPLE_ID RGB_R RGB_G RGB_B XYZ_X XYZ_Y XYZ_Z "
+                + " ".join(spec_names),
+                "END_DATA_FORMAT", f"NUMBER_OF_SETS {len(body)}", "BEGIN_DATA"]
+        for j, r in enumerate(body):
+            spec = " ".join(r[i] for i in spec_idx)
+            # FWA needs a media-white patch; encode each patch's brightness as
+            # its RGB so the paper (brightest) reads as white and spec2cie can
+            # find the white reference.
+            w = f"{brightness[j]:.4f}" if brightness is not None else "0"
+            head.append(f"{r[sid_i]} {w} {w} {w} 0 0 0 {spec}")
+        head += ["END_DATA", ""]
+        rel.write_text("\n".join(head))
+
+        args = [str(spec2cie)]
+        if fwa:
+            args += (["-f", fwa_illum] if fwa_illum else ["-f"])
+        if illum and illum != "D50":
+            args += ["-i", illum]
+        if observer and observer != "1931_2":
+            args += ["-o", observer]
+        args += [str(rel), str(out)]
+        r = subprocess.run(args, capture_output=True, text=True)
+        if r.returncode != 0 or not out.exists():
+            raise NChannelCheckError(
+                f"spec2cie failed: {(r.stderr or r.stdout).strip()[:160]}")
+
+        otext = out.read_text()
+        ofmt = re.search(r"BEGIN_DATA_FORMAT\s*\n(.*?)\nEND_DATA_FORMAT",
+                         otext, re.S).group(1).split()
+        oxi = [ofmt.index(f) for f in ("XYZ_X", "XYZ_Y", "XYZ_Z")]
+        osi = ofmt.index("SAMPLE_ID")
+        recomputed = {}
+        for ln in re.search(r"\nBEGIN_DATA\s*\n(.*?)\nEND_DATA",
+                            otext, re.S).group(1).splitlines():
+            p = ln.split()
+            if len(p) > max(oxi):
+                recomputed[p[osi]] = [float(p[i]) for i in oxi]
+        return recomputed
+
+
 def run_check(ti3_path, icc_path, *, bin_dir, de_formula="", intent="a",
-              sort=True, verbosity="2"):
-    """Run the check and return profcheck-format output lines (list of str)."""
+              sort=True, verbosity="2", illum="D50", observer="1931_2",
+              fwa=False, fwa_illum="D50"):
+    """Run the check and return profcheck-format output lines (list of str).
+
+    When ``illum`` / ``observer`` / ``fwa`` are non-default the patch colours
+    are recomputed from the .ti3's spectral data via Argyll's ``spec2cie``
+    (see :func:`_recompute_spectral_xyz`), matching profcheck's -i/-o/-f.
+    """
     ti3_path, icc_path = Path(ti3_path), Path(icc_path)
     bin_dir = Path(bin_dir)
     data = _read_ti3(ti3_path)
     n = data["n"]
-    device01 = data["device"] / 100.0
-    pred = _icclu_forward(icc_path, bin_dir, device01, intent)
-    meas = data["cie"] if data["is_lab"] else _xyz_to_lab(data["cie"])
+
+    if fwa or (illum and illum != "D50") or (observer and observer != "1931_2"):
+        # per-patch brightness (0..100), used only to mark the media white for
+        # FWA: measured L for Lab data, Y for XYZ.
+        bright = (data["cie"][:, 0] if data["is_lab"]
+                  else data["cie"][:, 1])
+        bright = 100.0 * bright / max(bright.max(), 1e-9)
+        xyz_by_sid = _recompute_spectral_xyz(
+            ti3_path, bin_dir, illum=illum, observer=observer, fwa=fwa,
+            fwa_illum=fwa_illum, brightness=bright)
+        try:
+            meas_xyz = np.array([xyz_by_sid[s] for s in data["sid"]])
+        except KeyError as exc:
+            raise NChannelCheckError(
+                f"spec2cie result is missing sample {exc}") from exc
+        meas = _xyz_to_lab(meas_xyz)
+    else:
+        meas = data["cie"] if data["is_lab"] else _xyz_to_lab(data["cie"])
+
+    pred = _icclu_forward(icc_path, bin_dir, data["device"] / 100.0, intent)
     de = _delta_e(pred, meas, de_formula)
 
     lines = [f"No of test patches = {len(de)}"]

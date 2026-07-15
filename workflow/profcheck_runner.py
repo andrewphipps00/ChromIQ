@@ -130,7 +130,8 @@ class _NChannelWorker(QThread):
             lines = run_check(
                 p.ti3_path, p.icc_path, bin_dir=self._bin_dir,
                 de_formula=p.de_formula, intent=p.intent, sort=p.sort,
-                verbosity=p.verbosity)
+                verbosity=p.verbosity, illum=p.illum, observer=p.observer,
+                fwa=p.fwa_enabled, fwa_illum=p.fwa_illum)
         except NChannelCheckError as exc:
             self.line.emit(tr("[ERROR] {msg}").format(msg=exc))
             self.done.emit(1)
