@@ -2752,7 +2752,7 @@
   "→ Next step: go to the '4. Calibration & Profiling' tab to create your calibration file.": "→ 下一步: 前往「4. 校准与配置文件」标签页创建校准文件。",
   "→ Press Continue Measurement to resume where you left off, or untick 'Refine / resume existing measurement (-r)' to start over.": "→ 按「继续测量」从停下的地方恢复，或取消勾选「优化/恢复已有测量 (-r)」从头开始。",
   "→ This file is for verification only — do not build a profile from it. Open it in Tools ▸ Inspect a measurement to check the profile.": "→ 此文件仅用于验证——不要用它构建配置文件。在“工具 ▸ 检查测量”中打开它以检查配置文件。",
-  "→ ink set: {rep}": "→ ink set: {rep}",
+  "→ ink set: {rep}": "→ 墨水组合: {rep}",
   "↶ Undo": "↶ 撤销",
   "≈ {n} fit one page": "≈ 一页可放 {n} 个",
   "≈ {n} patches per sheet": "≈ 每张 {n} 个色块",

@@ -2752,7 +2752,7 @@
   "→ Next step: go to the '4. Calibration & Profiling' tab to create your calibration file.": "→ 次のステップ: 「4. キャリブレーションとプロファイル」タブでキャリブレーションファイルを作成してください。",
   "→ Press Continue Measurement to resume where you left off, or untick 'Refine / resume existing measurement (-r)' to start over.": "→ 「測定を続行」を押すと中断したところから再開、「既存測定の改良/再開 (-r)」のチェックを外すと最初からやり直します。",
   "→ This file is for verification only — do not build a profile from it. Open it in Tools ▸ Inspect a measurement to check the profile.": "→ このファイルは検証専用です——これからプロファイルを作らないでください。ツール ▸ 測定を調べる で開いてプロファイルを確認してください。",
-  "→ ink set: {rep}": "→ ink set: {rep}",
+  "→ ink set: {rep}": "→ インクセット: {rep}",
   "↶ Undo": "↶ 元に戻す",
   "≈ {n} fit one page": "≈ 1ページに{n}個",
   "≈ {n} patches per sheet": "≈ 1枚あたり{n}パッチ",

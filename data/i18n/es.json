@@ -2752,7 +2752,7 @@
   "→ Next step: go to the '4. Calibration & Profiling' tab to create your calibration file.": "→ Siguiente paso: ve a la pestaña '4. Calibración y perfil' para crear tu archivo de calibración.",
   "→ Press Continue Measurement to resume where you left off, or untick 'Refine / resume existing measurement (-r)' to start over.": "→ Pulsa Continuar medición para reanudar donde lo dejaste, o desmarca 'Refinar / reanudar medición existente (-r)' para empezar de cero.",
   "→ This file is for verification only — do not build a profile from it. Open it in Tools ▸ Inspect a measurement to check the profile.": "→ Este archivo es solo para verificación — no construyas un perfil con él. Ábrelo en Herramientas ▸ Inspeccionar una medición para comprobar el perfil.",
-  "→ ink set: {rep}": "→ ink set: {rep}",
+  "→ ink set: {rep}": "→ juego de tintas: {rep}",
   "↶ Undo": "↶ Deshacer",
   "≈ {n} fit one page": "≈ {n} caben en una página",
   "≈ {n} patches per sheet": "≈ {n} parches por hoja",

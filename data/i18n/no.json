@@ -2752,7 +2752,7 @@
   "→ Next step: go to the '4. Calibration & Profiling' tab to create your calibration file.": "→ Neste steg: gå til fanen '4. Kalibrering & profil' for å lage kalibreringsfilen din.",
   "→ Press Continue Measurement to resume where you left off, or untick 'Refine / resume existing measurement (-r)' to start over.": "→ Trykk på Fortsett måling for å fortsette der du slapp, eller fjern krysset ved 'Forbedre / gjenoppta eksisterende måling (-r)' for å begynne på nytt.",
   "→ This file is for verification only — do not build a profile from it. Open it in Tools ▸ Inspect a measurement to check the profile.": "→ Denne filen er kun for verifisering — ikke bygg en profil av den. Åpne den i Verktøy ▸ Inspiser en måling for å kontrollere profilen.",
-  "→ ink set: {rep}": "→ ink set: {rep}",
+  "→ ink set: {rep}": "→ blekksett: {rep}",
   "↶ Undo": "↶ Angre",
   "≈ {n} fit one page": "≈ {n} får plass på én side",
   "≈ {n} patches per sheet": "≈ {n} felt per ark",

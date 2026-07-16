@@ -2752,7 +2752,7 @@
   "→ Next step: go to the '4. Calibration & Profiling' tab to create your calibration file.": "→ Следующий шаг: перейдите на вкладку «4. Калибровка и профиль», чтобы создать файл калибровки.",
   "→ Press Continue Measurement to resume where you left off, or untick 'Refine / resume existing measurement (-r)' to start over.": "→ Нажмите «Продолжить измерение», чтобы продолжить с того же места, или снимите «Доводка / продолжение измерения (-r)», чтобы начать заново.",
   "→ This file is for verification only — do not build a profile from it. Open it in Tools ▸ Inspect a measurement to check the profile.": "→ Этот файл только для проверки — не стройте по нему профиль. Откройте его в Инструменты ▸ Изучить измерение, чтобы проверить профиль.",
-  "→ ink set: {rep}": "→ ink set: {rep}",
+  "→ ink set: {rep}": "→ набор чернил: {rep}",
   "↶ Undo": "↶ Отменить",
   "≈ {n} fit one page": "≈ {n} на одной странице",
   "≈ {n} patches per sheet": "≈ {n} патчей на лист",
