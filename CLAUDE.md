@@ -1,13 +1,5 @@
 # CLAUDE.md — ChromIQ
 
-## Pending platform task (Windows-on-ARM only)
-
-**If you are running on Windows arm64:** there is a ready task to build the
-bit-exact gamut helper natively for this platform (the one CI gap). Read and
-follow **`docs/dev_windows_arm64_helper.md`** — it's a turnkey script plus
-step-by-step instructions. On any other platform, ignore this and remove this
-section once the arm64 helper is building in CI.
-
 ## Setup
 
 ```bash
