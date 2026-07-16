@@ -9,6 +9,7 @@ Result: dist/ChromIQ/ChromIQ.exe  (one-dir bundle)
 """
 
 import os
+import platform
 
 import certifi
 from PyInstaller.utils.hooks import collect_all
@@ -68,6 +69,21 @@ if not _gammap_datas:
     print(f"[ChromIQWin.spec] {_gm_path} not built — bit-exact gamut helper "
           f"unavailable in this bundle (fast mapper still works).")
 
+# Vector-PDF export (#72) needs libfreetype for glyph outlining. On Windows x64
+# freetype-py's own PyInstaller hook (collect_dynamic_libs) bundles the wheel's
+# libfreetype.dll automatically. On Windows/ARM there is no wheel with a native
+# lib, so bundle our vendored ARM64 FreeType; core.freetype_bootstrap adds it to
+# the DLL search path at startup so the export works there too. Without this,
+# PDF export is silently unavailable on arm64 (it's imported lazily).
+_ft_vendor_datas = []
+if platform.machine().upper() in ('ARM64', 'AARCH64'):
+    _ft_vp = os.path.join('vendor', 'freetype', 'win-arm64', 'freetype.dll')
+    if os.path.exists(_ft_vp):
+        _ft_vendor_datas = [(_ft_vp, 'vendor/freetype/win-arm64')]
+    else:
+        print(f"[ChromIQWin.spec] {_ft_vp} missing — vector-PDF export will be "
+              f"unavailable in this Windows/ARM bundle.")
+
 a = Analysis(
     ['main.py'],
     pathex=['.'],
@@ -78,6 +94,7 @@ a = Analysis(
         ('data/i18n',            'data/i18n'),
         (certifi_where,          'certifi'),
         *_gammap_datas,
+        *_ft_vendor_datas,
         *_ic_datas,
         *_winpty_datas,
         *_we_datas,
