@@ -121,6 +121,11 @@ jobs:
         run: |
           set -euo pipefail
           choco install mingw ninja -y --no-progress
+          # CMake is preinstalled on windows-latest, but install it if a future
+          # image drops it so the build fails loudly on choco, not on a bare cmake.
+          command -v cmake >/dev/null 2>&1 || {
+            choco install cmake -y --no-progress --installargs 'ADD_CMAKE_TO_PATH=System'
+            export PATH="/c/Program Files/CMake/bin:$PATH"; }
           gcc --version
           cmake -S native/gammap_helper -B build/gammap -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
@@ -145,6 +150,13 @@ jobs:
           $llvmDir = "$PWD\tools\llvm-mingw-$llvmVer-ucrt-aarch64"
           $env:PATH = "$llvmDir\bin;$env:PATH"
           choco install ninja -y --no-progress
+          # windows-11-arm is a leaner image than windows-latest — install CMake
+          # if it isn't already on PATH (x64 CMake runs fine under emulation; it
+          # only orchestrates, the compiler is the native aarch64 clang above).
+          if (-not (Get-Command cmake -ErrorAction SilentlyContinue)) {
+            choco install cmake -y --no-progress --installargs 'ADD_CMAKE_TO_PATH=System'
+            $env:PATH = "C:\Program Files\CMake\bin;$env:PATH"
+          }
           cmake -S native/gammap_helper -B build/gammap -G Ninja `
             -DCMAKE_BUILD_TYPE=Release `
             -DCMAKE_C_COMPILER=aarch64-w64-mingw32-clang

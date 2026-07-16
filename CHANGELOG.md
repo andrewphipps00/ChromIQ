@@ -1,5 +1,13 @@
 # Changelog
 
+## v3.13.7-beta.6
+
+- **Bit-exact gamut mapping now works on Windows and Linux**, not only macOS —
+  the bundled helper is built for every platform. On Windows arm64 it falls
+  back to the fast mapper if the helper isn't present.
+- **Translations completed**: all 13 interface languages are now fully
+  translated; several were still partly English placeholders before.
+
 ## v3.13.7-beta.5
 
 Adds a bit-exact gamut-mapping option to the profile engine and extends the
