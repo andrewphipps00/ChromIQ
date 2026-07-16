@@ -1,5 +1,21 @@
 # Changelog
 
+## v3.13.7
+
+Stable.
+
+- Refining a profile is smoother: the "Use as pre-conditioning profile"
+  option now also carries the profile into the Manual module's targen
+  settings, so switching Guided → Manual to refine no longer starts with a
+  blank pre-conditioning field.
+- All 13 interface languages are now fully translated.
+
+Also included, off by default and clearly marked experimental: an optional
+ChromIQ profile engine for multi-ink (6-ink and wider) printers that
+ArgyllCMS colprof can't profile, with a bit-exact gamut-mapping option. It's
+new and not yet tested on real multi-ink hardware — verify any profile with a
+test print before relying on it.
+
 ## v3.13.7-beta.6
 
 - **Bit-exact gamut mapping now works on Windows and Linux**, not only macOS —
