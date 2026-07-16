@@ -27,11 +27,17 @@ set(ARGYLL_UNITS
   rspl/rspl rspl/scat rspl/rev rspl/gam rspl/spline rspl/opt
   gamut/gamut gamut/gammap gamut/nearsmth
   xicc/xicc xicc/xspect xicc/xcolorants xicc/xcam xicc/cam97s3 xicc/cam02
-  xicc/mpp xicc/ccmx xicc/ccss xicc/xfit xicc/moncurve xicc/xcal
+  xicc/xfit xicc/moncurve xicc/xcal
   xicc/bt1886 xicc/tm3015
-  spectro/conv
   plot/vrml
 )
+# NOT compiled: spectro/conv, xicc/mpp, xicc/ccmx, xicc/ccss. They are members
+# of the upstream Jamfile libraries but are *unreferenced* by the gamut-mapping
+# path — the static-lib link never pulls them (proven: dropping them yields a
+# byte-identical binary). conv.c in particular is the one platform-fragile unit
+# (Win32 conio/tlhelp32/process vs POSIX termios/pwd), so excluding it from the
+# compile is what makes the Windows/Linux cross-builds portable. The four .c
+# files stay vendored under ../argyll for provenance; they are simply not built.
 set(ARGYLL_SOURCES "")
 foreach(u ${ARGYLL_UNITS})
   list(APPEND ARGYLL_SOURCES "${ARGYLL}/${u}.c")
@@ -45,10 +51,7 @@ set(ARGYLL_INCLUDES
 
 # Build the Argyll subset as a STATIC library so the final link pulls only the
 # objects the helper actually references — matching the archive-based recipe
-# that was verified byte-identical to Argyll's own gmcloud proof. A few
-# vendored units (ccmx/ccss/mpp/conv) are unreferenced by the gamut-mapping
-# path and carry externals to instrument code we don't vendor; as library
-# members they are simply never pulled, so those externals never surface.
+# that was verified byte-identical to Argyll's own gmcloud proof.
 add_library(argyllgm STATIC ${ARGYLL_SOURCES})
 target_include_directories(argyllgm PRIVATE ${ARGYLL_INCLUDES})
 target_compile_definitions(argyllgm PRIVATE ARGYLLCMS ALLINSTS)
@@ -91,4 +94,10 @@ elseif(UNIX)
   target_link_libraries(chromiq-gammap m pthread rt dl)
 elseif(WIN32)
   target_link_libraries(chromiq-gammap winmm)
+  # Static-link the mingw runtime so the .exe depends only on the system CRT
+  # (api-ms-win-crt-*, KERNEL32) and needs no libgcc/libwinpthread DLLs beside
+  # it — verified via objdump on a local x86_64-w64-mingw32 cross-build.
+  if(MINGW)
+    target_link_options(chromiq-gammap PRIVATE -static -static-libgcc)
+  endif()
 endif()

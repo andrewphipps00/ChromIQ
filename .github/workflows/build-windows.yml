@@ -110,6 +110,25 @@ jobs:
           curl -fsSL -o assets/zadig.exe \
             "https://github.com/pbatard/libwdi/releases/download/v1.5.1/zadig-2.9.exe"
 
+      # Bit-exact gamut-mapping helper — ArgyllCMS's real gamut mapper compiled
+      # from the vendored subset (native/argyll) with mingw-w64 gcc, statically
+      # linked so the .exe needs no runtime DLLs (verified via objdump on a local
+      # cross-build). x64 only: on Windows-arm64 the app falls back to the fast
+      # Python mapper, and ChromIQWin.spec bundles the helper only when present.
+      - name: Build bit-exact gamut helper (x64, mingw-w64)
+        if: matrix.arch == 'x64'
+        shell: bash
+        run: |
+          set -euo pipefail
+          choco install mingw ninja -y --no-progress
+          gcc --version
+          cmake -S native/gammap_helper -B build/gammap -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER=gcc
+          cmake --build build/gammap
+          cp build/gammap/chromiq-gammap.exe native/chromiq-gammap.exe
+          echo "helper deps:"; objdump -p native/chromiq-gammap.exe | grep -i "DLL Name" || true
+
       - name: Build Windows executable
         run: python -m PyInstaller ChromIQWin.spec
 
