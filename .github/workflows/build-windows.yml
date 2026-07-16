@@ -110,6 +110,62 @@ jobs:
           curl -fsSL -o assets/zadig.exe \
             "https://github.com/pbatard/libwdi/releases/download/v1.5.1/zadig-2.9.exe"
 
+      # Bit-exact gamut-mapping helper — ArgyllCMS's real gamut mapper compiled
+      # from the vendored subset (native/argyll) with mingw-w64 gcc, statically
+      # linked so the .exe needs no runtime DLLs (verified via objdump on a local
+      # cross-build). x64 only: on Windows-arm64 the app falls back to the fast
+      # Python mapper, and ChromIQWin.spec bundles the helper only when present.
+      - name: Build bit-exact gamut helper (x64, mingw-w64)
+        if: matrix.arch == 'x64'
+        shell: bash
+        run: |
+          set -euo pipefail
+          choco install mingw ninja -y --no-progress
+          # CMake is preinstalled on windows-latest, but install it if a future
+          # image drops it so the build fails loudly on choco, not on a bare cmake.
+          command -v cmake >/dev/null 2>&1 || {
+            choco install cmake -y --no-progress --installargs 'ADD_CMAKE_TO_PATH=System'
+            export PATH="/c/Program Files/CMake/bin:$PATH"; }
+          gcc --version
+          cmake -S native/gammap_helper -B build/gammap -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER=gcc
+          cmake --build build/gammap
+          cp build/gammap/chromiq-gammap.exe native/chromiq-gammap.exe
+          echo "helper deps:"; objdump -p native/chromiq-gammap.exe | grep -i "DLL Name" || true
+
+      # arm64 counterpart: mingw-w64 has no arm64 host toolchain, so use
+      # LLVM-mingw (clang -> aarch64-w64-mingw32). CMake treats it as MINGW, so
+      # the same static-linking path applies unchanged (self-contained .exe,
+      # deps = only api-ms-win-crt-* / KERNEL32 — verified natively on an arm64
+      # box). Proven with LLVM-mingw 20250430; bump the tag if the URL 404s.
+      - name: Build bit-exact gamut helper (arm64, LLVM-mingw)
+        if: matrix.arch == 'arm64'
+        shell: pwsh
+        run: |
+          $llvmVer = '20250430'
+          $url = "https://github.com/mstorsjo/llvm-mingw/releases/download/$llvmVer/llvm-mingw-$llvmVer-ucrt-aarch64.zip"
+          Invoke-WebRequest $url -OutFile llvm.zip
+          Expand-Archive llvm.zip -DestinationPath tools -Force
+          $llvmDir = "$PWD\tools\llvm-mingw-$llvmVer-ucrt-aarch64"
+          $env:PATH = "$llvmDir\bin;$env:PATH"
+          choco install ninja -y --no-progress
+          # windows-11-arm is a leaner image than windows-latest — install CMake
+          # if it isn't already on PATH (x64 CMake runs fine under emulation; it
+          # only orchestrates, the compiler is the native aarch64 clang above).
+          if (-not (Get-Command cmake -ErrorAction SilentlyContinue)) {
+            choco install cmake -y --no-progress --installargs 'ADD_CMAKE_TO_PATH=System'
+            $env:PATH = "C:\Program Files\CMake\bin;$env:PATH"
+          }
+          cmake -S native/gammap_helper -B build/gammap -G Ninja `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DCMAKE_C_COMPILER=aarch64-w64-mingw32-clang
+          cmake --build build/gammap
+          Copy-Item build/gammap/chromiq-gammap.exe native/chromiq-gammap.exe -Force
+          Write-Host "helper deps:"
+          & "$llvmDir\bin\llvm-readobj.exe" --coff-imports native/chromiq-gammap.exe |
+            Select-String 'Name:' | Sort-Object -Unique
+
       - name: Build Windows executable
         run: python -m PyInstaller ChromIQWin.spec
 

@@ -1,5 +1,147 @@
 # Changelog
 
+## v3.13.7
+
+Stable.
+
+- Refining a profile is smoother: the "Use as pre-conditioning profile"
+  option now also carries the profile into the Manual module's targen
+  settings, so switching Guided → Manual to refine no longer starts with a
+  blank pre-conditioning field.
+- All 13 interface languages are now fully translated.
+
+Also included, off by default and clearly marked experimental: an optional
+ChromIQ profile engine for multi-ink (6-ink and wider) printers that
+ArgyllCMS colprof can't profile, with a bit-exact gamut-mapping option. It's
+new and not yet tested on real multi-ink hardware — verify any profile with a
+test print before relying on it.
+
+## v3.13.7-beta.6
+
+- **Bit-exact gamut mapping now works on Windows and Linux**, not only macOS —
+  the bundled helper is built for every platform. On Windows arm64 it falls
+  back to the fast mapper if the helper isn't present.
+- **Translations completed**: all 13 interface languages are now fully
+  translated; several were still partly English placeholders before.
+
+## v3.13.7-beta.5
+
+Adds a bit-exact gamut-mapping option to the profile engine and extends the
+profile accuracy check to multi-ink profiles. Both are opt-in; the profile
+engine is still off by default.
+
+- **Bit-exact gamut mapping** (Settings → Beta → Gamut mapping). "Fast" uses
+  ChromIQ's built-in mapper. "Bit-exact" uses ArgyllCMS's own gamut-mapping
+  code instead: for RGB and CMYK printers the profile is built with colprof
+  directly, so it matches Argyll; for 6-ink and larger printers — which
+  colprof can't build — a bundled helper runs Argyll's gamut mapper on the
+  profile the engine builds. It takes a little longer than Fast.
+- **Accuracy check for multi-ink profiles**: Check & Refine now works on
+  6-ink and larger profiles, which stock profcheck won't read. The
+  illuminant, observer and paper-whitener (FWA) options are honoured,
+  computed from the measurement's spectral data.
+- **Settings**: the profile-engine toggle and the gamut-mapping option now
+  live on a separate "Beta" tab.
+- Fixes to the multi-ink build and the ≤4-ink destination-gamut step.
+
+## v3.13.7-beta.4
+
+Profile engine (#122): the engine now covers colprof's full option
+surface, and its perceptual rendering is built by ChromIQ's own port of
+Argyll's gamut-mapping algorithm. Still optional and off by default.
+
+- **Perceptual rendering, natively**: the engine's perceptual table is
+  computed by a line-by-line port of Argyll's gamut mapping (gammap /
+  nearsmth, AGPL-3.0, Graeme W. Gill — see workflow/profile_engine/
+  gammap_port/). It runs in the same CIECAM02 appearance space colprof
+  uses and was validated against Argyll's own mapping code to well
+  inside colprof's build-to-build variation. No background colprof run
+  is needed for the perceptual table any more; the saturation table
+  still uses the colprof-matched path while its port converges.
+- **Full colprof option surface**: spectral -i/-o illuminant/observer,
+  FWA compensation (-f), XYZ PCS (-a x), -r/-b/-ni/-np/-no/-nc/-nI/
+  -nP/-nS/-Z/-A/-M/-u/-R, -t/-T intent presets, -c/-d viewing
+  conditions, gamut source from any RGB/CMYK profile (including v4).
+  Unknown extra flags still route the build to colprof, named in the
+  log.
+- **Pre-conditioning hand-off (#44)**: the "Use as pre-conditioning
+  profile" button in the Build Profile and Check & Refine result
+  dialogs now also pre-fills the Manual module's targen expert option
+  (Pre-conditioning Profile, -c), so switching to Manual finds the
+  profile already in place.
+
+## v3.13.7-beta.3
+
+The ChromIQ profile engine (#122) — a profile builder inside the app, next
+to Argyll colprof. Optional and off by default; colprof remains the default
+engine everywhere.
+
+- **Settings → Behaviour → "ChromIQ profile engine (beta)"**: turning it on
+  adds a small "Profile engine" choice to the Build Profile tab — Argyll
+  colprof (default) or ChromIQ engine (beta). Build the same measurement
+  with both and compare; measurement files are never touched.
+- **Multi-ink profiles**: measurements from multi-ink charts (CMYK plus
+  orange, green, violet…) — which colprof cannot process — build
+  automatically with the ChromIQ engine. Together with the multi-ink charts
+  from Create Chart, the whole loop now closes inside ChromIQ: print,
+  measure, build, use as pre-conditioning profile.
+- **Loss-free rule**: the engine only takes a build it fully covers.
+  Options it doesn't do yet (spectral illuminants, FWA, custom smoothing,
+  extra command-line flags…) keep the build on colprof, and the log names
+  the reason. The standard gamut sources (ClayRGB / sRGB) are covered,
+  with perceptual and saturation tables built from them (approximate —
+  the colorimetric intents are the reference).
+- **Accuracy** (measured on real printers): at the same quality level the
+  engine's colour accuracy sits at colprof's level for RGB measurements;
+  profiles pass ColorSync verification and open in all Argyll tools.
+- Multi-ink profiles work in every downstream tool: previews, Lab 3D
+  views, profile-guided patch sets and lookups fall back transparently
+  where Argyll's own tools stop at 4 ink channels.
+
+## v3.13.7-beta.2
+
+The multi-ink preview round (#72 Tier D), plus fixes from live testing.
+
+- **True-colour chart preview**: when a multi-ink chart's preconditioning
+  profile is known, the preview renders the actual colours through it
+  (cctiff), with a badge saying so; without one, the approximate composite
+  is clearly labelled — and its extra-ink blending is now done in linear
+  light with absorption from real ink measurements.
+- **Per-ink inspector**: device-native charts get an "Inks:" row — hide any
+  ink to see what the others lay down, and read the exact ink values under
+  the cursor. Resets the moment a new chart is generated.
+- **Lab-space 3D views**: with a preconditioning profile, the New-patch-set
+  3D panel and the Tools "Show patch distribution (3D)" window plot multi-ink
+  patches where the profile predicts them in Lab — the honest distribution
+  picture (the RGB projection remains, clearly named, when no profile is set).
+- Generator options for multi-ink devices are remembered between sessions;
+  3D preview stays hidden when a remembered multi-ink setup reopens; compact
+  profile-row buttons; ink-limit ⓘ aligned; the patch-set window stays on
+  top after choosing a profile.
+
+## v3.13.7-beta.1
+
+The other half of multi-ink profiling (#72): CMYK / CMYK+N **patch sets** can
+now be designed, generated and edited — not just rendered. German is fully
+translated; the other languages follow before the final release.
+
+- **New patch set → Device**: choose Print RGB (unchanged default), CMYK, or
+  CMYK + extra inks (orange, green, violet, light inks… as removable chips),
+  with a first-class **ink limit** and an optional **preconditioning profile**
+  (validated inline against the chart's ink set).
+- **Multi-ink colour sets**: Even coverage (targen), per-ink ramps, ink-pair
+  overprints (always inside the ink limit), the near-neutral rings as a true
+  grey-balance set, white/black ink anchors — and with a preconditioning
+  profile, all the look-based sets (skin tones, blues, greens…) translate into
+  ink values, with an honest note when colours sit outside the printer's gamut.
+- **Editor**: multi-ink charts load, reorder, re-render and save through the
+  ChromIQ engine (press-ready separated TIFF + i1Profiler files included);
+  per-ink patch tooltips; RGB-only actions are cleanly gated.
+- **Profile build**: colprof's ink limit (-l) is prefilled from the chart's
+  own limit, carried through .ti1 → .ti2 → .ti3 automatically.
+- Generator rows whose set is off (or not available for the current device)
+  now show their count struck through, so the total is easier to follow.
+
 ## v3.13.6
 
 Stable. Multi-ink profiling in the layout engine (device-native CMYK/N TIFFs +

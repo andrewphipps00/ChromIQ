@@ -46,6 +46,8 @@ from ui.tooltip_button import InfoDialog, TooltipButton
 from ui.widgets import GatedOption, NoScrollComboBox, NoScrollDoubleSpinBox, NoScrollSpinBox, make_browse_button, open_file_dialog, replace_log_line, set_folder_icon, set_preset_icon, tint_dialog_primary
 from ui.ti2_loader import has_spectral_data, instrument_label, is_colormunki, read_target_instrument
 from ui.spectrum_progress import SpectrumSegmentsBar
+from workflow.engine_builder import (EngineProfileBuilder, engine_support,
+                                     is_multi_ink)
 from workflow.profile_builder import ProfileBuilder, ProfileParams
 from workflow.ti3_merge import merge_preconditioning, Ti3MergeError
 from workflow.printcal_runner import PrintcalRunner, PrintcalParams, ChannelTarget
@@ -277,6 +279,7 @@ class TabProfile(QWidget):
         self._runner        = runner
         self._settings      = settings
         self._builder       = ProfileBuilder(runner)
+        self._engine_builder = EngineProfileBuilder(settings)  # #122 beta
         self._printcal_runner = PrintcalRunner(runner, settings)
         self._applycal_runner = ApplycalRunner(runner, settings)
         self._ti3_path: Path | None = None
@@ -459,6 +462,7 @@ class TabProfile(QWidget):
         self._build_state_box = build_box
         cc.addWidget(build_box)
 
+
         btn_row = QHBoxLayout()
         self._build_btn = QPushButton(tr("Build Profile"), colprof_container)
         self._build_btn.setObjectName("primary")
@@ -499,6 +503,38 @@ class TabProfile(QWidget):
     # ------------------------------------------------------------------
     # Calibration mode
     # ------------------------------------------------------------------
+
+    def _resolve_engine(self, params: ProfileParams) -> str:
+        """Which engine builds this measurement: ``"colprof"``, ``"engine"``,
+        or ``"blocked"`` (multi-ink without the beta setting)."""
+        beta = bool(self._settings.get("profile_engine_beta", False))
+        if is_multi_ink(params.ti3_path):
+            if beta:
+                self._log.appendPlainText(tr(
+                    "[INFO] Multi-ink measurement — Argyll colprof can't "
+                    "build these, using the ChromIQ engine."))
+                return "engine"
+            return "blocked"
+        if beta:
+            # Bit-exact gamut mapping on a standard (<=4-ink) measurement:
+            # colprof builds these natively, so run it directly for a result
+            # identical to ArgyllCMS — the engine re-implements the forward and
+            # inverse tables, so it can only approximate colprof, never match it
+            # byte-for-byte. The engine (+ the bundled gamut helper) is reserved
+            # for CMY+N above, where colprof refuses.
+            if str(self._settings.get("gammap_mode", "fast")) == "argyll":
+                self._log.appendPlainText(tr(
+                    "[INFO] Bit-exact gamut mapping on a standard (≤4-ink) "
+                    "measurement — building with ArgyllCMS colprof directly, "
+                    "for a profile identical to Argyll."))
+                return "colprof"
+            ok, why = engine_support(params)
+            if ok:
+                return "engine"
+            self._log.appendPlainText(tr(
+                "[INFO] This build needs Argyll colprof because of: {what}. "
+                "Building with colprof.").format(what=why))
+        return "colprof"
 
     def set_calibration_mode(self, enabled: bool) -> None:
         """Switch between normal (GUIDED/MANUAL) and calibration (3-module) mode."""
@@ -3525,7 +3561,7 @@ class TabProfile(QWidget):
             self._log.appendPlainText("[ERROR] No valid .ti3 file selected.")
             self._log.ensureCursorVisible()
             return
-        if self._runner.is_running:
+        if self._runner.is_running or self._engine_builder.is_running:
             return
 
         params = self._collect_params()
@@ -3537,6 +3573,16 @@ class TabProfile(QWidget):
         params = self._apply_preconditioning_merge(params)
         self._active_params = params
         self._log.clear()
+        engine = self._resolve_engine(params)
+        if engine == "blocked":
+            self._show_tool_failure_dialog(
+                tr("Multi-ink measurement"),
+                tr("This measurement comes from a multi-ink chart (extra inks "
+                   "beyond CMYK). Argyll colprof cannot build a profile from "
+                   "it.\n\nEnable \"ChromIQ profile engine (beta)\" in "
+                   "Settings and build again — the engine handles multi-ink "
+                   "measurements."))
+            return
         self._build_headline.setText(
             tr("Working hard<span style=\"color: {SPEC_CYAN}; font-style: italic;\">…</span>").format(SPEC_CYAN=SPEC_CYAN)
         )
@@ -3547,22 +3593,31 @@ class TabProfile(QWidget):
         self._save_defaults_btn.setEnabled(False)
         self._file_grp.setEnabled(False)
         self._stack.setEnabled(False)
-        self._progress_bar.set_label("Building", "colprof")
+        self._progress_bar.set_label(
+            "Building", "colprof" if engine == "colprof" else "ChromIQ engine")
         self._progress_bar.set_value(None)
         self._progress_bar.start()
         self.profile_active.emit(True)
 
-        self._builder.build(
-            params,
-            on_line=self._on_log_line,
-            on_finish=self._on_build_done,
-        )
+        if engine == "engine":
+            self._engine_builder.build(
+                params,
+                on_line=self._on_log_line,
+                on_finish=self._on_engine_done,
+            )
+        else:
+            self._builder.build(
+                params,
+                on_line=self._on_log_line,
+                on_finish=self._on_build_done,
+            )
 
     def _on_log_line(self, line: str) -> None:
         self._log.appendPlainText(line)
         self._log.ensureCursorVisible()
 
-    def _on_build_done(self, code: int) -> None:
+    def _reset_build_ui(self) -> None:
+        """Restore the Build box after any build (colprof or engine)."""
         self.profile_active.emit(False)
         self._build_headline.setText(
             tr("Ready to build<span style=\"color: {SPEC_CYAN}; font-style: italic;\">?</span>").format(SPEC_CYAN=SPEC_CYAN)
@@ -3576,6 +3631,33 @@ class TabProfile(QWidget):
         self._progress_bar.stop()
         self._progress_bar.set_label("Build Profile", "")
         self._progress_bar.set_value(0)
+
+    def _on_engine_done(self, code: int) -> None:
+        """Finish path for ChromIQ-engine builds (#122)."""
+        self._reset_build_ui()
+        if code != 0:
+            failure = self._engine_builder.primary_failure()
+            self._show_tool_failure_dialog(
+                tr("Profile Build Failed"),
+                failure[1] if failure else tr(
+                    "The ChromIQ engine reported an error."))
+            return
+        params = self._active_params or self._collect_params()
+        self._icc_path = self._engine_builder.expected_icc_path(params)
+        if not (self._icc_path and self._icc_path.exists()):
+            self._log.appendPlainText("\n[ERROR] Profile file was not created.")
+            self._log.ensureCursorVisible()
+            return
+        self._install_btn.setEnabled(True)
+        self._log.appendPlainText(f"\n[OK] Profile saved: {self._icc_path}")
+        self._log.ensureCursorVisible()
+        self._ac_in_edit.setText(str(self._icc_path))
+        if self._ti3_path:
+            self.profile_built.emit(self._ti3_path, self._icc_path)
+        self._show_build_result_dialog(self._icc_path, [])
+
+    def _on_build_done(self, code: int) -> None:
+        self._reset_build_ui()
 
         if code != 0:
             self._log.appendPlainText(f"\n[ERROR] colprof exited with code {code}.")

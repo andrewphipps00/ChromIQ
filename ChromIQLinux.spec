@@ -119,6 +119,16 @@ print(
     file=sys.stderr,
 )
 
+# Bit-exact gamut-mapping helper (native/chromiq-gammap). Built by the CI CMake
+# step before PyInstaller; bundled under native/ so resource_path() finds it at
+# runtime. Absent in a plain local run (the app then falls back to the fast
+# Python mapper), so include it only when present.
+_gm_path = os.path.join('native', 'chromiq-gammap')
+_gammap_datas = [(_gm_path, 'native')] if os.path.exists(_gm_path) else []
+if not _gammap_datas:
+    print(f"[ChromIQLinux.spec] {_gm_path} not built — bit-exact gamut helper "
+          f"unavailable in this bundle (fast mapper still works).")
+
 a = Analysis(
     ['main.py'],
     pathex=['.'],
@@ -127,6 +137,7 @@ a = Analysis(
         ('assets',               'assets'),
         ('data/parameters.yaml', 'data'),
         (certifi_where,          'certifi'),
+        *_gammap_datas,
         *_ic_datas,
         *_we_datas,
     ],

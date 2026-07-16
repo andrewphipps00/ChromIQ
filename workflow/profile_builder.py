@@ -351,6 +351,28 @@ class ProfileBuilder:
             args.append("-R")
         if p.extra_args:
             args += shlex.split(p.extra_args)
+        # Multi-ink charts (#72): the chart's TOTAL_INK_LIMIT rides the
+        # .ti1 → .ti2 → .ti3 chain; prefill colprof's -l from it so the
+        # finished profile never asks the printer for more ink than the chart
+        # tested — unless the user already set -l/-L themselves. RGB
+        # measurements never carry the keyword, so this is a no-op for them.
+        if not any(a.startswith(("-l", "-L")) for a in args):
+            limit = self._ti3_ink_limit(p.ti3_path)
+            if limit is not None:
+                args.append(f"-l{int(limit)}")
         # Base name without extension
         args.append(str(p.ti3_path.with_suffix("")))
         return args
+
+    @staticmethod
+    def _ti3_ink_limit(ti3_path: Path) -> float | None:
+        """The measurement's ``TOTAL_INK_LIMIT`` (percent), or None (#72)."""
+        try:
+            text = Path(ti3_path).read_text(encoding="utf-8", errors="ignore")
+        except OSError:
+            return None
+        m = re.search(r'^TOTAL_INK_LIMIT\s+"([\d.]+)"', text, re.MULTILINE)
+        try:
+            return float(m.group(1)) if m else None
+        except ValueError:
+            return None

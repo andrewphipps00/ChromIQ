@@ -109,12 +109,15 @@ def test_new_chart_from_scratch(tmp_path: Path):
     assert out.read_text().count("CTI1") == 3
 
 
-def test_first_table_rgb_ignores_palette_tables(ti2: Path, tmp_path: Path):
-    # write_ti1 emits 3 tables; _first_table_rgb must return only the patch list.
+def test_seed_parse_ignores_palette_tables(ti2: Path, tmp_path: Path):
+    # write_ti1 emits 3 tables; the seed_from_targen parse (layout_engine's
+    # ti1_reader since #72) must return only the patch list, not the palette
+    # tables.
+    from workflow.layout_engine.ti1_reader import read_ti1
     spec = R.ChartSpec.from_ti2(ti2)
     prog = R.default_program(spec)
     out = R.write_ti1(spec, prog, tmp_path / "c.ti1")
-    got = R._first_table_rgb(out)
+    got = [dev for dev, _xyz in read_ti1(out).patches]
     assert len(got) == len(prog)  # not len(prog) + 8 extremes + 9 combos
     assert got[2] == (100.0, 0.0, 0.0)
 
@@ -430,15 +433,20 @@ def test_write_ti1_custom_palette_lands_in_extremes(ti2: Path, tmp_path: Path):
     assert "30.0000 70.0000 100.0000" in extremes
 
 
-def test_write_ti1_rejects_non_rgb(tmp_path: Path):
+def test_write_ti1_non_rgb_routes_to_engine_format(tmp_path: Path):
+    # Since #72 Tier A, non-RGB is no longer rejected: it routes to the
+    # single-table engine writer (full coverage in test_ti2_relayout_nchannel).
+    # Only the printtarg path (regenerate) still hard-fails on non-RGB.
     spec = R.ChartSpec(
         patches=[R.Patch("1", None, (0, 0, 0, 0), None)],
         dev_fields=["CMYK_C", "CMYK_M", "CMYK_Y", "CMYK_K"],
         has_xyz=False, color_rep="CMYK", white_point=None,
         instrument_flag="i1", paper_flag="A4", paper_mm=(210.0, 297.0),
     )
-    with pytest.raises(NotImplementedError):
-        R.write_ti1(spec, [(0, 0, 0, 0)], tmp_path / "c.ti1")
+    out = R.write_ti1(spec, [(0, 0, 0, 0)], tmp_path / "c.ti1")
+    assert 'COLOR_REP "CMYK"' in out.read_text(encoding="utf-8")
+    with pytest.raises(RuntimeError, match="RGB charts only"):
+        R.regenerate(spec, [(0, 0, 0, 0)], tmp_path, tmp_path)
 
 
 # --- spacer segmentation + recolour (synthetic, no Argyll) -----------------

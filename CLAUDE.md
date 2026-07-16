@@ -20,14 +20,14 @@ python main.py
 
 ```bash
 source .venv/bin/activate
-QT_QPA_PLATFORM=offscreen pytest      # ~20s, 724 tests
+QT_QPA_PLATFORM=offscreen pytest      # ~6–7 min, ~1900 tests
 ```
 
 `pytest.ini` scopes collection to `tests/` (via `testpaths`). Without it a bare
 `pytest` recurses into `.venv/` and — with `pytest-qt` active — collection
-appears to hang for many minutes. If a run takes more than a few seconds,
-something is wrong (a test opening a modal dialog `.exec()`, or `.venv` being
-scanned again), not just "slow tests".
+appears to hang for many minutes. A full run takes ~6–7 minutes; anything far
+beyond that means something is wrong (a test opening a modal dialog `.exec()`,
+or `.venv` being scanned again), not just "slow tests".
 
 ## Build distributable
 

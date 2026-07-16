@@ -594,6 +594,11 @@ class MainWindow(QMainWindow):
         try:
             program = load_rgb_program(chart)
         except ValueError as exc:
+            # Multi-ink chart (#72): show it anyway — as a true Lab-space
+            # scatter when its preconditioning profile is discoverable, else
+            # as the display-RGB projection of the ink values.
+            if self._show_nchannel_cube(chart):
+                return
             QMessageBox.information(self, tr("Show patch distribution (3D)"), str(exc))
             return
         if not program:
@@ -615,6 +620,62 @@ class MainWindow(QMainWindow):
         # label instead of a misleading profile name (Knut, #70 follow-up).
         PatchCubeDialog(program, mode=mode,
                         compare_presets=presets, parent=self).exec()
+
+    def _show_nchannel_cube(self, chart) -> bool:
+        """3D distribution for a multi-ink chart (#72): a true Lab-space
+        scatter when the chart's preconditioning profile is discoverable
+        (xicclu -ff through it), else the display-RGB projection of the ink
+        values in the normal cube. Returns False when nothing showable."""
+        from pathlib import Path
+        try:
+            from workflow.layout_engine.colorants import to_display_rgb
+            if Path(chart).suffix.lower() == ".ti2":
+                from workflow.ti2_relayout import ChartSpec
+                spec = ChartSpec.from_ti2(Path(chart))
+                devs, rep = [p.dev for p in spec.patches], spec.color_rep
+            else:
+                from workflow.layout_engine.ti1_reader import read_ti1
+                tgt = read_ti1(chart)
+                devs, rep = [d for d, _ in tgt.patches], tgt.color_rep
+            if not devs:
+                return False
+            colors = [to_display_rgb(d, rep) for d in devs]
+
+            from ui.dialogs.patch_cube_dialog import PatchCubeDialog
+            from ui.theme import resolve_mode
+            mode = resolve_mode(self._settings.get("appearance", "auto"))
+
+            from workflow.colorimetric_preview import find_device_profile
+            profile = find_device_profile(chart)
+            if profile is not None:
+                from core.platform_paths import argyll_candidate_dirs
+                from core.resource_path import argyll_binary
+                bin_dir = next((d for d in argyll_candidate_dirs()
+                                if (d / argyll_binary("xicclu")).exists()), None)
+                if bin_dir is not None:
+                    try:
+                        from workflow.xicclu_runner import forward_lab
+                        labs = forward_lab(devs, profile, bin_dir)
+                        PatchCubeDialog(
+                            [], mode=mode, lab_cloud=(labs, colors),
+                            target_name=tr("Current chart ({rep}, via profile)"
+                                           ).format(rep=rep),
+                            parent=self).exec()
+                        return True
+                    except Exception as exc:  # noqa: BLE001 — fall through
+                        log.warning("Lab cube for %s failed: %s", chart, exc)
+            # No profile: the ink values projected to display RGB — honest
+            # naming so nobody reads it as colorimetric truth.
+            program = [(r / 2.55, g / 2.55, b / 2.55) for r, g, b in colors]
+            PatchCubeDialog(
+                program, mode=mode,
+                target_name=tr("Current chart ({rep}, display approximation)"
+                               ).format(rep=rep),
+                parent=self).exec()
+            return True
+        except Exception as exc:  # noqa: BLE001 — never block the tool
+            log.warning("N-channel cube failed for %s: %s", chart, exc)
+            return False
 
     def _open_settings(self) -> None:
         # SettingsDialog tints its own tooltip ⓘ icons to the dialog's neutral
@@ -658,6 +719,7 @@ class MainWindow(QMainWindow):
         for tab in (self._tab_chart, self._tab_measure, self._tab_profile, self._tab_check):
             if hasattr(tab, "set_calibration_mode"):
                 tab.set_calibration_mode(enabled)
+        # Same refresh moment for the profile-engine beta selector (#122).
         profile_idx = self._tabs.indexOf(self._tab_profile)
         self._tabs.setTabText(
             profile_idx,

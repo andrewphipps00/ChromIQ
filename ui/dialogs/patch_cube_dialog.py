@@ -40,12 +40,19 @@ class PatchCubeDialog(QDialog):
                  target_name: str = "",
                  compare_presets: list[tuple[str, Path]] | None = None,
                  numbered: bool = False,
+                 lab_cloud: "tuple[list, list] | None" = None,
                  parent=None) -> None:
         super().__init__(parent)
         self._numbered = numbered
         self._target_name = target_name or tr("Current chart")
-        self._compare_presets = list(compare_presets or [])
-        self.setWindowTitle(tr("Patch distribution — 3D RGB cube"))
+        # Lab mode (#72): a multi-ink chart shown as a true Lab-space scatter
+        # (positions via its preconditioning profile). RGB preset comparison
+        # doesn't apply there, so the compare combo is dropped.
+        self._lab_cloud = lab_cloud
+        self._compare_presets = [] if lab_cloud else list(compare_presets or [])
+        self.setWindowTitle(
+            tr("Patch distribution — Lab space") if lab_cloud
+            else tr("Patch distribution — 3D RGB cube"))
         self.resize(1040 if self._compare_presets else 820, 760)
         self.setMinimumSize(520, 480)
 
@@ -116,7 +123,10 @@ class PatchCubeDialog(QDialog):
         self._panel = PatchCubePanel(mode=mode, numbered=numbered, parent=self)
         self._panel.set_primary_label(self._target_name)
         lay.addWidget(self._panel, 1)
-        self._panel.set_program(program)
+        if self._lab_cloud is not None:
+            self._panel.set_lab_cloud(*self._lab_cloud)
+        else:
+            self._panel.set_program(program)
 
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close, self)
         buttons.rejected.connect(self.reject)

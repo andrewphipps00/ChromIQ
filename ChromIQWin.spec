@@ -58,6 +58,16 @@ _winpty_datas, _winpty_binaries, _winpty_hiddenimports = collect_all('winpty')
 
 _we_datas, _we_binaries, _we_hiddenimports = collect_all('PyQt6-WebEngine')
 
+# Bit-exact gamut-mapping helper (native/chromiq-gammap.exe). Built by the CI
+# CMake+mingw step before PyInstaller; bundled under native/ so resource_path()
+# finds it at runtime. Absent in a plain local run or on Windows-arm64 (where
+# the app falls back to the fast Python mapper), so include it only when present.
+_gm_path = os.path.join('native', 'chromiq-gammap.exe')
+_gammap_datas = [(_gm_path, 'native')] if os.path.exists(_gm_path) else []
+if not _gammap_datas:
+    print(f"[ChromIQWin.spec] {_gm_path} not built — bit-exact gamut helper "
+          f"unavailable in this bundle (fast mapper still works).")
+
 a = Analysis(
     ['main.py'],
     pathex=['.'],
@@ -67,6 +77,7 @@ a = Analysis(
         ('data/parameters.yaml', 'data'),
         ('data/i18n',            'data/i18n'),
         (certifi_where,          'certifi'),
+        *_gammap_datas,
         *_ic_datas,
         *_winpty_datas,
         *_we_datas,

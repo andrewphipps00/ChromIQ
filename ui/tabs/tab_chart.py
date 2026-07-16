@@ -3811,6 +3811,10 @@ class TabChart(QWidget):
         self._switch_mode("guided")
         self._guided_precond_path.setText(str(profile_path))
         self._guided_precond_check.setChecked(True)
+        # mirror into the Manual module's targen expert option (-c) so the
+        # profile is pre-filled there too if the user flips to Manual
+        if self._manual_targen_c_pw is not None:
+            self._manual_targen_c_pw.set_value(str(profile_path))
         self._preconditioning_from_dialog = True
         try:
             self._precond_parent_run_id = self._file_mgr.project().current_run().id
@@ -7016,6 +7020,10 @@ class TabChart(QWidget):
         if self._runner.is_running:
             log.warning("A process is already running")
             return
+        # The per-ink inspector describes the PREVIOUS chart — drop it the
+        # moment a new build starts; load_tiff rebuilds it for the new chart's
+        # ink set when the build lands (#72, Basti).
+        self._preview.reset_ink_inspector()
         # Chart reflected from the Print/Measure tab — read-only. While nothing
         # is unlocked there is nothing to generate (the chart lives in its own
         # folder already); say so and stop. Unlocking a panel means the user

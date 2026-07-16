@@ -19,6 +19,7 @@ from PyQt6.QtWidgets import (
     QLabel,
     QLineEdit,
     QPushButton,
+    QSizePolicy,
     QTabWidget,
     QVBoxLayout,
     QWidget,
@@ -506,6 +507,127 @@ class SettingsDialog(QDialog):
             min_width=660,
         )
 
+        self._profile_engine_check = QCheckBox(
+            tr("ChromIQ profile engine (beta)"), self
+        )
+        engine_tip = TooltipButton(
+            tr("ChromIQ Profile Engine (beta)"),
+            tr("A profile builder that lives inside ChromIQ itself.\n\n"
+            "While this option is ON, clicking Build Profile runs the "
+            "ChromIQ engine instead of Argyll colprof — same tab, same "
+            "buttons, same options, nothing new to learn. Turn the option "
+            "OFF and every profile is built by colprof again, exactly as "
+            "before.\n\n"
+            "Why would you want it? One reason above all: printers with "
+            "EXTRA INKS. colprof can build profiles for RGB and CMYK "
+            "printers, but not for a CMYK printer with orange, green or "
+            "violet channels. The ChromIQ engine can. Together with the "
+            "multi-ink charts from Create Chart this closes the loop "
+            "entirely inside ChromIQ: print a multi-ink chart, measure "
+            "it, build a working profile.\n\n"
+            "What to expect:\n\n"
+            "  • The engine understands every option on the Build Profile "
+            "tab — quality levels, gamut sources, rendering intents, "
+            "spectral illuminants and observers, paper-whitener "
+            "compensation, ICC attributes and all the expert switches.\n\n"
+            "  • Its colour rendering is computed by ChromIQ's own port "
+            "of Argyll's gamut-mapping algorithm. In our own limited "
+            "testing the results measure within colprof's normal "
+            "build-to-build variation — but it has not been tested "
+            "extensively yet, so treat that as promising rather than "
+            "proven.\n\n"
+            "  • If a build needs something only colprof has (for example "
+            "a hand-typed extra flag the engine doesn't recognise), that "
+            "build is quietly handed to colprof and the log tells you "
+            "why.\n\n"
+            "  • Your measurement files are never changed by either "
+            "engine.\n\n"
+            "Turning the option on shows this information once more and "
+            "asks you to confirm. It is a new beta and has not been "
+            "extensively tested, so use it at your own risk and verify "
+            "every profile with a test print before you rely on it."),
+            self,
+            min_width=680,
+        )
+        self._profile_engine_check.clicked.connect(
+            self._on_profile_engine_clicked)
+
+        self._gammap_mode_combo = NoScrollComboBox(self)
+        self._gammap_mode_combo.addItem(tr("Fast"), "fast")
+        self._gammap_mode_combo.addItem(tr("Bit-exact"), "argyll")
+        self._gammap_mode_combo.setSizeAdjustPolicy(
+            NoScrollComboBox.SizeAdjustPolicy.AdjustToContents)
+        gammap_mode_tip = TooltipButton(
+            tr("Gamut mapping"),
+            tr("This chooses how the profile engine builds the perceptual "
+            "and saturation renderings of your profile — the parts that "
+            "gently squeeze the full range of an image into the smaller "
+            "range your printer and paper can actually reproduce. (It has "
+            "no effect on a plain colour-accurate profile; it only shapes "
+            "those two renderings.)\n\n"
+            "Both choices give you a correct, ready-to-use profile for any "
+            "printer ChromIQ supports, including 6-ink and beyond. The "
+            "difference is which software does the colour-squeezing:\n\n"
+            "  • Fast (built-in) — ChromIQ's own, careful re-creation of "
+            "Argyll's gamut-mapping maths, running right inside the app. It "
+            "finishes in a few seconds and, in our testing, is visually "
+            "indistinguishable from the exact result. This is the best "
+            "choice for everyday use.\n\n"
+            "  • Bit-exact (Argyll's engine) — gives you ArgyllCMS's real "
+            "result, not a re-creation of it:\n"
+            "       – For a normal RGB or CMYK printer, ChromIQ builds the "
+            "profile with ArgyllCMS colprof itself, so it is identical to "
+            "what Argyll would produce on its own.\n"
+            "       – For a 6-ink or larger printer — which Argyll's own "
+            "profiler cannot build at all — ChromIQ builds it with its "
+            "engine plus Argyll's actual gamut-mapping code (bundled with "
+            "the app), so the colour mapping is Argyll's real algorithm "
+            "there too.\n"
+            "     It takes a little longer — expect up to a minute or two, "
+            "and somewhat more for multi-ink printers.\n\n"
+            "Which should you pick? Fast is perfect for everyday work and "
+            "quicker. Choose Bit-exact when you want the most faithful "
+            "possible result — for example when you are comparing engines "
+            "closely, or simply prefer maximum faithfulness and don't mind "
+            "the short wait. Either way the colours are correct; this is "
+            "about exactness versus build speed, not about one being right "
+            "and the other wrong.\n\n"
+            "Building a profile is a one-time step per paper and printer, "
+            "so even the slower choice only costs you those extra minutes "
+            "once."),
+            self,
+            min_width=680,
+        )
+        self._gammap_mode_cell = gammap_mode_cell = QWidget(self)
+        _gm_row = QHBoxLayout(gammap_mode_cell)
+        _gm_row.setContentsMargins(0, 0, 0, 0)
+        _gm_row.addWidget(QLabel(tr("Gamut mapping"), self))
+        _gm_row.addWidget(self._gammap_mode_combo)
+        _gm_row.addStretch()
+        _gm_row.addWidget(gammap_mode_tip)
+        # Gamut mapping only applies to the profile engine, so the picker is
+        # shown only while the engine is enabled.
+        self._profile_engine_check.toggled.connect(
+            self._gammap_mode_cell.setVisible)
+
+        # Both live on their own "Beta features" tab.
+        self._beta_page = QWidget(self)
+        _beta = QVBoxLayout(self._beta_page)
+        _beta.setContentsMargins(16, 16, 16, 16)
+        _beta.setSpacing(12)
+        _beta_intro = QLabel(tr(
+            "Experimental features — enabled at your own risk. Verify every "
+            "result before you rely on it."), self)
+        _beta_intro.setWordWrap(True)
+        _beta.addWidget(_beta_intro)
+        _eng_row = QHBoxLayout()
+        _eng_row.addWidget(self._profile_engine_check)
+        _eng_row.addStretch()
+        _eng_row.addWidget(engine_tip)
+        _beta.addLayout(_eng_row)
+        _beta.addWidget(self._gammap_mode_cell)
+        _beta.addStretch()
+
         self._native_print_check = QCheckBox(tr("Use default macOS printer dialog"), self)
         native_tip = TooltipButton(
             tr("Use default macOS printer dialog"),
@@ -704,6 +826,11 @@ class SettingsDialog(QDialog):
                           tr("Scanner Limits"))
         self._tabs.addTab(self._scroll_wrap(self._build_paths_tab()),
                           tr("Paths"))
+        self._tabs.addTab(self._scroll_wrap(self._beta_page), tr("Beta"))
+        # Six tabs don't fit at the global 130px min-width / 20px padding, so
+        # trim this tab bar's tabs enough that they all show without a scroller.
+        self._tabs.tabBar().setStyleSheet(
+            "QTabBar::tab { min-width: 78px; padding: 9px 12px; }")
 
         # ---- About / Updates (below the tabs) ----
         credit1 = QLabel(tr("ChromIQ v{APP_VERSION} · Created by Sebastian Reiprich").format(APP_VERSION=APP_VERSION), self)
@@ -782,6 +909,86 @@ class SettingsDialog(QDialog):
     _MARGIN_INSTRUMENTS = ("i1Pro", "i1Pro 3+", "ColorMunki", "SpectroScan")
     _MARGIN_PAPERS = ("A4", "Letter", "Legal", "A3", "A3+", "A2", "Tabloid")
     _MARGIN_ORIENTS = ("Portrait", "Landscape")
+
+    def _on_profile_engine_clicked(self, checked: bool) -> None:
+        """Friendly beta consent dialog when the engine is switched on."""
+        if not checked:
+            return
+        from PyQt6.QtWidgets import QMessageBox, QSpacerItem, QSizePolicy
+        box = QMessageBox(self)
+        box.setWindowTitle(tr("ChromIQ Profile Engine (beta)"))
+        box.setIcon(QMessageBox.Icon.NoIcon)   # no exclamation mark
+        box.setText(tr(
+            "Great choice — you're switching on the ChromIQ profile "
+            "engine. Here's exactly what that does, in plain terms, so "
+            "there are no surprises.\n\n"
+            "The short version: from now on, when you click Build Profile, "
+            "ChromIQ builds the ICC profile itself instead of handing the "
+            "job to Argyll colprof. Everything else stays where it is — "
+            "the same tab, the same buttons, the same options. You don't "
+            "have to change how you work.\n\n"
+            "The big new thing this unlocks:\n\n"
+            "•  Printers with extra inks. colprof can only build profiles "
+            "for RGB and CMYK printers. If your printer adds orange, "
+            "green, violet or other inks on top of CMYK, colprof simply "
+            "can't make a profile for it — but the ChromIQ engine can. "
+            "Print one of the multi-ink charts from Create Chart, measure "
+            "it, and build a real, working profile for that printer, all "
+            "without leaving ChromIQ.\n\n"
+            "What stays exactly the same:\n\n"
+            "•  Every option on the Build Profile tab still works — the "
+            "quality levels, the gamut source, the rendering intents, "
+            "spectral illuminants and observers, paper-whitener "
+            "compensation, the ICC attributes and all the expert "
+            "switches. Nothing is taken away.\n\n"
+            "•  The colours match colprof. The engine's perceptual "
+            "rendering is ChromIQ's own careful port of Argyll's "
+            "gamut-mapping maths, and on our test charts the two build "
+            "profiles that measure so close you shouldn't be able to tell "
+            "them apart in a print.\n\n"
+            "•  Your measurements are never touched. If a particular build "
+            "needs something only colprof has, ChromIQ quietly lets "
+            "colprof handle that one and writes the reason in the log — "
+            "you don't have to do anything.\n\n"
+            "•  You're always one click from going back. Switch this "
+            "option off and ChromIQ returns to building every profile "
+            "with colprof, exactly as before.\n\n"
+            "Please read this part carefully: this engine is new and "
+            "still in beta. It has NOT been extensively tested yet, so "
+            "use it at your own risk. Treat every profile it makes as a "
+            "trial run — always check it with a test print before you "
+            "rely on it for anything that matters, and never use it "
+            "unchecked for an important or paid job. If anything looks "
+            "off, turn the option back off (colprof comes straight back) "
+            "and tell us what you saw; every report genuinely helps make "
+            "it better.\n\n"
+            "Enable it at your own risk and give it a try?"))
+        box.setStandardButtons(QMessageBox.StandardButton.Ok
+                               | QMessageBox.StandardButton.Cancel)
+        ok_btn = box.button(QMessageBox.StandardButton.Ok)
+        cancel_btn = box.button(QMessageBox.StandardButton.Cancel)
+        ok_btn.setText(tr("Enable the engine"))
+        cancel_btn.setText(tr("Keep using colprof"))
+        # Size each button to its own label so the text never clips
+        # (QMessageBox default min-width is too narrow for wide labels).
+        from PyQt6.QtGui import QFontMetrics
+        from PyQt6.QtWidgets import QDialogButtonBox
+        for b in (ok_btn, cancel_btn):
+            w = QFontMetrics(b.font()).horizontalAdvance(b.text()) + 44
+            b.setMinimumWidth(w)
+        bbox = box.findChild(QDialogButtonBox)
+        if bbox is not None:
+            bbox.setCenterButtons(True)
+        grid = box.layout()
+        if grid is not None:
+            # widen the box: a full-width spacer row under the text
+            spacer = QSpacerItem(620, 1, QSizePolicy.Policy.Minimum,
+                                 QSizePolicy.Policy.Minimum)
+            grid.addItem(spacer, grid.rowCount(), 0, 1,
+                         grid.columnCount())
+        box.setDefaultButton(QMessageBox.StandardButton.Ok)
+        if box.exec() != QMessageBox.StandardButton.Ok:
+            self._profile_engine_check.setChecked(False)
 
     def _build_paths_tab(self) -> QWidget:
         """Every folder ChromIQ reads or writes, in one place (Knut, #108):
@@ -1432,6 +1639,13 @@ class SettingsDialog(QDialog):
             .findData(int(s.get("scanner_flank_min_cells", 8)))))
         self._chromiq_refine_check.setChecked(bool(s.get("chromiq_refinement", False)))
         self._averaging_check.setChecked(bool(s.get("averaging_enabled", False)))
+        self._profile_engine_check.setChecked(bool(s.get("profile_engine_beta", False)))
+        self._gammap_mode_combo.setCurrentIndex(
+            max(0, self._gammap_mode_combo.findData(
+                str(s.get("gammap_mode", "fast")))))
+        # A no-change setChecked above may not emit toggled, so sync explicitly.
+        self._gammap_mode_cell.setVisible(
+            self._profile_engine_check.isChecked())
         self._native_print_check.setChecked(bool(s.get("use_native_print_dialog", False)))
         self._pdf_fallback_check.setChecked(bool(s.get("pdf_print_fallback", False)))
         self._confirm_print_check.setChecked(bool(s.get("confirm_before_printing", True)))
@@ -2059,6 +2273,8 @@ class SettingsDialog(QDialog):
         s.set("calibration_mode",          self._cal_mode_check.isChecked())
         s.set("chromiq_refinement",        self._chromiq_refine_check.isChecked())
         s.set("averaging_enabled",         self._averaging_check.isChecked())
+        s.set("profile_engine_beta",       self._profile_engine_check.isChecked())
+        s.set("gammap_mode",               self._gammap_mode_combo.currentData())
         s.set("use_native_print_dialog",   self._native_print_check.isChecked())
         s.set("pdf_print_fallback",        self._pdf_fallback_check.isChecked())
         s.set("confirm_before_printing",   self._confirm_print_check.isChecked())

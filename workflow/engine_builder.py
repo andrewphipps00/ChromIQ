@@ -1,0 +1,330 @@
+"""Qt adapter for the ChromIQ profile engine (#122) — Build-Profile side.
+
+Wraps :func:`workflow.profile_engine.build_profile` in a ``QThread`` with the
+same call surface the colprof :class:`~workflow.profile_builder.ProfileBuilder`
+offers (``build(params, on_line, on_finish)`` + ``expected_icc_path``), so
+``tab_profile`` can route a build to either engine without special-casing the
+UI flow. The engine runs in-process — the worker thread keeps the UI alive
+during the numeric fit.
+
+Coverage: the engine handles **every build the Build-Profile tab can
+request** — every option maps onto the engine's implementation, and options
+that are *errors* in colprof for printer measurements (matrix profile
+types, the input-profile white-point modes) produce the same errors here.
+Only two things still route to colprof, both named in the log: a hand-typed
+extra command-line flag the parser doesn't know, and a gamut-source file
+that can't be read as an RGB/CMYK profile.
+"""
+from __future__ import annotations
+
+import re
+import shlex
+from pathlib import Path
+from typing import TYPE_CHECKING, Callable
+
+from PyQt6.QtCore import QThread, pyqtSignal
+
+from core.i18n import tr
+from core.logger import get_logger
+from workflow.profile_engine import BuildSettings
+
+if TYPE_CHECKING:
+    from workflow.profile_builder import ProfileParams
+
+log = get_logger(__name__)
+
+# Device representations colprof itself accepts (profout.c) — everything
+# else (CMYKOG, CMYKcm, …) is engine-only territory.
+_COLPROF_REPS = {"RGB", "iRGB", "CMYK", "CMY", "K", "W", "GRAY"}
+
+
+def ti3_device_rep(ti3_path: Path | str) -> str:
+    """The device part of the file's COLOR_REP (``""`` when unreadable)."""
+    try:
+        head = Path(ti3_path).read_text(errors="replace")[:8000]
+    except OSError:
+        return ""
+    m = re.search(r'^COLOR_REP\s+"([^"]+)"', head, re.M)
+    return m.group(1).split("_")[0] if m else ""
+
+
+def is_multi_ink(ti3_path: Path | str) -> bool:
+    rep = ti3_device_rep(ti3_path)
+    return bool(rep) and rep not in _COLPROF_REPS
+
+
+class ExtraArgsError(ValueError):
+    """An extra command-line flag the engine parser doesn't know."""
+
+
+def _apply_extra_args(extra: str, s: BuildSettings) -> None:
+    """Fold hand-typed colprof flags into the BuildSettings.
+
+    Every documented colprof flag the Build tab could also set through its
+    widgets is accepted; anything unknown raises — the caller then routes
+    that build through colprof itself, naming the flag.
+    """
+    toks = shlex.split(extra)
+    i = 0
+
+    def val(tok: str, prefix: str) -> str:
+        nonlocal i
+        if len(tok) > len(prefix):
+            return tok[len(prefix):]
+        i += 1
+        if i >= len(toks):
+            raise ExtraArgsError(tok)
+        return toks[i]
+
+    while i < len(toks):
+        t = toks[i]
+        if t == "-v":
+            pass
+        elif t.startswith("-l") or t.startswith("-L"):
+            s.ink_limit = float(val(t, t[:2]))
+        elif t.startswith("-r"):
+            s.smoothing = float(val(t, "-r"))
+        elif t.startswith("-V"):
+            val(t, "-V")                    # no-op for output class (source)
+        elif t.startswith("-q"):
+            s.quality = val(t, "-q")
+        elif t.startswith("-b"):
+            if len(t) > 2:
+                s.b2a_quality = t[2:]
+            elif i + 1 < len(toks) and toks[i + 1] in tuple("lmhunfsLMHUN"):
+                i += 1
+                s.b2a_quality = toks[i]
+            else:
+                s.b2a_quality = "l"         # bare -b = low (colprof.c)
+        elif t.startswith("-a"):
+            s.algorithm = val(t, "-a")
+        elif t == "-ni" or t == "-np":
+            s.no_input_shaper = True
+        elif t == "-no":
+            s.no_output_shaper = True
+        elif t == "-nc":
+            s.embed_ti3 = False
+        elif t == "-nP":
+            s.perc_src_colorimetric = True
+        elif t == "-nS":
+            s.sat_src_colorimetric = True
+        elif t == "-nI":
+            s.inverse_gamut_a2b = True
+        elif t.startswith("-i"):
+            s.illuminant = val(t, "-i")
+        elif t.startswith("-o"):
+            s.observer = val(t, "-o")
+        elif t.startswith("-f"):
+            s.fwa = True
+            if len(t) > 2:
+                s.fwa_illum = t[2:]
+        elif t.startswith("-c"):
+            s.src_viewing = val(t, "-c")
+        elif t.startswith("-d"):
+            s.dst_viewing = val(t, "-d")
+        elif t.startswith("-t"):
+            s.perc_intent = val(t, "-t")
+        elif t.startswith("-T"):
+            s.sat_intent = val(t, "-T")
+        elif t.startswith("-Z"):
+            z = val(t, "-Z")
+            if z in ("p", "r", "s", "a"):
+                s.z_default_intent = z
+            else:
+                s.z_attributes += z
+        elif t.startswith("-A"):
+            s.manufacturer = val(t, "-A")
+        elif t.startswith("-M"):
+            s.model = val(t, "-M")
+        elif t.startswith("-C"):
+            s.copyright = val(t, "-C")
+        elif t.startswith("-D"):
+            s.description = val(t, "-D")
+        elif t.startswith("-s") or t.startswith("-S"):
+            s.source_gamut = val(t, t[:2])
+        elif t == "-R":
+            s.clip_primaries = True
+        elif t.startswith("-u"):
+            s.wp_scale = float(val(t, "-u"))
+        else:
+            raise ExtraArgsError(t)
+        i += 1
+
+
+# colprof's own errors for input-profile options on output data (colprof.c).
+_WP_MODE_ERRORS = {
+    "u": "Input auto WP scale mode isn't applicable to an output device",
+    "ua": "Force absolute colorimetric isn't applicable to an output device",
+    "uc": "Input cLUT clipping above WP mode isn't applicable to an output "
+          "device",
+}
+
+
+def settings_from_params(params: "ProfileParams") -> BuildSettings:
+    """Map the tab's ProfileParams onto engine BuildSettings (full surface).
+
+    Raises :class:`ExtraArgsError` for unknown extra flags and
+    :class:`workflow.profile_engine.EngineError`-style ValueError for
+    combinations colprof itself refuses on printer data — the caller shows
+    those as build errors, exactly like a colprof run would.
+    """
+    if params.wp_mode in _WP_MODE_ERRORS:
+        raise ValueError(_WP_MODE_ERRORS[params.wp_mode])
+    _ = params.dark_emphasis   # -V: no-op for output-class data — colprof
+    #                            itself passes literal 1.0 (colprof.c)
+    s = BuildSettings(
+        quality=params.quality or "m",
+        b2a_quality=params.b2a_quality or "",
+        algorithm=params.algorithm or "l",
+        description=params.description or None,
+        copyright=params.copyright or "Created with ChromIQ",
+        manufacturer=params.manufacturer or "ChromIQ",
+        model=params.model or params.description or "",
+        smoothing=params.smoothing,
+        no_input_shaper=params.no_input_shaper or params.no_grid_pos,
+        no_output_shaper=params.no_output_shaper,
+        embed_ti3=not params.no_embedded_data,
+        clip_primaries=params.clip_primaries,
+        wp_scale=(params.wp_scale
+                  if params.wp_mode == "scale" and params.wp_scale > 0
+                  else None),
+        z_attributes="".join(filter(None, [
+            params.z_surface, params.z_media_type, params.z_polarity,
+            params.z_color_mode])),
+        z_default_intent=params.z_default_intent,
+        source_gamut=params.gamut_src or params.gamut_sat_src or None,
+        perc_src_colorimetric=params.no_perc_gamut,
+        sat_src_colorimetric=params.no_sat_gamut,
+        inverse_gamut_a2b=params.inv_gamut_map,
+        perc_intent=params.perc_intent,
+        sat_intent=params.sat_intent,
+        src_viewing=params.src_viewing_cond,
+        dst_viewing=params.dst_viewing_cond,
+        illuminant=params.illuminant,
+        observer=params.observer,
+        fwa=params.fwa_enabled,
+        fwa_illum=params.fwa_illum,
+    )
+    if params.extra_args.strip():
+        _apply_extra_args(params.extra_args, s)
+    return s
+
+
+def engine_support(params: "ProfileParams") -> tuple[bool, str]:
+    """Can the engine run this exact build?
+
+    Returns ``(supported, reason)``. After the full-coverage round only two
+    cases still route to colprof: an unknown hand-typed extra flag, and a
+    gamut-source profile the live sampler can't read. Everything else either
+    runs on the engine or fails with the same error colprof gives.
+    """
+    try:
+        s = settings_from_params(params)
+    except ExtraArgsError as exc:
+        return False, tr(
+            "the extra colprof option {flag}").format(flag=exc)
+    except ValueError:
+        return True, ""      # colprof-identical error — engine handles it
+    gamut_source = s.source_gamut
+    if gamut_source:
+        from workflow.profile_engine.gamut_map import (
+            GamutSourceError, source_surface_from_profile)
+        try:
+            source_surface_from_profile(gamut_source, mesh=5)
+        except GamutSourceError as exc:
+            return False, tr(
+                "this gamut source profile ({reason})").format(reason=exc)
+    return True, ""
+
+
+class _EngineThread(QThread):
+    line = pyqtSignal(str)
+    done = pyqtSignal(int, str)
+
+    def __init__(self, ti3_path: Path, out_path: Path, settings, parent=None):
+        super().__init__(parent)
+        self._ti3 = ti3_path
+        self._out = out_path
+        self._settings = settings
+
+    def run(self) -> None:  # noqa: D102 — QThread worker
+        from workflow.profile_engine import build_profile
+        self._settings.progress = self.line.emit   # queued across threads
+        try:
+            res = build_profile(self._ti3, self._out, self._settings)
+        except Exception as exc:            # noqa: BLE001 — surfaced to UI
+            log.exception("engine build failed")
+            self.done.emit(1, str(exc))
+            return
+        self.line.emit(tr(
+            "Model fit at the measured patches: median {med:.2f} ΔE, "
+            "95% {p95:.2f} ΔE.").format(med=res.fit_median_de,
+                                        p95=res.fit_p95_de))
+        if res.perceptual_distinct:
+            self.line.emit(tr(
+                "Perceptual and saturation tables built from the gamut "
+                "source."))
+        self.done.emit(0, "")
+
+
+class EngineProfileBuilder:
+    """ProfileBuilder-compatible front end for the in-process engine."""
+
+    def __init__(self, settings=None) -> None:
+        self._thread: _EngineThread | None = None
+        self._last_error: str = ""
+        self._app_settings = settings
+
+    @property
+    def is_running(self) -> bool:
+        t = self._thread
+        if t is None:
+            return False
+        try:
+            return t.isRunning()
+        except RuntimeError:      # C++ side already deleted (deleteLater)
+            self._thread = None
+            return False
+
+    def expected_icc_path(self, params: "ProfileParams") -> Path:
+        base = params.ti3_path
+        return base.with_suffix(".icc")
+
+    def build(self, params: "ProfileParams",
+              on_line: Callable[[str], None],
+              on_finish: Callable[[int], None]) -> None:
+        try:
+            settings = settings_from_params(params)
+            if self._app_settings is not None:
+                settings.argyll_bin = self._app_settings.get(
+                    "argyll_bin_path", "/Applications/Argyll/bin")
+                settings.gammap_mode = str(
+                    self._app_settings.get("gammap_mode", "fast"))
+        except (ExtraArgsError, ValueError) as exc:
+            self._last_error = str(exc)
+            on_line(tr("[ERROR] {msg}").format(msg=exc))
+            on_finish(1)
+            return
+        out = self.expected_icc_path(params)
+        self._last_error = ""
+        self._thread = t = _EngineThread(params.ti3_path, out, settings)
+        t.line.connect(on_line)
+
+        def _finished(code: int, err: str) -> None:
+            self._last_error = err
+            self._thread = None
+            if err:
+                on_line(tr("[ERROR] {msg}").format(msg=err))
+            on_finish(code)
+
+        t.done.connect(_finished)
+        t.finished.connect(t.deleteLater)
+        on_line(tr("Building with the ChromIQ profile engine (beta)…"))
+        t.start()
+
+    # ProfileBuilder-parity helpers the finish path may consult ------------
+    def primary_failure(self) -> tuple[str, str] | None:
+        return ("engine", self._last_error) if self._last_error else None
+
+    def captured_warnings(self) -> list[tuple[str, str]]:
+        return []

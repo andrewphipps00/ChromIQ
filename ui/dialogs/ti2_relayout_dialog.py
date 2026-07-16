@@ -42,7 +42,8 @@ from ui.tab_header import SpectrumStripe as _SpectrumStripe, TabHeader
 from ui.tooltip_button import TooltipButton
 from ui.widgets import (
     NoScrollComboBox, NoScrollDoubleSpinBox, NoScrollSpinBox,
-    PrefixLockedLineEdit, open_dir_dialog, open_file_dialog, save_file_dialog,
+    PrefixLockedLineEdit, load_magenta_folder_icon, open_dir_dialog,
+    open_file_dialog, save_file_dialog,
 )
 
 
@@ -218,6 +219,17 @@ def _uniform_button_width(buttons, *, pad: int = 0) -> None:
         b.setMinimumWidth(w)
 
 
+def _hint_count_inactive(label: QLabel, active: bool) -> None:
+    """Strike through a generator row's count when the row won't contribute
+    (unticked, or gated off by the device state) — the number stays readable
+    for planning, but it's visually 'not counted' (#72, Basti). Works in both
+    light and dark mode (the strike inherits the label's own colour)."""
+    f = label.font()
+    if f.strikeOut() != (not active):
+        f.setStrikeOut(not active)
+        label.setFont(f)
+
+
 def _as_compact(*widgets) -> None:
     """Mark inputs as ``#compact_input`` so the app-wide stylesheets
     (ui/styles.py + ui/light_styles.py) apply the short / small-arrow
@@ -252,6 +264,7 @@ def _wire_spacer_mutex(boxes: tuple) -> None:
         cb.toggled.connect(_make(i))
 from workflow import ti2_relayout as R
 from workflow import patch_generators as G
+from workflow import patch_generators_nd as NDG
 
 log = get_logger(__name__)
 
@@ -342,6 +355,21 @@ def _qcolor(rgb: tuple[float, float, float]) -> QColor:
 
 def _to100(c: QColor) -> tuple[float, float, float]:
     return (c.red() / 255 * 100, c.green() / 255 * 100, c.blue() / 255 * 100)
+
+
+def _display100(vals: tuple, color_rep: str = "iRGB") -> tuple[float, float, float]:
+    """Device tuple (0..100, any channel count) → display RGB 0..100 (#72).
+
+    RGB programs pass through untouched (swatches stay pixel-identical for
+    RGB charts); anything else goes through the engine's display
+    approximation — the same colours the rendered chart preview shows.
+    """
+    rep = color_rep.lstrip("i").upper()
+    if len(vals) == 3 and rep == "RGB":
+        return vals  # type: ignore[return-value]
+    from workflow.layout_engine.colorants import to_display_rgb
+    r, g, b = to_display_rgb(tuple(vals), color_rep)
+    return (r / 255 * 100, g / 255 * 100, b / 255 * 100)
 
 
 def _swatch_icon(rgb: tuple[float, float, float], size: int = _SWATCH) -> QIcon:
@@ -510,15 +538,19 @@ class _ReorderListWidget(QListWidget):
         super().__init__(parent)
         self._drag_originals: list[tuple[QListWidgetItem, QIcon]] = []
         self._drop_line: tuple[int, int, int] | None = None  # (x, y0, y1)
+        # Device tuple → display RGB (0..100) for swatch/ghost icons. The
+        # hosting dialog points this at its chart-aware converter when a
+        # non-RGB chart is loaded (#72); the default handles plain RGB.
+        self.display_rgb = _display100
 
     def startDrag(self, supported_actions) -> None:  # noqa: N802
         selected = self.selectedItems()
         size = self.iconSize().width() or _SWATCH
         self._drag_originals = [(it, it.icon()) for it in selected]
         for it, _ in self._drag_originals:
-            rgb = it.data(Qt.ItemDataRole.UserRole)
-            if rgb is not None:
-                it.setIcon(_ghost_swatch_icon(rgb, size))
+            dev = it.data(Qt.ItemDataRole.UserRole)
+            if dev is not None:
+                it.setIcon(_ghost_swatch_icon(self.display_rgb(dev), size))
         try:
             super().startDrag(supported_actions)
         finally:
@@ -701,6 +733,9 @@ class _NewChartDialog(QDialog):
         self.result_program: list[tuple] | None = None
         self.result_options: R.LayoutOptions | None = None
         self.result_basename: str = "chart"
+        # Honest OOG note from the perceptual bridge (#72, appendix B) — set
+        # by _build_generated_program_nch, surfaced by the editor's status.
+        self.nch_moved_note: str = ""
         # Engine layout-mode the user picked in the Chart section (only
         # meaningful when the engine is on); the editor applies these to the
         # new chart's recipe (#93).
@@ -988,6 +1023,198 @@ class _NewChartDialog(QDialog):
         # placeholder spec — Create Chart applies the real layout on apply.
         chart_box.setVisible(False)
 
+        # --- Device (multi-ink patch data, #72) -------------------------------
+        # Which inks the chart's device values address. Print RGB (default)
+        # keeps the dialog exactly as it always was; CMYK / CMYK + extra inks
+        # reveal the ink limit + optional preconditioning profile and re-gate
+        # the colour sets (the three-state model). This is a patch-data
+        # concern, so it lives here — layout stays with the Create Chart tab.
+        dev_box = QGroupBox(tr("Device"), self)
+        dvg = QGridLayout(dev_box)
+        dvg.addWidget(QLabel(tr("Device type:")), 0, 0)
+        self._device_type = NoScrollComboBox(dev_box)
+        self._device_type.addItem(tr("Print RGB"), "rgb")
+        self._device_type.addItem(tr("CMYK"), "cmyk")
+        self._device_type.addItem(tr("CMYK + extra inks"), "cmykplus")
+        _as_compact(self._device_type)
+        dvg.addWidget(self._device_type, 0, 1)
+        dvg.addWidget(_magenta_tip(
+            tr("Device type"),
+            tr("Tells the chart which inks your printer actually uses, so "
+               "every patch is a colour your printer can really put on "
+               "paper.\n\n"
+               "  • Print RGB — standard photo inkjets driven as RGB (the "
+               "usual choice). Everything works with no extra setup, exactly "
+               "as before.\n"
+               "  • CMYK — four-ink printers and presses driven through a "
+               "RIP.\n"
+               "  • CMYK + extra inks — wide-gamut devices with orange, "
+               "green, violet or light inks. Add each extra ink below; the "
+               "chart then carries one value per ink, per patch.\n\n"
+               "Two things appear for anything other than RGB:\n"
+               "  • Ink limit — stops patches from laying down more total ink "
+               "than the paper can take (see its own ⓘ).\n"
+               "  • Preconditioning profile — optional; unlocks the "
+               "look-based colour sets. Its tooltip walks you through the "
+               "whole two-pass workflow.\n\n"
+               "Heads-up: multi-ink charts are saved as press-ready files for "
+               "your RIP — ChromIQ's own Print button is for RGB charts.")), 0, 2)
+        dvg.setColumnStretch(1, 1)
+
+        # Extra-ink slots — inline progressive reveal like the Manual tab's -D
+        # stacking: pick an ink to add it as a removable chip, no pop-ups.
+        self._nch_inks_row = QWidget(dev_box)
+        self._nch_inks_row.setObjectName("nch_inks_row")
+        irow = QHBoxLayout(self._nch_inks_row)
+        irow.setContentsMargins(0, 0, 0, 0)
+        irow.setSpacing(6)
+        irow.addWidget(QLabel(tr("Extra inks:")))
+        self._nch_chip_bar = QHBoxLayout()
+        self._nch_chip_bar.setSpacing(4)
+        irow.addLayout(self._nch_chip_bar)
+        self._nch_add_ink = NoScrollComboBox(self._nch_inks_row)
+        self._nch_add_ink.addItem(tr("Add ink…"), "")
+        for code, label in self._extra_ink_labels().items():
+            self._nch_add_ink.addItem(label, code)
+        _as_compact(self._nch_add_ink)
+        self._nch_add_ink.activated.connect(self._on_add_ink)
+        irow.addWidget(self._nch_add_ink)
+        self._nch_inkset_lbl = QLabel("", self._nch_inks_row)
+        self._nch_inkset_lbl.setStyleSheet(
+            "color: palette(text); font-style: italic;")
+        irow.addWidget(self._nch_inkset_lbl)
+        irow.addStretch(1)
+        dvg.addWidget(self._nch_inks_row, 1, 0, 1, 3)
+
+        # Ink limit — first-class and always visible for multi-ink devices.
+        self._nch_limit_row = QWidget(dev_box)
+        self._nch_limit_row.setObjectName("nch_limit_row")
+        lrow = QHBoxLayout(self._nch_limit_row)
+        lrow.setContentsMargins(0, 0, 0, 0)
+        lrow.setSpacing(6)
+        lrow.addWidget(QLabel(tr("Ink limit:")))
+        self._ink_limit = NoScrollSpinBox(self._nch_limit_row)
+        self._ink_limit.setRange(40, 400)
+        self._ink_limit.setValue(300)
+        self._ink_limit.setSuffix(" %")
+        self._ink_limit.setObjectName("compact_input")
+        _as_compact(self._ink_limit)
+        lrow.addWidget(self._ink_limit)
+        _limit_tip = _magenta_tip(
+            tr("Ink limit"),
+            tr("The most total ink one patch may lay down, as a percentage. "
+               "100 % per ink — so a four-ink printer could in theory reach "
+               "400 %, but real paper can't hold that: it soaks, warps and "
+               "dries slowly, and the measurement gets unreliable.\n\n"
+               "A safe starting point is 300 % for coated inkjet papers (many "
+               "presses use 260–330 %). Your RIP or paper vendor often states "
+               "the right value — if so, use theirs.\n\n"
+               "Why it matters twice:\n"
+               "  • Chart time (here): patches over the limit are never "
+               "printed, so the chart only contains colours your paper can "
+               "actually hold.\n"
+               "  • Profile time: the same limit is passed to the profile "
+               "builder, so the finished profile never asks the printer for "
+               "more ink than the chart tested. ChromIQ keeps the two in "
+               "sync for you."))
+        lrow.addStretch(1)
+        # Limit row spans the content columns; its ⓘ sits in the shared
+        # right-edge icon column, aligned under the other ⓘs (Basti).
+        dvg.addWidget(self._nch_limit_row, 2, 0, 1, 2)
+        dvg.addWidget(_limit_tip, 2, 2)
+
+        # Preconditioning profile — optional; unlocks the look-based sets.
+        self._nch_prof_row = QWidget(dev_box)
+        self._nch_prof_row.setObjectName("nch_prof_row")
+        prow = QGridLayout(self._nch_prof_row)
+        prow.setContentsMargins(0, 0, 0, 0)
+        prow.setHorizontalSpacing(6)
+        _prof_lbl = QLabel(tr("Preconditioning profile (optional):"),
+                           self._nch_prof_row)
+        prow.addWidget(_prof_lbl, 0, 0, 1, 4)
+        prow.addWidget(_magenta_tip(
+            tr("Preconditioning profile (optional)"),
+            tr("A profile here turns on the \"look-based\" colour sets — skin "
+               "tones, blues, greens, sunrises, pastels and From image — for "
+               "multi-ink printers (CMYK and CMYK + extra inks). You don't "
+               "need one to make a chart; it only adds these extra sets. "
+               "Here's the full picture, and why each step makes a better "
+               "profile.\n\n"
+               "The catch with multi-ink printers: a colour like \"skin\" or "
+               "\"sky blue\" can be mixed from many different ink "
+               "combinations, and the app can't know which inks make which "
+               "colour until it has measured your printer at least once. So "
+               "the recommended path is a two-pass loop:\n\n"
+               "  Pass 1 — Even coverage (no profile yet)\n"
+               "    • Leave this box empty and build the chart from \"Even "
+               "coverage\".\n"
+               "    • This spreads patches evenly across all your inks, so "
+               "the first profile learns the whole printer, not just one "
+               "area.\n"
+               "    • Print it with colour management OFF, measure it, and "
+               "build your first profile. It won't be perfect — that's "
+               "expected.\n\n"
+               "  Pass 2 — Refine where it matters (with this profile)\n"
+               "    • Come back here and choose that first profile (or any "
+               "profile built for this exact printer and ink set).\n"
+               "    • The app now knows, roughly, which ink mix makes which "
+               "colour — so the look-based sets light up. Tick the ones you "
+               "care about: skin tones for portraits, blues and greens for "
+               "landscapes, pastels for soft photo tones, or From image to "
+               "match a specific picture.\n"
+               "    • The app places extra patches exactly in those colours, "
+               "plus wherever the first profile was weakest. Print, measure "
+               "and rebuild.\n"
+               "    • The second profile is sharpened where your eyes are "
+               "most critical — without wasting patches on colours you "
+               "rarely print.\n\n"
+               "Good to know:\n"
+               "  • The profile must match the device type you picked (same "
+               "inks, same number of channels). A mismatch is flagged right "
+               "here, before you build.\n"
+               "  • The look-based patches are best guesses from your first "
+               "profile about where each colour sits. The real measurement "
+               "is what defines the final profile, so a slightly-off guess "
+               "still gives a solid result.\n"
+               "  • Prefer a profile built on the same paper and settings "
+               "you'll profile with.")), 0, 4)
+        self._nch_prof_edit = QLineEdit(self._nch_prof_row)
+        self._nch_prof_edit.setReadOnly(True)
+        self._nch_prof_edit.setPlaceholderText(
+            tr("(none — look-based sets need one)"))
+        _as_compact(self._nch_prof_edit)
+        prow.addWidget(self._nch_prof_edit, 1, 0)
+        # Square icon-sized buttons matching the compact field height —
+        # QPushButton otherwise pads to a wide default (Basti's live review).
+        self._nch_prof_browse = QPushButton(self._nch_prof_row)
+        self._nch_prof_browse.setIcon(load_magenta_folder_icon())
+        self._nch_prof_browse.setToolTip(tr("Choose an ICC profile…"))
+        self._nch_prof_browse.setObjectName("compact_input")
+        # The app-wide QPushButton QSS sets min-width: 72px, which overrides
+        # setFixedWidth (stylesheet minimums win over widget constraints) —
+        # relax it per-widget so these stay icon-sized square buttons.
+        self._nch_prof_browse.setStyleSheet(
+            "min-width: 20px; max-width: 20px; padding: 1px 4px;")
+        self._nch_prof_browse.clicked.connect(self._browse_precond)
+        prow.addWidget(self._nch_prof_browse, 1, 1)
+        self._nch_prof_clear = QPushButton("×", self._nch_prof_row)
+        self._nch_prof_clear.setToolTip(tr("Clear the profile"))
+        self._nch_prof_clear.setObjectName("compact_input")
+        self._nch_prof_clear.setStyleSheet(
+            "min-width: 20px; max-width: 20px; padding: 1px 4px;")
+        self._nch_prof_clear.clicked.connect(self._clear_precond)
+        prow.addWidget(self._nch_prof_clear, 1, 2)
+        self._nch_prof_status = QLabel("", self._nch_prof_row)
+        self._nch_prof_status.setWordWrap(True)
+        prow.addWidget(self._nch_prof_status, 2, 0, 1, 5)
+        prow.setColumnStretch(0, 1)
+        dvg.addWidget(self._nch_prof_row, 3, 0, 1, 3)
+
+        self._precond_path: str = ""
+        self._extra_inks: list[str] = []
+        self._device_type.currentIndexChanged.connect(self._refresh_nch_state)
+        lay.addWidget(dev_box)
+
         # --- Source ---------------------------------------------------------
         src_box = QGroupBox(tr("Patches"), self)
         sl = QVBoxLayout(src_box)
@@ -1183,6 +1410,10 @@ class _NewChartDialog(QDialog):
         # Height fits common laptop screens; width follows the fold state.
         self._init_fold_state(760)
 
+        # Initial device state (#72): default Print RGB hides the multi-ink
+        # rows; a restored state below may re-reveal them.
+        self._refresh_nch_state()
+
         # Prefer the chart's own creation recipe (reopened to tweak/recreate it);
         # otherwise restore the app-wide last-used state so creating another chart
         # doesn't start from scratch.
@@ -1199,6 +1430,276 @@ class _NewChartDialog(QDialog):
                    "sunrises", "flamingos", "neutral", "nearneutral", "edges",
                    "hs", "pastel", "image", "whiteblack", "fill", "unique",
                    "fill_unit_pages")
+
+    # Extra inks a CMYK device can add (#72) — ChromIQ ink codes (the
+    # ui.tiff_preview convention); labels follow targen's own colorant list
+    # and are translated at build time (literal tr() calls so the extractor
+    # sees them). Order = Argyll's canonical colorant order.
+    @staticmethod
+    def _extra_ink_labels() -> dict[str, str]:
+        return {
+            "o": tr("Orange"), "r": tr("Red"), "g": tr("Green"),
+            "b": tr("Blue"), "v": tr("Violet"), "w": tr("White"),
+            "lc": tr("Light cyan"), "lm": tr("Light magenta"),
+            "ly": tr("Light yellow"), "lk": tr("Light black"),
+            "mc": tr("Medium cyan"), "mm": tr("Medium magenta"),
+            "my": tr("Medium yellow"), "mk": tr("Medium black"),
+            "llk": tr("Light-light black"),
+        }
+
+    _INK_DFLAG: dict[str, int] = {
+        "c": 1, "m": 2, "y": 3, "k": 4, "o": 5, "r": 6, "g": 7, "b": 8,
+        "v": 9, "w": 10, "lc": 11, "lm": 12, "ly": 13, "lk": 14,
+        "mc": 15, "mm": 16, "my": 17, "mk": 18, "llk": 19,
+    }
+
+    # ---- Device / three-state model (#72) --------------------------------
+
+    def _nch_device_type(self) -> str:
+        """targen ``-d`` value for the chosen device type ("2" RGB, "4" CMYK…).
+
+        The Add-patches dialog shares the generate panel but has no Device box
+        (it always extends the loaded chart, whose colorspace is fixed) — it
+        reports RGB here so all state-2/3 gating stays off.
+        """
+        if getattr(self, "_device_type", None) is None:
+            return "2"
+        return "2" if (self._device_type.currentData() in (None, "rgb")) else "4"
+
+    def _nch_ink_codes(self) -> list[str]:
+        """The effective ink set as ChromIQ ink codes (RGB → r/g/b)."""
+        if self._nch_device_type() == "2":
+            return ["r", "g", "b"]
+        codes = ["c", "m", "y", "k"]
+        if self._device_type.currentData() == "cmykplus":
+            codes += [c for c in self._extra_inks if c not in codes]
+        return codes
+
+    def _nch_state(self) -> int:
+        """1 = RGB (everything as today), 2 = multi-ink without a usable
+        profile, 3 = multi-ink + channel-matching preconditioning profile."""
+        if self._nch_device_type() == "2":
+            return 1
+        return 3 if (self._precond_path
+                     and self._validate_precond(quiet=True)) else 2
+
+    def _on_add_ink(self, index: int) -> None:
+        code = self._nch_add_ink.itemData(index)
+        self._nch_add_ink.setCurrentIndex(0)
+        if not code or code in self._extra_inks:
+            return
+        self._extra_inks.append(code)
+        self._refresh_nch_state()
+
+    def _remove_ink(self, code: str) -> None:
+        if code in self._extra_inks:
+            self._extra_inks.remove(code)
+            self._refresh_nch_state()
+
+    def _rebuild_ink_chips(self) -> None:
+        while self._nch_chip_bar.count():
+            it = self._nch_chip_bar.takeAt(0)
+            if it.widget() is not None:
+                it.widget().deleteLater()
+        labels = self._extra_ink_labels()
+        for code in self._extra_inks:
+            chip = QPushButton(f"{labels.get(code, code)} ×",
+                               self._nch_inks_row)
+            chip.setObjectName("compact_input")
+            chip.setToolTip(tr("Remove this ink"))
+            chip.clicked.connect(lambda _=False, c=code: self._remove_ink(c))
+            self._nch_chip_bar.addWidget(chip)
+        try:
+            rep, _fields = R.color_rep_for_inks(self._nch_ink_codes())
+            self._nch_inkset_lbl.setText(
+                tr("→ ink set: {rep}").format(rep=rep)
+                if self._nch_device_type() != "2" else "")
+        except ValueError:
+            self._nch_inkset_lbl.setText("")
+
+    def _browse_precond(self) -> None:
+        from ui.widgets import icc_profile_paths
+        start = (self._settings.get("custom_output_path", "")
+                 if self._settings else "") or str(Path.home() / "ChromIQ")
+        path = open_file_dialog(
+            self, tr("Choose preconditioning profile"),
+            "ICC profiles (*.icc *.icm)", start_dir=start,
+            extra_paths=icc_profile_paths())
+        # macOS can hand focus to the editor window underneath when the file
+        # dialog closes over two stacked modals — bring this window back on
+        # top either way (picked or cancelled) (#72, Basti's live review).
+        self.raise_()
+        self.activateWindow()
+        if not path:
+            return
+        self._precond_path = path
+        self._refresh_nch_state()
+
+    def _clear_precond(self) -> None:
+        self._precond_path = ""
+        self._refresh_nch_state()
+
+    @staticmethod
+    def _icc_channel_count(color_space: str) -> int | None:
+        """Channel count for an ICC colour-space signature ('CMYK', '6CLR'…)."""
+        cs = color_space.strip().upper()
+        fixed = {"GRAY": 1, "RGB": 3, "CMY": 3, "CMYK": 4, "LAB": 3, "XYZ": 3}
+        if cs in fixed:
+            return fixed[cs]
+        if cs.endswith("CLR") and len(cs) == 4:
+            try:
+                return int(cs[0], 16)
+            except ValueError:
+                return None
+        return None
+
+    def _validate_precond(self, quiet: bool = False) -> bool:
+        """Inline profile-matches-device check (#72): the profile's colour
+        space must carry exactly the chart's channel count. Updates the status
+        label unless *quiet*."""
+        if not self._precond_path:
+            if not quiet:
+                self._nch_prof_status.setText("")
+            return False
+        n_chart = len(self._nch_ink_codes())
+        try:
+            from workflow.icc_info import read_icc
+            info = read_icc(self._precond_path)
+        except Exception as exc:  # noqa: BLE001 — unreadable/foreign file
+            if not quiet:
+                self._nch_prof_status.setText(
+                    tr("✗ Not a readable ICC profile: {err}").format(err=exc))
+                self._nch_prof_status.setStyleSheet("color: #d9534f;")
+            return False
+        n_prof = self._icc_channel_count(info.color_space)
+        rep, _ = R.color_rep_for_inks(self._nch_ink_codes())
+        if n_prof != n_chart:
+            if not quiet:
+                self._nch_prof_status.setText(
+                    tr("✗ Profile is {cs} ({np} channels) — this chart uses "
+                       "{rep} ({nc} channels). Pick a profile made for this "
+                       "exact printer and ink set.").format(
+                        cs=info.color_space.strip(), np=n_prof or "?",
+                        rep=rep, nc=n_chart))
+                self._nch_prof_status.setStyleSheet("color: #d9534f;")
+            return False
+        if not quiet:
+            desc = info.description or Path(self._precond_path).name
+            self._nch_prof_status.setText(
+                tr("✓ {desc} — {cs}, {n} channels — matches").format(
+                    desc=desc, cs=info.color_space.strip(), n=n_chart))
+            self._nch_prof_status.setStyleSheet("color: #5cb85c;")
+        return True
+
+    def _refresh_nch_state(self) -> None:
+        """Show/hide the multi-ink rows and re-gate the source modes for the
+        current state (1 RGB / 2 no-profile / 3 profile) — #72."""
+        dt = self._device_type.currentData() or "rgb"
+        multi = dt != "rgb"
+        self._nch_inks_row.setVisible(dt == "cmykplus")
+        self._nch_limit_row.setVisible(multi)
+        self._nch_prof_row.setVisible(multi)
+        self._rebuild_ink_chips()
+        self._nch_prof_edit.setText(self._precond_path)
+        if multi:
+            self._validate_precond()
+        self._apply_gen_state_gating(self._nch_state())
+        self._update_gen_counts()
+        self._do_push_live_preview()
+
+    # Generator-row classification for the three-state model (#72): RGB-cube
+    # constructs never generalise (a 9-step factorial in 7 channels is ~4.8 M
+    # patches); look-based sets need the preconditioning profile; the rest is
+    # N-native via the device adapters in workflow.patch_generators_nd.
+    _GEN_CUBE_BOUND = ("cube", "edges", "corners", "spirals")
+    _GEN_PERCEPTUAL = ("skin", "blues", "greens", "sunrises", "flamingos",
+                       "hs", "pastel", "image")
+
+    def _apply_gen_state_gating(self, state: int) -> None:
+        """Gate the source modes + generator rows for the three-state model.
+
+        State 1 (RGB): everything enabled, exactly as before #72. States 2/3:
+        hex/RGB pasting is meaningless; the RGB-cube rows stay greyed forever
+        (Even coverage is their replacement), the look-based rows unlock with
+        a channel-matching profile (state 3), the N-native rows (neutral
+        ramp, near-neutral rings, white/black, fill, unique) work in both.
+        The 3D cube preview is an RGB-cube projection — hidden for multi-ink.
+        """
+        rgb = state == 1
+        self._mode_paste.setEnabled(rgb)
+        if not rgb and self._mode_paste.isChecked():
+            self._mode_seed.setChecked(True)
+        # Per-row gating + honest tooltips. Original RGB tooltips are stashed
+        # once and restored on the way back to state 1.
+        if not self._gen_orig_tooltips:
+            for name in self._GEN_CUBE_BOUND + self._GEN_PERCEPTUAL + (
+                    "nearneutral",):
+                cb = getattr(self, f"_gen_{name}")
+                self._gen_orig_tooltips[name] = cb.toolTip()
+        tip_cube = tr(
+            "These sets trace the corners and edges of the RGB colour cube, "
+            "which only exists on RGB printers. \"Even coverage\" does the "
+            "same job for multi-ink printers — it spreads patches across "
+            "every ink combination your device can print.")
+        tip_profile = tr(
+            "This set places patches by how colours look (skin, sky, "
+            "foliage…). On a multi-ink printer the app first needs a "
+            "preconditioning profile, so it knows which ink mix produces "
+            "each colour. Add one in the Preconditioning profile field above "
+            "— its tooltip walks through the two-pass workflow, and the "
+            "field accepts any profile made for this exact printer and ink "
+            "set. On RGB printers this set is always available.")
+        tip_rings_nch = tr(
+            "Greys are where your eyes are pickiest, and where a printer "
+            "drifts first. This set places rings of patches around the grey "
+            "axis, so the profile learns exactly how much cyan, magenta and "
+            "yellow your printer needs for a clean, cast-free neutral — the "
+            "classic \"grey balance\" chart, built in.\n\n"
+            "Without a preconditioning profile the rings are centred on "
+            "equal amounts of C, M and Y. On a real printer that mix "
+            "usually looks slightly warm or green — that's expected, and "
+            "it's exactly why the rings exist: they bracket the neutral "
+            "region generously, and the measurement finds the true neutral "
+            "inside them. Tip: keep the ring offset at its default or "
+            "larger here.\n\n"
+            "With a preconditioning profile (see the field above) the same "
+            "rings are re-centred on your printer's actual neutral, so "
+            "every patch lands closer to where it matters most. Same "
+            "checkbox — the app simply aims better once it knows your "
+            "printer.")
+        for name in self._GEN_CUBE_BOUND:
+            cb = getattr(self, f"_gen_{name}")
+            cb.setEnabled(rgb)
+            cb.setToolTip(self._gen_orig_tooltips[name] if rgb else tip_cube)
+        for name in self._GEN_PERCEPTUAL:
+            cb = getattr(self, f"_gen_{name}")
+            cb.setEnabled(rgb or state == 3)
+            cb.setToolTip(self._gen_orig_tooltips[name] if rgb else
+                          (tip_profile if state == 2 else
+                           self._gen_orig_tooltips[name]))
+        self._gen_nearneutral.setToolTip(
+            self._gen_orig_tooltips["nearneutral"] if rgb else tip_rings_nch)
+        for w in self._nch_gen_widgets:
+            w.setVisible(not rgb)
+        # The fold button lives next to the cube; hide both in state 2 (no
+        # colour model — nothing honest to draw). State 3 keeps the panel:
+        # it shows the Lab-space scatter via the profile (#72). Track the
+        # intent with an explicit flag — widget isVisible() is always False
+        # before the window is shown, so guarding on it made a RESTORED
+        # multi-ink state keep the cube visible (Basti's live review). The
+        # flag only acts on real transitions, so refreshes don't resize the
+        # window through _on_fold_toggled.
+        if getattr(self, "_cube_panel", None) is not None:
+            hidden = getattr(self, "_nch_cube_hidden", False)
+            want_hidden = state == 2
+            if not want_hidden and hidden:
+                self._nch_cube_hidden = False
+                self._fold_btn.setVisible(True)
+                self._on_fold_toggled(self._cube_shown)
+            elif want_hidden and not hidden:
+                self._nch_cube_hidden = True
+                self._cube_panel.setVisible(False)
+                self._fold_btn.setVisible(False)
     _GEN_SPINS = ("cube_n", "corners_edge", "spirals_end", "spirals_reach",
                   "skin_n", "skin_ranges", "blues_n", "blues_layers",
                   "greens_n", "greens_layers", "sunrises_n", "sunrises_layers",
@@ -1354,8 +1855,33 @@ class _NewChartDialog(QDialog):
     def _collect_gen_state(self) -> dict:
         mode = ("generate" if self._mode_generate.isChecked() else
                 "paste" if self._mode_paste.isChecked() else "seed")
+        # Multi-ink device settings (#72) ride along ONLY when a non-RGB
+        # device type is chosen — the RGB state dict stays byte-identical to
+        # pre-#72 (state-1 identity: old versions + old presets keep
+        # round-tripping; see tests/test_gen_state1_identity.py).
+        device = {}
+        if self._nch_device_type() != "2":
+            device = {"device": {
+                "type": self._device_type.currentData(),
+                "extra_inks": list(self._extra_inks),
+                "ink_limit": int(self._ink_limit.value()),
+                "precond": self._precond_path,
+                # The device-gated generator rows persist WITH the device
+                # (generator-requirements checklist: every row must survive
+                # save/load, presets and the editor recipe) — inside this
+                # sub-dict so the RGB state dict stays byte-identical (R1).
+                "gen": {
+                    "targen": self._nch_targen.isChecked(),
+                    "targen_n": self._nch_targen_n.value(),
+                    "perink": self._nch_perink.isChecked(),
+                    "perink_n": self._nch_perink_n.value(),
+                    "pairs": self._nch_pairs.isChecked(),
+                    "pairs_n": self._nch_pairs_n.value(),
+                },
+            }}
         return {
             "mode": mode,
+            **device,
             **self._collect_gen_sets(),
             "instr": self._instr.currentData(),
             "paper": self._paper.currentData(),
@@ -1433,13 +1959,45 @@ class _NewChartDialog(QDialog):
         if "bit16" in lo:
             (self._bd_16 if lo["bit16"] else self._bd_8).setChecked(True)
 
+        # Multi-ink device settings (#72): absent key = RGB, matching every
+        # pre-#72 saved state/preset (get()-with-default, R1 rule).
+        dev = st.get("device") or {}
+        dt = dev.get("type", "rgb")
+        ix = self._device_type.findData(dt)
+        self._device_type.setCurrentIndex(ix if ix >= 0 else 0)
+        self._extra_inks = [c for c in dev.get("extra_inks", [])
+                            if c in self._INK_DFLAG]
+        try:
+            self._ink_limit.setValue(int(dev.get("ink_limit", 300)))
+        except (TypeError, ValueError):
+            pass
+        self._precond_path = str(dev.get("precond", "") or "")
+        # Device-gated generator rows: restore with get()-defaults, and reset
+        # to the factory baseline when no device state rides along (RGB state
+        # or Restore-defaults) — the checklist's default-when-absent rule.
+        gen = dev.get("gen") or {}
+        self._nch_targen.setChecked(bool(gen.get("targen", True)))
+        self._nch_perink.setChecked(bool(gen.get("perink", True)))
+        self._nch_pairs.setChecked(bool(gen.get("pairs", True)))
+        for key, spin, default in (("targen_n", self._nch_targen_n, 800),
+                                   ("perink_n", self._nch_perink_n, 8),
+                                   ("pairs_n", self._nch_pairs_n, 4)):
+            try:
+                spin.setValue(int(gen.get(key, default)))
+            except (TypeError, ValueError):
+                spin.setValue(default)
+        self._refresh_nch_state()
+
         self._apply_gen_sets(st)
         # "blank" (the removed Blank-canvas mode) is deliberately absent: a
         # saved state or preset that carries it keeps the current selection.
         radio = {"generate": self._mode_generate, "paste": self._mode_paste,
                  "seed": self._mode_seed}.get(
                      st.get("mode"))
-        if radio is not None:
+        if radio is not None and radio.isEnabled():
+            # A disabled radio means the current device state gates that mode
+            # (#72: paste/generate are RGB-only until Tier C) — keep the
+            # gating's choice instead of re-checking it programmatically.
             radio.setChecked(True)
         self._refresh_source_widgets()
 
@@ -1544,10 +2102,10 @@ class _NewChartDialog(QDialog):
                                   "range. N is the steps per axis."))
         self._gen_cube_n = _spin(2, 30, 8)
         self._gen_cube_count = _count_label()
-        gg.addWidget(self._gen_cube, 0, 0)
-        gg.addWidget(QLabel(tr("per axis:")), 0, 1)
-        gg.addWidget(self._gen_cube_n, 0, 2)
-        gg.addWidget(self._gen_cube_count, 0, 7)
+        gg.addWidget(self._gen_cube, 3, 0)
+        gg.addWidget(QLabel(tr("per axis:")), 3, 1)
+        gg.addWidget(self._gen_cube_n, 3, 2)
+        gg.addWidget(self._gen_cube_count, 3, 7)
 
         # Gamut-corner emphasis — extra patches ON the gamut edge lines near each
         # corner tip (TC9.18/TC9.24 style), slotted into the gaps the cube /
@@ -1566,10 +2124,10 @@ class _NewChartDialog(QDialog):
                                      "is never missing."))
         self._gen_corners_edge = _spin(1, 8, 2)
         self._gen_corners_count = _count_label()
-        gg.addWidget(self._gen_corners, 2, 0)
-        gg.addWidget(QLabel(tr("edge:")), 2, 1)
-        gg.addWidget(self._gen_corners_edge, 2, 2)
-        gg.addWidget(self._gen_corners_count, 2, 7)
+        gg.addWidget(self._gen_corners, 5, 0)
+        gg.addWidget(QLabel(tr("edge:")), 5, 1)
+        gg.addWidget(self._gen_corners_edge, 5, 2)
+        gg.addWidget(self._gen_corners_count, 5, 7)
 
         # Colour extremes — Highlights-&-shadows-style spiral cones just inside the
         # six chromatic corners. Placed directly above Highlights & shadows (grid
@@ -1590,12 +2148,12 @@ class _NewChartDialog(QDialog):
         self._gen_spirals_end = _spin(1, 200, 8)   # max matches Pastels/H&S (Knut)
         self._gen_spirals_reach = _spin(2, 45, 16)
         self._gen_spirals_count = _count_label()
-        gg.addWidget(self._gen_spirals, 10, 0)
-        gg.addWidget(QLabel(tr("per end:")), 10, 1)
-        gg.addWidget(self._gen_spirals_end, 10, 2)
-        gg.addWidget(QLabel(tr("reach:")), 10, 3)
-        gg.addWidget(self._gen_spirals_reach, 10, 4)
-        gg.addWidget(self._gen_spirals_count, 10, 7)
+        gg.addWidget(self._gen_spirals, 13, 0)
+        gg.addWidget(QLabel(tr("per end:")), 13, 1)
+        gg.addWidget(self._gen_spirals_end, 13, 2)
+        gg.addWidget(QLabel(tr("reach:")), 13, 3)
+        gg.addWidget(self._gen_spirals_reach, 13, 4)
+        gg.addWidget(self._gen_spirals_count, 13, 7)
 
         # Fitzpatrick skin tones — per-type ramp × parallel hue ranges.
         self._gen_skin = QCheckBox(tr("Skin tones (Fitzpatrick)"), self._gen_panel)
@@ -1607,12 +2165,12 @@ class _NewChartDialog(QDialog):
         self._gen_skin_n = _spin(1, 36, 8)
         self._gen_skin_ranges = _spin(1, 5, 3)
         self._gen_skin_count = _count_label()
-        gg.addWidget(self._gen_skin, 3, 0)
-        gg.addWidget(QLabel(tr("per type:")), 3, 1)
-        gg.addWidget(self._gen_skin_n, 3, 2)
-        gg.addWidget(QLabel(tr("ranges:")), 3, 3)
-        gg.addWidget(self._gen_skin_ranges, 3, 4)
-        gg.addWidget(self._gen_skin_count, 3, 7)
+        gg.addWidget(self._gen_skin, 6, 0)
+        gg.addWidget(QLabel(tr("per type:")), 6, 1)
+        gg.addWidget(self._gen_skin_n, 6, 2)
+        gg.addWidget(QLabel(tr("ranges:")), 6, 3)
+        gg.addWidget(self._gen_skin_ranges, 6, 4)
+        gg.addWidget(self._gen_skin_count, 6, 7)
 
         # Enhanced blues / turquoise.
         self._gen_blues = QCheckBox(tr("Oceans (blues)"), self._gen_panel)
@@ -1624,12 +2182,12 @@ class _NewChartDialog(QDialog):
         self._gen_blues_n = _spin(1, 200, 64)
         self._gen_blues_layers = _spin(1, 10, 3)
         self._gen_blues_count = _count_label()
-        gg.addWidget(self._gen_blues, 4, 0)
-        gg.addWidget(QLabel(tr("per layer:")), 4, 1)
-        gg.addWidget(self._gen_blues_n, 4, 2)
-        gg.addWidget(QLabel(tr("layers:")), 4, 3)
-        gg.addWidget(self._gen_blues_layers, 4, 4)
-        gg.addWidget(self._gen_blues_count, 4, 7)
+        gg.addWidget(self._gen_blues, 7, 0)
+        gg.addWidget(QLabel(tr("per layer:")), 7, 1)
+        gg.addWidget(self._gen_blues_n, 7, 2)
+        gg.addWidget(QLabel(tr("layers:")), 7, 3)
+        gg.addWidget(self._gen_blues_layers, 7, 4)
+        gg.addWidget(self._gen_blues_count, 7, 7)
 
         # Enhanced greens (foliage).
         self._gen_greens = QCheckBox(tr("Foliage (greens)"), self._gen_panel)
@@ -1641,12 +2199,12 @@ class _NewChartDialog(QDialog):
         self._gen_greens_n = _spin(1, 200, 64)
         self._gen_greens_layers = _spin(1, 10, 3)
         self._gen_greens_count = _count_label()
-        gg.addWidget(self._gen_greens, 5, 0)
-        gg.addWidget(QLabel(tr("per layer:")), 5, 1)
-        gg.addWidget(self._gen_greens_n, 5, 2)
-        gg.addWidget(QLabel(tr("layers:")), 5, 3)
-        gg.addWidget(self._gen_greens_layers, 5, 4)
-        gg.addWidget(self._gen_greens_count, 5, 7)
+        gg.addWidget(self._gen_greens, 8, 0)
+        gg.addWidget(QLabel(tr("per layer:")), 8, 1)
+        gg.addWidget(self._gen_greens_n, 8, 2)
+        gg.addWidget(QLabel(tr("layers:")), 8, 3)
+        gg.addWidget(self._gen_greens_layers, 8, 4)
+        gg.addWidget(self._gen_greens_count, 8, 7)
 
         # Sunrises — the warm band (yellows, oranges, reds, pinks).
         self._gen_sunrises = QCheckBox(tr("Sunrises (warm)"), self._gen_panel)
@@ -1660,12 +2218,12 @@ class _NewChartDialog(QDialog):
         self._gen_sunrises_n = _spin(1, 200, 64)
         self._gen_sunrises_layers = _spin(1, 10, 3)
         self._gen_sunrises_count = _count_label()
-        gg.addWidget(self._gen_sunrises, 6, 0)
-        gg.addWidget(QLabel(tr("per layer:")), 6, 1)
-        gg.addWidget(self._gen_sunrises_n, 6, 2)
-        gg.addWidget(QLabel(tr("layers:")), 6, 3)
-        gg.addWidget(self._gen_sunrises_layers, 6, 4)
-        gg.addWidget(self._gen_sunrises_count, 6, 7)
+        gg.addWidget(self._gen_sunrises, 9, 0)
+        gg.addWidget(QLabel(tr("per layer:")), 9, 1)
+        gg.addWidget(self._gen_sunrises_n, 9, 2)
+        gg.addWidget(QLabel(tr("layers:")), 9, 3)
+        gg.addWidget(self._gen_sunrises_layers, 9, 4)
+        gg.addWidget(self._gen_sunrises_count, 9, 7)
 
         # Flamingos — the pink / magenta / indigo band the other bands leave out.
         self._gen_flamingos = QCheckBox(tr("Flamingos (pinks)"), self._gen_panel)
@@ -1680,12 +2238,12 @@ class _NewChartDialog(QDialog):
         self._gen_flamingos_n = _spin(1, 200, 64)
         self._gen_flamingos_layers = _spin(1, 10, 3)
         self._gen_flamingos_count = _count_label()
-        gg.addWidget(self._gen_flamingos, 7, 0)
-        gg.addWidget(QLabel(tr("per layer:")), 7, 1)
-        gg.addWidget(self._gen_flamingos_n, 7, 2)
-        gg.addWidget(QLabel(tr("layers:")), 7, 3)
-        gg.addWidget(self._gen_flamingos_layers, 7, 4)
-        gg.addWidget(self._gen_flamingos_count, 7, 7)
+        gg.addWidget(self._gen_flamingos, 10, 0)
+        gg.addWidget(QLabel(tr("per layer:")), 10, 1)
+        gg.addWidget(self._gen_flamingos_n, 10, 2)
+        gg.addWidget(QLabel(tr("layers:")), 10, 3)
+        gg.addWidget(self._gen_flamingos_layers, 10, 4)
+        gg.addWidget(self._gen_flamingos_count, 10, 7)
 
         # Neutral grey ramp — pure greys black→white, no tints (a B&W wedge).
         # Independent of Near-neutral greys below, so the count of pure neutrals
@@ -1704,10 +2262,10 @@ class _NewChartDialog(QDialog):
                                      "ones, or either on its own."))
         self._gen_neutral_n = _spin(1, 64, 16)
         self._gen_neutral_count = _count_label()
-        gg.addWidget(self._gen_neutral, 8, 0)
-        gg.addWidget(QLabel(tr("steps:")), 8, 1)
-        gg.addWidget(self._gen_neutral_n, 8, 2)
-        gg.addWidget(self._gen_neutral_count, 8, 7)
+        gg.addWidget(self._gen_neutral, 11, 0)
+        gg.addWidget(QLabel(tr("steps:")), 11, 1)
+        gg.addWidget(self._gen_neutral_n, 11, 2)
+        gg.addWidget(self._gen_neutral_count, 11, 7)
 
         # Near-neutral greys — ONLY the rings of gentle hue tints around each
         # neutral level (no pure centre — that's the ramp's job above).
@@ -1730,14 +2288,14 @@ class _NewChartDialog(QDialog):
         self._gen_nearneutral_off = _spin(1, 50, 4)
         self._gen_nearneutral_count = _count_label()
         self._gen_nearneutral_off_label = QLabel(tr("offset:"))
-        gg.addWidget(self._gen_nearneutral, 9, 0)
-        gg.addWidget(QLabel(tr("steps:")), 9, 1)
-        gg.addWidget(self._gen_nearneutral_n, 9, 2)
-        gg.addWidget(QLabel(tr("rings:")), 9, 3)
-        gg.addWidget(self._gen_nearneutral_rings, 9, 4)
-        gg.addWidget(self._gen_nearneutral_off_label, 9, 5)
-        gg.addWidget(self._gen_nearneutral_off, 9, 6)
-        gg.addWidget(self._gen_nearneutral_count, 9, 7)
+        gg.addWidget(self._gen_nearneutral, 12, 0)
+        gg.addWidget(QLabel(tr("steps:")), 12, 1)
+        gg.addWidget(self._gen_nearneutral_n, 12, 2)
+        gg.addWidget(QLabel(tr("rings:")), 12, 3)
+        gg.addWidget(self._gen_nearneutral_rings, 12, 4)
+        gg.addWidget(self._gen_nearneutral_off_label, 12, 5)
+        gg.addWidget(self._gen_nearneutral_off, 12, 6)
+        gg.addWidget(self._gen_nearneutral_count, 12, 7)
 
         # Saturated edges — the gamut boundary, locked to the 3D cube's grid so
         # the infill stays even at any density (Knut, #78). Placed directly under
@@ -1758,12 +2316,12 @@ class _NewChartDialog(QDialog):
         self._gen_edges_n = _spin(0, 5, 1)
         self._gen_edges_faces = _spin(0, 5, 0)
         self._gen_edges_count = _count_label()
-        gg.addWidget(self._gen_edges, 1, 0)
-        gg.addWidget(QLabel(tr("between:")), 1, 1)
-        gg.addWidget(self._gen_edges_n, 1, 2)
-        gg.addWidget(QLabel(tr("faces:")), 1, 3)
-        gg.addWidget(self._gen_edges_faces, 1, 4)
-        gg.addWidget(self._gen_edges_count, 1, 7)
+        gg.addWidget(self._gen_edges, 4, 0)
+        gg.addWidget(QLabel(tr("between:")), 4, 1)
+        gg.addWidget(self._gen_edges_n, 4, 2)
+        gg.addWidget(QLabel(tr("faces:")), 4, 3)
+        gg.addWidget(self._gen_edges_faces, 4, 4)
+        gg.addWidget(self._gen_edges_count, 4, 7)
 
         # Highlights & shadows — detail at the two tonal ends. The label's "&"
         # is doubled so Qt shows it literally instead of eating it as a mnemonic;
@@ -1786,12 +2344,12 @@ class _NewChartDialog(QDialog):
         self._gen_hs_n = _spin(1, 200, 24)
         self._gen_hs_reach = _spin(2, 45, 16)
         self._gen_hs_count = _count_label()
-        gg.addWidget(self._gen_hs, 11, 0)
-        gg.addWidget(QLabel(tr("per end:")), 11, 1)
-        gg.addWidget(self._gen_hs_n, 11, 2)
-        gg.addWidget(QLabel(tr("depth:")), 11, 3)
-        gg.addWidget(self._gen_hs_reach, 11, 4)
-        gg.addWidget(self._gen_hs_count, 11, 7)
+        gg.addWidget(self._gen_hs, 14, 0)
+        gg.addWidget(QLabel(tr("per end:")), 14, 1)
+        gg.addWidget(self._gen_hs_n, 14, 2)
+        gg.addWidget(QLabel(tr("depth:")), 14, 3)
+        gg.addWidget(self._gen_hs_reach, 14, 4)
+        gg.addWidget(self._gen_hs_count, 14, 7)
 
         # Pastels — low-chroma midtones.
         self._gen_pastel = QCheckBox(tr("Pastels"), self._gen_panel)
@@ -1804,12 +2362,12 @@ class _NewChartDialog(QDialog):
         self._gen_pastel_n = _spin(1, 200, 24)
         self._gen_pastel_layers = _spin(1, 4, 2)
         self._gen_pastel_count = _count_label()
-        gg.addWidget(self._gen_pastel, 12, 0)
-        gg.addWidget(QLabel(tr("per layer:")), 12, 1)
-        gg.addWidget(self._gen_pastel_n, 12, 2)
-        gg.addWidget(QLabel(tr("layers:")), 12, 3)
-        gg.addWidget(self._gen_pastel_layers, 12, 4)
-        gg.addWidget(self._gen_pastel_count, 12, 7)
+        gg.addWidget(self._gen_pastel, 15, 0)
+        gg.addWidget(QLabel(tr("per layer:")), 15, 1)
+        gg.addWidget(self._gen_pastel_n, 15, 2)
+        gg.addWidget(QLabel(tr("layers:")), 15, 3)
+        gg.addWidget(self._gen_pastel_layers, 15, 4)
+        gg.addWidget(self._gen_pastel_count, 15, 7)
 
         # From image — the most representative colours of a chosen photo.
         self._gen_image = QCheckBox(tr("From image"), self._gen_panel)
@@ -1825,11 +2383,11 @@ class _NewChartDialog(QDialog):
         self._gen_image_btn.clicked.connect(self._load_gen_image)
         self._gen_image_n = _spin(1, 500, 24)
         self._gen_image_count = _count_label()
-        gg.addWidget(self._gen_image, 13, 0)
-        gg.addWidget(self._gen_image_btn, 13, 1, 1, 2)
-        gg.addWidget(QLabel(tr("colours:")), 13, 3)
-        gg.addWidget(self._gen_image_n, 13, 4)
-        gg.addWidget(self._gen_image_count, 13, 7)
+        gg.addWidget(self._gen_image, 16, 0)
+        gg.addWidget(self._gen_image_btn, 16, 1, 1, 2)
+        gg.addWidget(QLabel(tr("colours:")), 16, 3)
+        gg.addWidget(self._gen_image_n, 16, 4)
+        gg.addWidget(self._gen_image_count, 16, 7)
 
         # Pure white & black — the two tonal anchors, N of each, kept verbatim.
         self._gen_whiteblack = QCheckBox(
@@ -1846,10 +2404,10 @@ class _NewChartDialog(QDialog):
                                         "toward your number."))
         self._gen_whiteblack_n = _spin(1, 50, 1)
         self._gen_whiteblack_count = _count_label()
-        gg.addWidget(self._gen_whiteblack, 14, 0)
-        gg.addWidget(QLabel(tr("each:")), 14, 1)
-        gg.addWidget(self._gen_whiteblack_n, 14, 2)
-        gg.addWidget(self._gen_whiteblack_count, 14, 7)
+        gg.addWidget(self._gen_whiteblack, 17, 0)
+        gg.addWidget(QLabel(tr("each:")), 17, 1)
+        gg.addWidget(self._gen_whiteblack_n, 17, 2)
+        gg.addWidget(self._gen_whiteblack_count, 17, 7)
 
         # Fill remaining gaps — blue-noise top-up of whatever's left sparse.
         # Special: its count depends on the combined total of the sets above.
@@ -1898,10 +2456,10 @@ class _NewChartDialog(QDialog):
         _fill_row.addStretch()
         _fill_w = QWidget(self._gen_panel); _fill_w.setLayout(_fill_row)
         self._gen_fill_count = _count_label()
-        gg.addWidget(self._gen_fill, 15, 0)
-        gg.addWidget(QLabel(tr("fill to:")), 15, 1)
-        gg.addWidget(_fill_w, 15, 2, 1, 5)
-        gg.addWidget(self._gen_fill_count, 15, 7)
+        gg.addWidget(self._gen_fill, 18, 0)
+        gg.addWidget(QLabel(tr("fill to:")), 18, 1)
+        gg.addWidget(_fill_w, 18, 2, 1, 5)
+        gg.addWidget(self._gen_fill_count, 18, 7)
 
         # A per-set ⓘ icon (col 8) opens the set's explanation in its own little
         # window — more discoverable than a hover tooltip. The body reuses each
@@ -1909,22 +2467,22 @@ class _NewChartDialog(QDialog):
         # name, so this adds no new strings. Titles use the plain name (the "&"
         # in "Highlights & shadows" is fine here — the icon has no mnemonic).
         row_tips = (
-            (0, self._gen_cube,   tr("3D RGB cube")),
-            (1, self._gen_edges,  tr("Saturated edges")),
-            (2, self._gen_corners, tr("Gamut-corner emphasis")),
-            (3, self._gen_skin,   tr("Skin tones (Fitzpatrick)")),
-            (4, self._gen_blues,  tr("Oceans (blues)")),
-            (5, self._gen_greens, tr("Foliage (greens)")),
-            (6, self._gen_sunrises, tr("Sunrises (warm)")),
-            (7, self._gen_flamingos, tr("Flamingos (pinks)")),
-            (8, self._gen_neutral, tr("Neutral grey ramp")),
-            (9, self._gen_nearneutral, tr("Near-neutral greys")),
-            (10, self._gen_spirals, tr("Colour extremes")),
-            (11, self._gen_hs,     tr("Highlights & shadows")),
-            (12, self._gen_pastel, tr("Pastels")),
-            (13, self._gen_image,  tr("From image")),
-            (14, self._gen_whiteblack, tr("Pure white & black")),
-            (15, self._gen_fill,  tr("Fill remaining gaps")),
+            (3, self._gen_cube,   tr("3D RGB cube")),
+            (4, self._gen_edges,  tr("Saturated edges")),
+            (5, self._gen_corners, tr("Gamut-corner emphasis")),
+            (6, self._gen_skin,   tr("Skin tones (Fitzpatrick)")),
+            (7, self._gen_blues,  tr("Oceans (blues)")),
+            (8, self._gen_greens, tr("Foliage (greens)")),
+            (9, self._gen_sunrises, tr("Sunrises (warm)")),
+            (10, self._gen_flamingos, tr("Flamingos (pinks)")),
+            (11, self._gen_neutral, tr("Neutral grey ramp")),
+            (12, self._gen_nearneutral, tr("Near-neutral greys")),
+            (13, self._gen_spirals, tr("Colour extremes")),
+            (14, self._gen_hs,     tr("Highlights & shadows")),
+            (15, self._gen_pastel, tr("Pastels")),
+            (16, self._gen_image,  tr("From image")),
+            (17, self._gen_whiteblack, tr("Pure white & black")),
+            (18, self._gen_fill,  tr("Fill remaining gaps")),
         )
         for row, cb, title in row_tips:
             # Top-align the ⓘ so every set's icon lines up on the first row even
@@ -1949,11 +2507,11 @@ class _NewChartDialog(QDialog):
                                     "repeated colours apart by a small offset "
                                     "so no patch is printed twice."))
         self._gen_unique.toggled.connect(self._update_gen_counts)
-        gg.addWidget(self._gen_unique, 16, 0, 1, 8)
+        gg.addWidget(self._gen_unique, 19, 0, 1, 8)
 
         self._gen_total = QLabel("", self._gen_panel)
         self._gen_total.setStyleSheet("font-weight: bold;")
-        gg.addWidget(self._gen_total, 17, 0, 1, 8)
+        gg.addWidget(self._gen_total, 20, 0, 1, 8)
 
         # In the Add dialog (a chart already has patches), also show the chart's
         # resulting size — existing patches + the additions — since this is the
@@ -1962,7 +2520,7 @@ class _NewChartDialog(QDialog):
         self._gen_after_total = QLabel("", self._gen_panel)
         self._gen_after_total.setStyleSheet("color: #909090;")
         self._gen_after_total.setVisible(bool(self._existing_patches))
-        gg.addWidget(self._gen_after_total, 18, 0, 1, 8)
+        gg.addWidget(self._gen_after_total, 21, 0, 1, 8)
 
         for cb in (self._gen_cube, self._gen_corners, self._gen_spirals,
                    self._gen_skin, self._gen_blues, self._gen_greens,
@@ -1977,6 +2535,100 @@ class _NewChartDialog(QDialog):
         # it reads the cube's steps-per-axis directly at build time and stays even
         # at any setting (Knut, #78). The old edges↔cube auto-sync is gone (the
         # cube spin already refreshes the counts, which now drive the edges total).
+        # --- Multi-ink rows (#72 Tier C) — shown only in states 2/3 ---------
+        # Grid rows 0–2 of the SAME grid as the RGB sets (which start at row
+        # 3), so counts and ⓘ icons share one column geometry; every widget
+        # here starts hidden and _apply_gen_state_gating reveals them for
+        # multi-ink devices. State-1 stays pixel-identical (hidden grid rows
+        # collapse to zero height).
+        self._nch_gen_widgets: list = []   # every widget of the 3 rows
+
+        def _nch_add(w, row: int, col: int):
+            gg.addWidget(w, row, col)
+            self._nch_gen_widgets.append(w)
+
+        self._nch_targen = QCheckBox(tr("Even coverage (targen)"),
+                                     self._gen_panel)
+        self._nch_targen.setChecked(True)
+        self._nch_targen.setToolTip(
+            tr("Spreads patches evenly across every ink combination your "
+               "printer can mix — the backbone of a good multi-ink profile, "
+               "and the multi-ink replacement for the RGB cube sets.\n\n"
+               "Argyll's targen places each patch so the whole ink space is "
+               "covered without wasteful clumps, always staying inside the "
+               "ink limit above. \"Patches\" is simply how many you want — "
+               "more patches, finer coverage, longer measuring.\n\n"
+               "With a preconditioning profile set, the spread follows your "
+               "printer's real response instead of the theoretical ink "
+               "space, so patches land where the printer actually needs "
+               "them. For a first-ever chart (no profile yet), this set plus "
+               "the ramps below is exactly the right starting point."))
+        self._nch_targen.toggled.connect(self._update_gen_counts)
+        self._nch_targen_n = _spin(8, 4000, 800)
+        self._nch_targen_count = _count_label()
+        _nch_add(self._nch_targen, 0, 0)
+        _nch_add(QLabel(tr("patches:")), 0, 1)
+        _nch_add(self._nch_targen_n, 0, 2)
+        _nch_add(self._nch_targen_count, 0, 7)
+        self._nch_perink = QCheckBox(tr("Per-ink ramps"), self._gen_panel)
+        self._nch_perink.setChecked(True)
+        self._nch_perink.setToolTip(
+            tr("A tone ramp of every ink on its own — from a light tint up "
+               "to 100 % coverage, in the number of steps you choose here.\n\n"
+               "This shows the profile how each ink behaves by itself: how "
+               "fast it darkens, where it saturates, what its pure colour "
+               "looks like on your paper. Without these single-ink patches "
+               "the profile only ever sees inks mixed together and has to "
+               "guess each one's own character.\n\n"
+               "\"Steps/ink\" is the number of tones per ink — 8 is a solid "
+               "default; use more for inks with strong tonal behaviour "
+               "(e.g. black on matte papers)."))
+        self._nch_perink.toggled.connect(self._update_gen_counts)
+        self._nch_perink_n = _spin(2, 64, 8)
+        self._nch_perink_count = _count_label()
+        _nch_add(self._nch_perink, 1, 0)
+        _nch_add(QLabel(tr("steps/ink:")), 1, 1)
+        _nch_add(self._nch_perink_n, 1, 2)
+        _nch_add(self._nch_perink_count, 1, 7)
+        self._nch_pairs = QCheckBox(tr("Ink-pair overprints"), self._gen_panel)
+        self._nch_pairs.setChecked(True)
+        self._nch_pairs.setToolTip(
+            tr("Two inks printed on top of each other, stepped up together, "
+               "for every possible pair of your inks.\n\n"
+               "Mixing on paper is where printers surprise you: cyan over "
+               "yellow doesn't just add up — the inks bleed, trap and darken "
+               "differently on every paper. These patches show the profile "
+               "exactly how each pair really combines, which sharpens all "
+               "the mixed colours in between.\n\n"
+               "Safe by design: each ink in a pair stays at or below half "
+               "the ink limit, so no overprint patch can ever exceed it. "
+               "\"Steps/pair\" is the number of tones per pair — with many "
+               "inks the pair count grows quickly, so a small number of "
+               "steps is usually plenty."))
+        self._nch_pairs.toggled.connect(self._update_gen_counts)
+        self._nch_pairs_n = _spin(1, 32, 4)
+        self._nch_pairs_count = _count_label()
+        _nch_add(self._nch_pairs, 2, 0)
+        _nch_add(QLabel(tr("steps/pair:")), 2, 1)
+        _nch_add(self._nch_pairs_n, 2, 2)
+        _nch_add(self._nch_pairs_count, 2, 7)
+        # ⓘ per row in col 8, counts in col 7 — shared grid, aligned for free.
+        for row, cb, title in (
+                (0, self._nch_targen, tr("Even coverage (targen)")),
+                (1, self._nch_perink, tr("Per-ink ramps")),
+                (2, self._nch_pairs, tr("Ink-pair overprints"))):
+            tip = _magenta_tip(title, cb.toolTip(), self._gen_panel,
+                               min_width=360)
+            gg.addWidget(tip, row, 8,
+                         Qt.AlignmentFlag.AlignTop
+                         | Qt.AlignmentFlag.AlignHCenter)
+            self._nch_gen_widgets.append(tip)
+        for w in self._nch_gen_widgets:
+            w.setVisible(False)
+        # Original RGB tooltips, restored when the device returns to state 1
+        # (the gating swaps in the greyed-explanation texts, #72).
+        self._gen_orig_tooltips: dict = {}
+
         indent.addWidget(self._gen_panel)
         return indent
 
@@ -2259,6 +2911,21 @@ class _NewChartDialog(QDialog):
         the per-row spin boxes on their checkbox."""
         on = self._gen_sets_active()
         self._gen_panel.setEnabled(on)
+        state = self._nch_state()
+        if getattr(self, "_nch_targen", None) is not None:
+            for cb, spin, lbl, count in (
+                (self._nch_targen, self._nch_targen_n, self._nch_targen_count,
+                 lambda: self._nch_targen_n.value()),
+                (self._nch_perink, self._nch_perink_n, self._nch_perink_count,
+                 lambda: NDG.per_ink_ramps_count(
+                     len(self._nch_ink_codes()), self._nch_perink_n.value())),
+                (self._nch_pairs, self._nch_pairs_n, self._nch_pairs_count,
+                 lambda: NDG.ink_pair_overprints_count(
+                     len(self._nch_ink_codes()), self._nch_pairs_n.value())),
+            ):
+                spin.setEnabled(cb.isChecked())
+                lbl.setText(_patches_label(count()) if state != 1 else "")
+                _hint_count_inactive(lbl, cb.isChecked())
         # Grey each row's size control(s) when its set is unticked.
         for cb, spins in (
             (self._gen_cube, (self._gen_cube_n,)),
@@ -2291,8 +2958,23 @@ class _NewChartDialog(QDialog):
         for cb, _build, count, label in self._gen_specs():
             n = count()
             label.setText(_patches_label(n))
-            if cb.isChecked():
+            # Disabled rows never contribute (#72 states 2/3: a ticked but
+            # greyed RGB-cube/look-based row must not count or build); the
+            # strike-through marks any non-contributing row's count (Basti).
+            active = cb.isChecked() and cb.isEnabled()
+            _hint_count_inactive(label, active)
+            if active:
                 total += n
+        if state != 1:
+            for cb, count in (
+                (self._nch_targen, lambda: self._nch_targen_n.value()),
+                (self._nch_perink, lambda: NDG.per_ink_ramps_count(
+                    len(self._nch_ink_codes()), self._nch_perink_n.value())),
+                (self._nch_pairs, lambda: NDG.ink_pair_overprints_count(
+                    len(self._nch_ink_codes()), self._nch_pairs_n.value())),
+            ):
+                if cb.isChecked():
+                    total += count()
         # "From image" shows a hint until a photo is loaded.
         if self._gen_image.isChecked() and self._gen_image_px is None:
             self._gen_image_count.setText(tr("load an image"))
@@ -2308,14 +2990,18 @@ class _NewChartDialog(QDialog):
         # and white). Near-neutral greys is only off-axis tints, never pure
         # white/black; Colour extremes never lands on white/black either (six
         # chromatic corners only), so neither counts here (Knut, #78).
-        corner = ((1 if (self._gen_cube.isChecked() or self._gen_edges.isChecked()
-                         or self._gen_corners.isChecked()) else 0)
+        corner = ((1 if ((self._gen_cube.isChecked() and self._gen_cube.isEnabled())
+                         or (self._gen_edges.isChecked() and self._gen_edges.isEnabled())
+                         or (self._gen_corners.isChecked()
+                             and self._gen_corners.isEnabled())) else 0)
                   + (1 if (self._gen_neutral.isChecked()
                            and self._gen_neutral_n.value() >= 2) else 0))
         sets_have = (1 if corner else 0) if self._gen_unique.isChecked() else corner
         wb_n = G.white_black_count(self._gen_whiteblack_n.value(),
                                    sets_have, sets_have)
         self._gen_whiteblack_count.setText(_patches_label(wb_n))
+        _hint_count_inactive(self._gen_whiteblack_count,
+                             self._gen_whiteblack.isChecked())
         if self._gen_whiteblack.isChecked():
             total += wb_n
         # Fill remaining gaps tops the whole chart (existing + sets + white/black)
@@ -2324,6 +3010,7 @@ class _NewChartDialog(QDialog):
         fill_n = G.fill_gaps_count(total + len(self._existing_patches),
                                    self._effective_fill_target())
         self._gen_fill_count.setText(_patches_label(fill_n))
+        _hint_count_inactive(self._gen_fill_count, self._gen_fill.isChecked())
         if self._gen_fill.isChecked():
             total += fill_n
         # Total = the patches the current set selection produces (the additions:
@@ -2341,9 +3028,86 @@ class _NewChartDialog(QDialog):
         # Keep the embedded live cube in step with the colour-set controls.
         self._push_live_preview()
 
+    def _build_generated_program_nch(self, state: int) -> list[tuple]:
+        """Build the device-value program for a multi-ink chart (#72 Tier C).
+
+        Panel order: targen coverage → per-ink ramps → ink-pair overprints →
+        neutral ramp → near-neutral grey-balance rings → (state 3) the
+        look-based sets through the perceptual bridge — then min-distance
+        spacing, white/black anchors and the gap fill, mirroring the RGB
+        build. The honest out-of-gamut displacement note lands in
+        ``self.nch_moved_note`` for the caller to surface.
+        """
+        codes = self._nch_ink_codes()
+        n = len(codes)
+        k_ix = codes.index("k") if "k" in codes else None
+        limit = float(self._ink_limit.value())
+        program: list[tuple] = []
+        self.nch_moved_note = ""
+        if self._nch_targen.isChecked():
+            extra_args = [f"-D{self._INK_DFLAG[c]}" for c in codes[4:]]
+            extra_args.append(f"-l{int(limit)}")
+            if state == 3:
+                extra_args += ["-c", self._precond_path]
+            program.extend(R.seed_from_targen(
+                self._bin_dir, self._nch_targen_n.value(), device="4",
+                extra_args=extra_args))
+        if self._nch_perink.isChecked():
+            program.extend(NDG.per_ink_ramps(n, self._nch_perink_n.value()))
+        if self._nch_pairs.isChecked():
+            program.extend(NDG.ink_pair_overprints(
+                n, self._nch_pairs_n.value(), ink_limit=limit))
+        if self._gen_neutral.isChecked():
+            program.extend(NDG.neutral_ramp_device(
+                self._gen_neutral_n.value(), n, ink_limit=limit))
+        if self._gen_nearneutral.isChecked():
+            program.extend(NDG.near_neutrals_device(
+                self._gen_nearneutral_n.value(),
+                float(self._gen_nearneutral_off.value()),
+                self._gen_nearneutral_rings.value(), n, ink_limit=limit))
+        if state == 3:
+            from workflow.xicclu_runner import to_device_via_profile
+            moved_total = requested = 0
+            for name in self._GEN_PERCEPTUAL:
+                cb = getattr(self, f"_gen_{name}")
+                if not (cb.isChecked() and cb.isEnabled()):
+                    continue
+                build = next(b for c, b, _cnt, _lbl in self._gen_specs()
+                             if c is cb)
+                rgb = build()
+                if not rgb:
+                    continue
+                dev, moved = to_device_via_profile(
+                    rgb, self._precond_path, self._bin_dir, ink_limit=limit)
+                program.extend(dev)
+                moved_total += moved
+                requested += len(rgb)
+            if moved_total:
+                self.nch_moved_note = tr(
+                    "{moved} of {req} look-based colours lie outside this "
+                    "printer's gamut and were moved to the nearest printable "
+                    "colour.").format(moved=moved_total, req=requested)
+        if self._gen_unique.isChecked():
+            program = NDG.enforce_min_distance_nd(
+                program, _GEN_MIN_DIST, existing=self._existing_patches)
+        if self._gen_whiteblack.isChecked():
+            have_w, have_b = NDG.count_white_black_device(
+                program, n, k_index=k_ix, ink_limit=limit)
+            program.extend(NDG.white_black_device(
+                self._gen_whiteblack_n.value(), n, k_index=k_ix,
+                have_white=have_w, have_black=have_b, ink_limit=limit))
+        if self._gen_fill.isChecked():
+            seed = list(self._existing_patches) + program
+            program.extend(NDG.fill_gaps_nd(
+                seed, self._effective_fill_target(), n_channels=n))
+        return program
+
     def _build_generated_program(self) -> list[tuple]:
         """Concatenate every ticked generator's patches, in panel order,
         de-duplicating across sets when 'Ensure unique colours' is on."""
+        state = self._nch_state()
+        if state != 1:
+            return self._build_generated_program_nch(state)
         program: list[tuple] = []
         for cb, build, _count, _label in self._gen_specs():
             if not cb.isChecked():
@@ -2447,6 +3211,10 @@ class _NewChartDialog(QDialog):
 
     def _on_fold_toggled(self, shown: bool) -> None:
         self._cube_shown = shown
+        # Unfolding in state 3 renders the Lab cloud on demand (#72) — it is
+        # only computed while the panel is actually visible.
+        if shown and self._nch_state() == 3:
+            self._push_live_preview()
         # Capture the centre *first*: when unfolding, raising the minimum width
         # below makes Qt resize the window immediately (and rightward, top-left
         # fixed), so a centre read after that already reflects the grown, shifted
@@ -2543,6 +3311,15 @@ class _NewChartDialog(QDialog):
     def _do_push_live_preview(self) -> None:
         if getattr(self, "_gen_total", None) is None:
             return
+        state = self._nch_state()
+        if state == 2:
+            # No colour model: building the real program shells targen — too
+            # heavy for a live keystroke path (#72 R5), and the cube is
+            # hidden in state 2 anyway. The per-row estimates stand.
+            return
+        if state == 3:
+            self._push_lab_cloud()
+            return
         # The generated additions for the current set selection. Built even when
         # the master Generate toggle is off, so the Total previews them like the
         # per-set counts do; using the real built program also catches the
@@ -2562,6 +3339,49 @@ class _NewChartDialog(QDialog):
         program = self._live_preview_program(additions)
         if getattr(self, "_cube_panel", None) is not None and self._cube_shown:
             self._cube_panel.set_program(program, self._existing_patches)
+
+    def _push_lab_cloud(self) -> None:
+        """State-3 3D preview (#72): the generated ink patches as a Lab-space
+        scatter, positions from the preconditioning profile (``xicclu -ff``),
+        each point painted its display-approximation colour.
+
+        Heavy (targen + xicclu subprocesses), so it only runs when the cube
+        is actually unfolded, sits behind the existing debounce, and caches
+        by the full generator state — spinbox bursts reuse the cache (R5).
+        """
+        if (getattr(self, "_cube_panel", None) is None or not self._cube_shown
+                or getattr(self, "_nch_cube_hidden", False)):
+            return
+        if not self._gen_sets_active():
+            return
+        import json as _json
+        key = _json.dumps(self._collect_gen_state(), sort_keys=True,
+                          default=str)
+        cached = getattr(self, "_lab_cloud_cache", None)
+        if cached is not None and cached[0] == key:
+            labs, colors = cached[1], cached[2]
+        else:
+            try:
+                from workflow.xicclu_runner import forward_lab
+                program = self._build_generated_program()
+                if not program:
+                    return
+                bin_dir = self._bin_dir
+                labs = forward_lab(program, self._precond_path, bin_dir)
+                rep = ("CMYK" if not self._extra_inks
+                       else R.color_rep_for_inks(self._nch_ink_codes())[0])
+                colors = []
+                for dev in program:
+                    r, g, b = _display100(dev, rep)
+                    colors.append((round(r * 2.55), round(g * 2.55),
+                                   round(b * 2.55)))
+                self._lab_cloud_cache = (key, labs, colors)
+            except Exception as exc:  # noqa: BLE001 — preview is best-effort
+                log.warning("Lab cloud preview failed: %s", exc)
+                return
+        self._cube_panel.set_lab_cloud(labs, colors)
+        self._gen_total.setText(tr("Total: {label}").format(
+            label=_patches_label(len(labs))))
 
     def _live_preview_program(self, additions: list) -> list:
         """The colours the current source mode would add, for the live 3D cube.
@@ -2781,7 +3601,13 @@ class _NewChartDialog(QDialog):
         paper_code = self._paper.currentData() or self._paper.currentText()
         if paper_code == "custom":
             paper_code = f"{self._paper_w.value()}x{self._paper_h.value()}"
-        spec = R.ChartSpec.new(self._instr.currentData(), paper_code)
+        dt = self._nch_device_type()
+        extras = (tuple(self._extra_inks)
+                  if self._device_type.currentData() == "cmykplus" else ())
+        spec = R.ChartSpec.new(self._instr.currentData(), paper_code,
+                               device_type=dt, extra_inks=extras)
+        if dt != "2":
+            spec.ink_limit = float(self._ink_limit.value())
         # ChartSpec.new only knows the named-paper inverse map; patch
         # paper_mm explicitly for custom sizes so the editor knows the
         # canvas dimensions for downstream code (preview scaling etc.).
@@ -2790,8 +3616,17 @@ class _NewChartDialog(QDialog):
                               float(self._paper_h.value()))
         program: list[tuple] = []
         if self._mode_seed.isChecked():
+            # Multi-ink seeding rides targen natively (#72): -D per extra ink,
+            # -l ink limit, -c preconditioning profile (state 3 — also
+            # improves the OFPS distribution).
+            extra_args = [f"-D{self._INK_DFLAG[c]}" for c in extras]
+            if dt != "2":
+                extra_args.append(f"-l{int(self._ink_limit.value())}")
+                if self._precond_path and self._validate_precond(quiet=True):
+                    extra_args += ["-c", self._precond_path]
             try:
-                program = R.seed_from_targen(self._bin_dir, self._count.value())
+                program = R.seed_from_targen(self._bin_dir, self._count.value(),
+                                             device=dt, extra_args=extra_args)
             except Exception as exc:
                 QMessageBox.warning(self, tr("targen failed"), str(exc))
                 return
@@ -2803,7 +3638,11 @@ class _NewChartDialog(QDialog):
                                     "from the pasted text."))
                 return
         elif self._mode_generate.isChecked():
-            program = self._build_generated_program()
+            try:
+                program = self._build_generated_program()
+            except Exception as exc:  # noqa: BLE001 — targen/xicclu failure
+                QMessageBox.warning(self, tr("Generation failed"), str(exc))
+                return
             if not program:
                 QMessageBox.warning(self, tr("No colour sets"),
                                     tr("Tick at least one colour set to "
@@ -3509,6 +4348,8 @@ class Ti2RelayoutDialog(QDialog):
         self._grid.setSelectionMode(QListWidget.SelectionMode.ExtendedSelection)
         self._grid.setIconSize(QSize(_SWATCH, _SWATCH))
         self._grid.setSpacing(0)        # gap is the delegate's per-cell trailing margin
+        # Drag-ghost icons follow the chart's colorspace (N-tuple aware, #72).
+        self._grid.display_rgb = self._display_rgb
         self._delegate = _SwatchDelegate(self._grid, _SWATCH)
         self._grid.setItemDelegate(self._delegate)
         self._grid.setGridSize(self._delegate.sizeHint(None, None))
@@ -4283,6 +5124,20 @@ class Ti2RelayoutDialog(QDialog):
         # A loaded chart with no engine recipe is a printtarg chart → stay
         # printtarg even if the engine setting is on (preserve its real layout).
         self._loaded_printtarg_chart = self._engine_recipe is None
+        # …except multi-ink charts, which are engine-only (#72 decision 0):
+        # a non-RGB .ti2 without a recipe (e.g. a foreign CMYK chart) gets a
+        # fresh engine recipe seeded from its instrument/paper — friendly
+        # note, not an error.
+        if (self._engine_recipe is None
+                and spec.color_rep.lstrip("i").upper() != "RGB"):
+            from workflow.chart_creator import ENGINE_INSTRUMENTS
+            self._engine_recipe = LayoutRecipe(
+                instrument=(spec.instrument_flag
+                            if spec.instrument_flag in ENGINE_INSTRUMENTS
+                            else "i1"),
+                paper=spec.paper_flag)
+            self._loaded_printtarg_chart = False
+            note += tr(" — multi-ink chart, laid out by the ChromIQ engine")
         if self._engine_recipe is not None and self._engine_panel is not None:
             # The grid is loaded in the chart's final SHEET order (ChartSpec.
             # from_ti2 sorts by SAMPLE_LOC), i.e. it already IS the randomised
@@ -4366,7 +5221,13 @@ class Ti2RelayoutDialog(QDialog):
             except Exception as exc:  # noqa: BLE001
                 log.warning("seed engine panel for new chart failed: %s", exc)
         self._refresh_engine_panel_visible()
-        self._set_chart(spec, dlg.result_program or [], "New chart")
+        # Honest out-of-gamut note from the perceptual bridge (#72): tell the
+        # user how many look-based colours were moved to the gamut surface.
+        note = "New chart"
+        moved = getattr(dlg, "nch_moved_note", "")
+        if moved:
+            note += " — " + moved
+        self._set_chart(spec, dlg.result_program or [], note)
 
     def _set_chart(self, spec: R.ChartSpec, program: list[tuple], note: str,
                    *, is_saved: bool = False) -> None:
@@ -4592,12 +5453,27 @@ class Ti2RelayoutDialog(QDialog):
         self._note_edit()
 
     # -- patch grid ---------------------------------------------------------
+    def _display_rgb(self, dev: tuple) -> tuple[float, float, float]:
+        """Device tuple → display RGB (0..100) for this chart's colorspace (#72)."""
+        return _display100(dev, self._spec.color_rep if self._spec else "iRGB")
+
+    def _patch_tooltip(self, n: int, dev: tuple) -> str:
+        """Grid tooltip: exact RGB format for RGB charts (unchanged), per-ink
+        values for multi-ink charts, e.g. ``#7  C 40 · M 10 · Y 0 · K 5`` (#72)."""
+        if self._spec is None or (len(dev) == 3
+                                  and self._spec.color_rep.lstrip("i") == "RGB"):
+            return f"#{n}  RGB {tuple(round(v) for v in dev)}"
+        inks = [f.split("_")[-1] for f in self._spec.dev_fields]
+        return f"#{n}  " + " · ".join(
+            f"{ink} {round(v)}" for ink, v in zip(inks, dev))
+
     def _populate_grid(self, program: list[tuple]) -> None:
         self._grid.clear()
-        for i, rgb in enumerate(program, start=1):
-            it = QListWidgetItem(_swatch_icon(rgb, self._swatch_size), str(i))
-            it.setData(Qt.ItemDataRole.UserRole, tuple(rgb))
-            it.setToolTip(f"#{i}  RGB {tuple(round(v) for v in rgb)}")
+        for i, dev in enumerate(program, start=1):
+            it = QListWidgetItem(
+                _swatch_icon(self._display_rgb(dev), self._swatch_size), str(i))
+            it.setData(Qt.ItemDataRole.UserRole, tuple(dev))
+            it.setToolTip(self._patch_tooltip(i, dev))
             self._grid.addItem(it)
         self._update_grid_count()
 
@@ -4605,9 +5481,9 @@ class Ti2RelayoutDialog(QDialog):
         """Refresh #1..#N labels + tooltips (after drag-reorder or add/remove)."""
         for i in range(self._grid.count()):
             it = self._grid.item(i)
-            rgb = it.data(Qt.ItemDataRole.UserRole)
+            dev = it.data(Qt.ItemDataRole.UserRole)
             it.setText(str(i + 1))
-            it.setToolTip(f"#{i + 1}  RGB {tuple(round(v) for v in rgb)}")
+            it.setToolTip(self._patch_tooltip(i + 1, dev))
         # Keep the top-right "… N patches …" readout in step with the grid:
         # _renumber runs after every add / remove / append / reorder.
         self._refresh_info()
@@ -4646,7 +5522,8 @@ class Ti2RelayoutDialog(QDialog):
         self._grid.setGridSize(self._delegate.sizeHint(None, None))
         for i in range(self._grid.count()):
             it = self._grid.item(i)
-            it.setIcon(_swatch_icon(it.data(Qt.ItemDataRole.UserRole), size))
+            it.setIcon(_swatch_icon(
+                self._display_rgb(it.data(Qt.ItemDataRole.UserRole)), size))
         self._grid.scheduleDelayedItemsLayout()
 
     def _set_show_numbers(self, on: bool) -> None:
@@ -4678,16 +5555,27 @@ class Ti2RelayoutDialog(QDialog):
         self._grid.scheduleDelayedItemsLayout()
         self._grid.viewport().update()
 
-    def _grid_item(self, rgb: tuple) -> QListWidgetItem:
-        """Build a grid item for one RGB patch (icon + UserRole payload)."""
-        it = QListWidgetItem(_swatch_icon(rgb, self._swatch_size), "")
-        it.setData(Qt.ItemDataRole.UserRole, tuple(rgb))
+    def _grid_item(self, dev: tuple) -> QListWidgetItem:
+        """Build a grid item for one patch (icon + UserRole device payload)."""
+        it = QListWidgetItem(_swatch_icon(self._display_rgb(dev),
+                                          self._swatch_size), "")
+        it.setData(Qt.ItemDataRole.UserRole, tuple(dev))
         return it
 
     def _add_patch(self) -> None:
         """Open the Add dialog — a single chosen colour, or one or more
         generated colour sets (3D cube, skin tones, blues, greens, greys, …) —
         and splice the result into the chart."""
+        if (self._spec is not None
+                and self._spec.color_rep.lstrip("i").upper() != "RGB"):
+            # The Add dialog's sources (colour picker, RGB colour sets, hex
+            # files) all produce RGB triples — splicing them into a multi-ink
+            # program would corrupt it (#72; the multi-ink generators arrive
+            # with the even-coverage / grey-balance sets).
+            self._status.setText(
+                tr("Adding patches to a multi-ink chart isn't available yet — "
+                   "the colour sets here are RGB-only."))
+            return
         dlg = _AddPatchesDialog(self._settings, self,
                                 existing_patches=self._program_from_grid(),
                                 initial_recipe=self._chart_recipe)
@@ -4995,10 +5883,17 @@ class Ti2RelayoutDialog(QDialog):
 
         Format mirrors what :func:`workflow.ti2_relayout.parse_color_values`
         accepts so the file round-trips through the New chart dialog's
-        "Paste colour values" mode.
+        "Paste colour values" mode. The hex/RGB list formats are RGB-only by
+        definition; a multi-ink chart offers the i1Profiler pair instead
+        (#72 — a "50 40 30 10" ink line would silently misparse as RGB on
+        re-import, so it is not offered).
         """
         if self._grid.count() == 0:
             self._status.setText(tr("No patches to export."))
+            return
+        if self._spec is not None and \
+                self._spec.color_rep.lstrip("i").upper() != "RGB":
+            self._export_i1profiler()
             return
         from PyQt6.QtWidgets import QInputDialog
         fmt, ok = QInputDialog.getItem(
@@ -5048,12 +5943,12 @@ class Ti2RelayoutDialog(QDialog):
 
         Writes the same ``<base>.txt`` (CGATS) + ``<base>.pxf`` (CxF3) pair the
         Create Chart tab produces, so the layout the user designed here can be
-        handed straight to i1Profiler. RGB only (matching the editor and the
-        i1Profiler exporter); the program goes via a temp .ti1 the exporter
-        reads.
+        handed straight to i1Profiler. Channel-generic since #72: the program
+        goes via a temp .ti1 the exporter reads — RGB/CMYK sets get the
+        ``.txt`` + ``.pxf`` pair, CMYK+N sets the ``.pxf`` only (i1Profiler
+        accepts +N sets only as CxF; ``export_from_ti1`` decides).
         """
         import tempfile
-        from workflow.i1profiler_import import RgbPatch, write_ti1 as _write_ti1
         from workflow import i1profiler_export as X
 
         prog = self._program_from_grid()
@@ -5073,7 +5968,12 @@ class Ti2RelayoutDialog(QDialog):
         try:
             with tempfile.TemporaryDirectory() as td:
                 ti1 = Path(td) / f"{base}.ti1"
-                _write_ti1([RgbPatch(*rgb) for rgb in prog], ti1)
+                if self._spec is not None:
+                    R.write_ti1(self._spec, prog, ti1)
+                else:
+                    from workflow.i1profiler_import import RgbPatch, \
+                        write_ti1 as _write_ti1
+                    _write_ti1([RgbPatch(*rgb) for rgb in prog], ti1)
                 txt_out, pxf_out = X.export_from_ti1(
                     ti1, out_dir, base_name=base, descriptor=base)
         except Exception as exc:  # noqa: BLE001 — surface any writer failure
@@ -5086,7 +5986,20 @@ class Ti2RelayoutDialog(QDialog):
             if n_exp == 1 else
             tr("Exported {n} colours to {name}.").format(n=n_exp, name=name))
 
+    def _rgb_edit_allowed(self) -> bool:
+        """Colour-pick / lighten / darken act on RGB values — on a multi-ink
+        chart they would corrupt the ink tuples, so they are disabled until a
+        per-ink editor exists (#72, v1 limitation)."""
+        if self._spec is None or self._spec.color_rep.lstrip("i").upper() == "RGB":
+            return True
+        self._status.setText(
+            tr("Patch colours can only be edited on RGB charts — this chart "
+               "stores multi-ink values."))
+        return False
+
     def _set_patch_colour(self) -> None:
+        if not self._rgb_edit_allowed():
+            return
         items = self._grid.selectedItems()
         if not items:
             self._status.setText(tr("Select one or more patches first."))
@@ -5106,6 +6019,8 @@ class Ti2RelayoutDialog(QDialog):
         self._schedule_auto_refresh()
 
     def _transform_selection(self, factor: float) -> None:
+        if not self._rgb_edit_allowed():
+            return
         items = self._grid.selectedItems()
         if not items:
             self._status.setText(tr("Select one or more patches first."))
@@ -5474,6 +6389,15 @@ class Ti2RelayoutDialog(QDialog):
             return
         if self._worker is not None and self._worker.isRunning():
             return
+        # Multi-ink charts never touch printtarg (#72 decision 0): its
+        # relayout path is RGB-only and would fail loudly. RGB engine charts
+        # still run the printtarg pass first (it seeds page nav / geometry;
+        # _on_regen_done then swaps in the engine render), but for non-RGB the
+        # engine render IS the preview, directly.
+        if (self._spec is not None
+                and self._spec.color_rep.lstrip("i").upper() != "RGB"):
+            self._do_engine_preview()
+            return
         out_dir = save_to or Path(self._preview_tmp.name)
         # fresh dir for each preview render
         if save_to is None:
@@ -5660,6 +6584,14 @@ class Ti2RelayoutDialog(QDialog):
         # to render. The .ti1 is derived from the grid, so _engine_ti1 isn't
         # required. A loaded printtarg chart keeps printtarg (handled in
         # _refresh_engine_panel_visible) so its real no-clip layout shows.
+        #
+        # Multi-ink charts are engine-only, ALWAYS (#72 decision 0): printtarg
+        # relayout is RGB-only by design (R.regenerate hard-fails), so a
+        # non-RGB chart forces the engine path regardless of the Manual toggle
+        # or where the chart came from.
+        if (self._spec is not None
+                and self._spec.color_rep.lstrip("i").upper() != "RGB"):
+            return True
         return (self._engine_panel_grp is not None
                 and not self._engine_panel_grp.isHidden()
                 and self._spec is not None)
@@ -6439,7 +7371,14 @@ class Ti2RelayoutDialog(QDialog):
 
         Same format :func:`workflow.ti2_relayout.parse_color_values` accepts, so
         the file round-trips through the New chart dialog's "Paste colour values".
+        RGB charts only — for a multi-ink chart nothing is written (the format
+        cannot carry ink values; matches ``chart_exports.write_colours_txt``).
         """
+        if self._spec is not None and \
+                self._spec.color_rep.lstrip("i").upper() != "RGB":
+            log.debug("colour-list export skipped: %s chart is not RGB",
+                      self._spec.color_rep)
+            return
         lines: list[str] = []
         for r100, g100, b100 in self._program_from_grid():
             r = max(0, min(255, round(r100 / 100 * 255)))

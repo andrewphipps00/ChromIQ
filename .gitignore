@@ -13,6 +13,8 @@ env/
 # Distribution / PyInstaller
 dist/
 build/
+# Toolchains downloaded by native/gammap_helper/build_windows_arm64.ps1
+.tools/
 *.egg-info/
 *.dmg
 dmg_arm64/
@@ -55,3 +57,8 @@ assets/app_icon.ico
 
 # Local promo/marketing deliverables (not part of the app)
 *.docx
+
+# Compiled bit-exact gamut helper — built by CI (or locally) from the vendored
+# Argyll sources under native/argyll/; never checked in.
+/native/chromiq-gammap
+/native/chromiq-gammap.exe

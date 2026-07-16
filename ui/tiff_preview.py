@@ -114,6 +114,88 @@ _D_FLAG_CODE: dict[int, str] = {
     19: "llk",
 }
 
+# --- #72 Tier D: honest preview plumbing -----------------------------------
+# How the LAST separated-TIFF frame was rendered: "profile" (true colours via
+# cctiff + the chart's device profile) or "approx" (absorption composite).
+# Read by the preview widget right after loading to badge the picture; "" for
+# ordinary RGB pages (no badge).
+_render_mode: dict[str, str] = {"mode": ""}
+
+
+def _set_render_mode(mode: str) -> None:
+    _render_mode["mode"] = mode
+
+
+def last_render_mode() -> str:
+    return _render_mode["mode"]
+
+
+def _srgb_to_linear(a):
+    """sRGB-encoded 0..1 array → linear light."""
+    import numpy as np
+    return np.where(a <= 0.04045, a / 12.92, ((a + 0.055) / 1.055) ** 2.4)
+
+
+def _linear_to_srgb(a):
+    """Linear-light 0..1 array → sRGB encoding."""
+    import numpy as np
+    return np.where(a <= 0.0031308, a * 12.92, 1.055 * a ** (1 / 2.4) - 0.055)
+
+
+def _ink_absorption_linear(code: str) -> tuple[float, float, float]:
+    """Per-channel LINEAR-light absorption for one extra ink.
+
+    Preferred source: the ink's real Lab anchor from the i1Profiler export
+    reference data (EXTRA_INK; placeholders excluded) — Lab → linear sRGB of
+    the full ink on paper, absorption = 1 − transmittance. Fallback: the
+    hand-calibrated gamma-space table, linearised (its values are full-ink
+    sRGB responses, so decoding the implied colour is exact).
+    Cached per code.
+    """
+    cached = _ABS_LIN_CACHE.get(code)
+    if cached is not None:
+        return cached
+    rgb_lin = None
+    try:
+        from workflow.i1profiler_export import EXTRA_INK, _PLACEHOLDER_LAB
+        key = {"o": "O", "g": "G", "v": "V", "b": "B"}.get(code)
+        if key and key in EXTRA_INK and key not in _PLACEHOLDER_LAB:
+            L, a_, b_ = (float(v) for v in EXTRA_INK[key][1].split("|"))
+            rgb_lin = _lab_to_linear_srgb(L, a_, b_)
+    except Exception:  # noqa: BLE001 — reference data is best-effort here
+        rgb_lin = None
+    if rgb_lin is None:
+        ar, ag, ab = _INK_ABSORPTION.get(code, (0.87, 0.87, 0.87))
+        import numpy as np
+        rgb_lin = tuple(float(v) for v in
+                        _srgb_to_linear(np.array([1 - ar, 1 - ag, 1 - ab])))
+    out = tuple(min(1.0, max(0.0, 1.0 - t)) for t in rgb_lin)
+    _ABS_LIN_CACHE[code] = out  # type: ignore[assignment]
+    return out  # type: ignore[return-value]
+
+
+_ABS_LIN_CACHE: dict[str, tuple[float, float, float]] = {}
+
+
+def _lab_to_linear_srgb(L: float, a: float, b: float) -> tuple[float, float, float]:
+    """CIELab (D50) → linear sRGB (D50-adapted matrix), clipped to 0..1."""
+    import numpy as np
+    fy = (L + 16.0) / 116.0
+    fx = fy + a / 500.0
+    fz = fy - b / 200.0
+
+    def finv(t: float) -> float:
+        return t ** 3 if t > 6.0 / 29.0 else 3 * (6.0 / 29.0) ** 2 * (t - 4.0 / 29.0)
+
+    wp = (0.9642, 1.0, 0.8249)  # D50
+    xyz = np.array([finv(fx) * wp[0], finv(fy) * wp[1], finv(fz) * wp[2]])
+    m = np.linalg.inv(np.array([[0.4360747, 0.3850649, 0.1430804],
+                                [0.2225045, 0.7168786, 0.0606169],
+                                [0.0139322, 0.0971045, 0.7141733]]))
+    rgb = m @ xyz
+    return tuple(float(min(1.0, max(0.0, v))) for v in rgb)
+
+
 # Channel count → most common ink layout (fallback when sidecar is absent)
 _N_CHANNELS_FALLBACK: dict[int, list[str]] = {
     1: ["k"],
@@ -368,6 +450,7 @@ class TiffPreview(QWidget):
             self._pan = QPointF(0.0, 0.0)
         self._update_nav()
         self._update_filename_label(paths)
+        self._rebuild_ink_row()
         from PyQt6.QtCore import QTimer
         QTimer.singleShot(0, self._update_display)
         self._schedule_refresh()
@@ -537,7 +620,19 @@ class TiffPreview(QWidget):
             self._schedule_refresh()
             self.page_changed.emit(self._current)
 
+    def reset_ink_inspector(self) -> None:
+        """Hide the per-ink row + badge immediately (#72, Basti): called when
+        a chart build starts, so options from the previous chart never linger
+        while the new one is generated; load_tiff rebuilds them for the new
+        chart's ink set."""
+        self._ink_row.setVisible(False)
+        self._ink_readout.setText("")
+        self._ink_badge.setVisible(False)
+        if getattr(self, "_badge_lbl", None) is not None:
+            self._badge_lbl.setVisible(False)
+
     def clear(self) -> None:
+        self.reset_ink_inspector()
         self._pages = []
         self._current = 0
         self._active_stripe = -1
@@ -631,6 +726,44 @@ class TiffPreview(QWidget):
         self._img_label.setMinimumSize(200, 200)
         layout.addWidget(self._img_label, stretch=1)
 
+        # Per-ink inspector for device-native (separated) charts (#72 Tier D):
+        # mute checkboxes recomposite the preview from the remaining inks, and
+        # the readout shows the exact ink values under the cursor — the file's
+        # real numbers, straight from the channel data.
+        self._muted_inks: set[int] = set()
+        self._ink_checks: list = []
+        self._ink_page_data = None      # (H, W, n) uint8 of the current page
+        self._ink_page_key = None
+        self._paint_geom = None         # (scale, x, y): image px → label px
+        self._ink_row = QWidget(self)
+        _ink_l = QHBoxLayout(self._ink_row)
+        _ink_l.setContentsMargins(8, 2, 8, 2)
+        _ink_l.setSpacing(8)
+        self._ink_row_label = QLabel(tr("Inks:"), self._ink_row)
+        _ink_l.addWidget(self._ink_row_label)
+        self._ink_checks_bar = QHBoxLayout()
+        self._ink_checks_bar.setSpacing(6)
+        _ink_l.addLayout(self._ink_checks_bar)
+        _ink_l.addStretch(1)
+        self._ink_readout = QLabel("", self._ink_row)
+        self._ink_readout.setStyleSheet(
+            "QLabel { color: #808080; font-family: 'Menlo'; }")
+        _ink_l.addWidget(self._ink_readout)
+        # The honesty badge shares this line whenever the ink row is shown
+        # (Basti) — the floating overlay is only the fallback for
+        # device-native pages without a known ink set.
+        self._ink_badge = QLabel("", self._ink_row)
+        self._ink_badge.setStyleSheet(
+            "QLabel { background: rgba(30, 30, 30, 185); color: #f4f2ef;"
+            " border-radius: 4px; padding: 2px 8px; font-size: 11px; }")
+        self._ink_badge.setVisible(False)
+        _ink_l.addWidget(self._ink_badge)
+        self._ink_row.setVisible(False)
+        layout.addWidget(self._ink_row)
+        # Cursor readout needs move events without a button held.
+        self.setMouseTracking(True)
+        self._img_label.setMouseTracking(True)
+
         # Gap between image and nav (replaces the old setSpacing(12))
         self._image_nav_gap = QWidget(self)
         self._image_nav_gap.setFixedHeight(12)
@@ -689,6 +822,106 @@ class TiffPreview(QWidget):
             self._schedule_refresh()
             self.page_changed.emit(self._current)
 
+    # ---- per-ink inspector (#72 Tier D) ---------------------------------
+
+    def _current_ink_codes(self) -> "list[str] | None":
+        """Ink codes when the shown pages are device-native (≥4 channels)."""
+        if not self._pages:
+            return None
+        path = self._pages[0][0]
+        codes = self._ink_channels or _find_sidecar_channels(path)
+        return codes if codes and len(codes) >= 4 else None
+
+    def _rebuild_ink_row(self) -> None:
+        """(Re)build the mute checkboxes for the loaded chart's ink set."""
+        from PyQt6.QtWidgets import QCheckBox
+        while self._ink_checks_bar.count():
+            it = self._ink_checks_bar.takeAt(0)
+            if it.widget() is not None:
+                it.widget().deleteLater()
+        self._ink_checks = []
+        self._muted_inks = set()
+        self._ink_page_data = None
+        self._ink_page_key = None
+        self._ink_readout.setText("")
+        codes = self._current_ink_codes()
+        if not codes:
+            self._ink_row.setVisible(False)
+            return
+        for i, code in enumerate(codes):
+            cb = QCheckBox(code.upper(), self._ink_row)
+            cb.setChecked(True)
+            cb.setToolTip(tr("Show or hide this ink in the preview — the "
+                             "file itself is untouched."))
+            cb.toggled.connect(self._on_ink_toggle)
+            self._ink_checks_bar.addWidget(cb)
+            self._ink_checks.append(cb)
+        self._ink_row.setVisible(True)
+
+    def _on_ink_toggle(self, _on: bool) -> None:
+        self._muted_inks = {i for i, cb in enumerate(self._ink_checks)
+                            if not cb.isChecked()}
+        self._update_display()
+
+    def _ensure_ink_page_data(self) -> None:
+        """Cache the current page's raw channel data for the cursor readout."""
+        if not self._pages or self._current_ink_codes() is None:
+            self._ink_page_data = None
+            return
+        path, frame = self._pages[self._current]
+        key = (str(path), frame)
+        if self._ink_page_key == key and self._ink_page_data is not None:
+            return
+        try:
+            import tifffile
+            with tifffile.TiffFile(str(path)) as tif:
+                idx = min(frame, len(tif.pages) - 1)
+                data = tif.pages[idx].asarray()
+            import numpy as np
+            if data.dtype != np.uint8:
+                data = (data.astype(np.float32)
+                        * (255.0 / np.iinfo(data.dtype).max)).astype(np.uint8)
+            self._ink_page_data = data if data.ndim == 3 else None
+            self._ink_page_key = key
+        except Exception:  # noqa: BLE001 — readout is best-effort
+            self._ink_page_data = None
+
+    def _image_px_at(self, label_pos) -> "tuple[int, int] | None":
+        """Map a position on the image label to image pixel coords, honouring
+        the current fit/zoom/pan (both paint modes store their geometry)."""
+        if self._paint_geom is None or self._pixmap is None:
+            return None
+        scale, ox, oy = self._paint_geom
+        if scale <= 0:
+            return None
+        ix = int((label_pos.x() - ox) / scale)
+        iy = int((label_pos.y() - oy) / scale)
+        if 0 <= ix < self._pixmap.width() and 0 <= iy < self._pixmap.height():
+            return ix, iy
+        return None
+
+    def _update_ink_readout(self, event) -> None:
+        codes = self._current_ink_codes()
+        if not codes or not self._ink_row.isVisible():
+            return
+        self._ensure_ink_page_data()
+        if self._ink_page_data is None:
+            return
+        pos = self._img_label.mapFrom(self, event.position().toPoint())
+        px = self._image_px_at(pos)
+        if px is None:
+            self._ink_readout.setText("")
+            return
+        x, y = px
+        h, w = self._ink_page_data.shape[:2]
+        if not (0 <= x < w and 0 <= y < h):
+            self._ink_readout.setText("")
+            return
+        vals = self._ink_page_data[y, x]
+        self._ink_readout.setText(" · ".join(
+            f"{c.upper()} {round(float(v) / 2.55)}"
+            for c, v in zip(codes, vals.tolist())))
+
     def _update_nav(self) -> None:
         n = len(self._pages)
         visible = n > 1
@@ -722,14 +955,50 @@ class TiffPreview(QWidget):
 
         path, frame = self._pages[self._current]
         try:
-            img = self._load_frame(path, frame, self._ink_channels)
+            img = self._load_frame(path, frame, self._ink_channels,
+                                   muted=frozenset(self._muted_inks))
             self._pixmap = self._pil_to_pixmap(img)
         except Exception as exc:
             log.warning("Preview render error: %s", exc)
             self._img_label.setText(tr("Preview error:\n{exc}").format(exc=exc))
             return
 
+        self._update_render_badge()
         self._repaint_label()
+
+    def _update_render_badge(self) -> None:
+        """Honesty badge for device-native (multi-ink) pages (#72 Tier D):
+        'via profile' when the preview is a true colorimetric render, or a
+        clear note that the colours are approximate while the ink values in
+        the file are exact. Hidden for ordinary RGB pages."""
+        mode = last_render_mode()
+        text = ("" if not mode else
+                tr("True colours — via the chart's profile") if mode == "profile"
+                else tr("Approximate colours — the ink values in the file are exact"))
+        if self._ink_row.isVisible():
+            # Share the ink-options line (Basti) — no floating overlay then.
+            self._ink_badge.setText(text)
+            self._ink_badge.setVisible(bool(text))
+            if getattr(self, "_badge_lbl", None) is not None:
+                self._badge_lbl.setVisible(False)
+            return
+        self._ink_badge.setVisible(False)
+        if getattr(self, "_badge_lbl", None) is None:
+            if not mode:
+                return
+            self._badge_lbl = QLabel(self)
+            self._badge_lbl.setStyleSheet(
+                "QLabel { background: rgba(30, 30, 30, 185); color: #f4f2ef;"
+                " border-radius: 4px; padding: 2px 8px; font-size: 11px; }")
+            self._badge_lbl.raise_()
+        if not mode:
+            self._badge_lbl.setVisible(False)
+            return
+        self._badge_lbl.setText(text)
+        self._badge_lbl.adjustSize()
+        self._badge_lbl.move(self.width() - self._badge_lbl.width() - 12,
+                             self.height() - self._badge_lbl.height() - 12)
+        self._badge_lbl.setVisible(True)
 
     def _repaint_label(self) -> None:
         if not self._pixmap:
@@ -764,6 +1033,14 @@ class TiffPreview(QWidget):
         # Painter coordinates are logical (canvas has DPR set)
         painter = QPainter(canvas)
         painter.drawPixmap(B, B, scaled)
+        # Cursor→image mapping (#72): the centred canvas' top-left plus the
+        # border offset, at the fitted scale.
+        _cw = scaled.width() / dpr + 2 * B
+        _ch = scaled.height() / dpr + 2 * B
+        _s = (scaled.width() / dpr) / max(1, self._pixmap.width())
+        self._paint_geom = (_s,
+                            (label_size.width() - _cw) / 2 + B,
+                            (label_size.height() - _ch) / 2 + B)
 
         if self._active_stripe >= 0 and self._stripe_rects:
             # sx/sy: device pixels per original image pixel
@@ -919,6 +1196,7 @@ class TiffPreview(QWidget):
                          int(disp_h + 2 * B), self._frame_color)   # thin tinted frame
         painter.drawPixmap(int(x), int(y), scaled)
         painter.end()
+        self._paint_geom = (scale, x, y)   # for the cursor→image mapping (#72)
         self._img_label.setPixmap(canvas)
 
     def wheelEvent(self, event) -> None:  # type: ignore[override]
@@ -951,6 +1229,7 @@ class TiffPreview(QWidget):
             self._repaint_label()
             event.accept()
             return
+        self._update_ink_readout(event)   # per-ink cursor readout (#72)
         super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event) -> None:  # type: ignore[override]
@@ -989,6 +1268,11 @@ class TiffPreview(QWidget):
     def resizeEvent(self, event) -> None:  # type: ignore[override]
         super().resizeEvent(event)
         self._repaint_label()
+        if getattr(self, "_badge_lbl", None) is not None \
+                and self._badge_lbl.isVisible():
+            self._badge_lbl.move(
+                self.width() - self._badge_lbl.width() - 12,
+                self.height() - self._badge_lbl.height() - 12)
 
     def showEvent(self, event) -> None:  # type: ignore[override]
         super().showEvent(event)
@@ -1017,13 +1301,21 @@ class TiffPreview(QWidget):
             return 0
 
     @staticmethod
-    def _load_frame(path: Path, frame: int, ink_channels: list[str] | None) -> Image.Image:
-        """Load one TIFF frame as RGB, handling CMYK and multi-channel Separated."""
+    def _load_frame(path: Path, frame: int, ink_channels: list[str] | None,
+                    muted: frozenset = frozenset()) -> Image.Image:
+        """Load one TIFF frame as RGB, handling CMYK and multi-channel Separated.
+
+        ``muted`` (channel indices) recomposites the page without those inks —
+        the per-ink inspector (#72); it forces the channel-composite path,
+        since cctiff can only render the complete ink set.
+        """
+        _set_render_mode("")   # plain RGB pages carry no badge
         # Bypass PIL for known multi-channel files: PIL may silently return only 4 channels
         # from a Separated TIFF, dropping any extra ink channels without raising an exception.
         known_codes = ink_channels or _find_sidecar_channels(path)
-        if known_codes and len(known_codes) > 4:
-            return TiffPreview._tifffile_load_frame(path, frame, ink_channels)
+        if known_codes and (len(known_codes) > 4 or muted):
+            return TiffPreview._tifffile_load_frame(path, frame, ink_channels,
+                                                    muted=muted)
 
         try:
             img = Image.open(path)
@@ -1035,10 +1327,18 @@ class TiffPreview(QWidget):
             if img.mode in ("RGB", "RGBA"):
                 return img.convert("RGB")
             if img.mode == "CMYK":
+                # Device-native CMYK chart: true colours via the chart's own
+                # profile when known (#72 Tier D), else the ICC approximation.
+                cimg = TiffPreview._colorimetric_frame(path, frame)
+                if cimg is not None:
+                    _set_render_mode("profile")
+                    return cimg
+                _set_render_mode("approx")
                 return TiffPreview._cmyk_pil_to_rgb(img)
             return img.convert("RGB")
         except Exception:
-            return TiffPreview._tifffile_load_frame(path, frame, ink_channels)
+            return TiffPreview._tifffile_load_frame(path, frame, ink_channels,
+                                                    muted=muted)
 
     @staticmethod
     def _cmyk_pil_to_rgb(img: Image.Image) -> Image.Image:
@@ -1072,16 +1372,61 @@ class TiffPreview(QWidget):
         return Image.merge("RGB", (r, g, b))
 
     @staticmethod
+    def _colorimetric_frame(path: Path, frame: int) -> "Image.Image | None":
+        """True-colour render of a separated chart page via cctiff (#72 Tier D).
+
+        Only possible when the chart's device profile is discoverable next to
+        the TIFF (run's preconditioning.icc / meta.json recipe) and Argyll is
+        installed; returns None otherwise — callers fall back to the
+        approximate composite. Conversion results are cached by mtime.
+        """
+        try:
+            from workflow.colorimetric_preview import (
+                colorimetric_rgb_tiff, find_device_profile,
+            )
+            profile = find_device_profile(path)
+            if profile is None:
+                return None
+            from core.platform_paths import argyll_candidate_dirs
+            from core.resource_path import argyll_binary
+            bin_dir = next((d for d in argyll_candidate_dirs()
+                            if (d / argyll_binary("cctiff")).exists()), None)
+            if bin_dir is None:
+                return None
+            conv = colorimetric_rgb_tiff(path, profile, bin_dir)
+            if conv is None:
+                return None
+            img = Image.open(conv)
+            if hasattr(img, "seek"):
+                try:
+                    img.seek(frame)
+                except EOFError:
+                    pass
+            return img.convert("RGB")
+        except Exception:  # noqa: BLE001 — preview upgrade is best-effort
+            return None
+
+    @staticmethod
     def _tifffile_load_frame(
-        path: Path, frame: int, ink_channels: list[str] | None
+        path: Path, frame: int, ink_channels: list[str] | None,
+        muted: frozenset = frozenset()
     ) -> Image.Image:
-        """Load multi-channel/malformed TIFF via tifffile and composite to RGB."""
+        """Load multi-channel/malformed TIFF via tifffile and composite to RGB.
+
+        ``muted`` channel indices are zeroed before compositing (the per-ink
+        inspector, #72) — the picture shows what the remaining inks lay down.
+        """
         import tifffile
         import numpy as np
 
         with tifffile.TiffFile(str(path)) as tif:
             idx = min(frame, len(tif.pages) - 1)
             data = tif.pages[idx].asarray()
+        if muted and data.ndim == 3:
+            data = data.copy()
+            for i in muted:
+                if 0 <= i < data.shape[2]:
+                    data[:, :, i] = 0
 
         if data.dtype != np.uint8:
             data = (data.astype(np.float32) * (255.0 / np.iinfo(data.dtype).max)).astype(np.uint8)
@@ -1103,20 +1448,31 @@ class TiffPreview(QWidget):
             or (["c", "m", "y", "k"] + ["k"] * max(0, n_ch - 4))
         )
 
-        # n_ch >= 4: ICC-convert CMYK base, then composite extra channels on top
+        # n_ch >= 4: a device-native chart. When the chart's own profile is
+        # known, render the TRUE colours through cctiff (#72 Tier D) — the
+        # honest picture; otherwise composite an approximation and say so.
         if n_ch >= 4:
+            img = None if muted else TiffPreview._colorimetric_frame(path, frame)
+            if img is not None:
+                _set_render_mode("profile")
+                return img
+            _set_render_mode("approx")
             cmyk_img = Image.fromarray(data[:, :, :4], "CMYK")
             base = TiffPreview._cmyk_pil_to_rgb(cmyk_img)
             if n_ch == 4:
                 return base
-            ref = np.array(base, dtype=np.float32) / 255.0
+            # Extra inks multiply the base's REFLECTANCE — physical light is
+            # linear, so decode the sRGB gamma first and re-encode after
+            # (#72 Tier D item 2: overprints get visibly more believable).
+            ref = _srgb_to_linear(np.array(base, dtype=np.float32) / 255.0)
             for i, code in enumerate(codes[4:n_ch], start=4):
                 ink_val = data[:, :, i].astype(np.float32) / 255.0
-                ar, ag, ab = _INK_ABSORPTION.get(code, (0.87, 0.87, 0.87))
+                ar, ag, ab = _ink_absorption_linear(code)
                 ref[:, :, 0] *= 1.0 - ink_val * ar
                 ref[:, :, 1] *= 1.0 - ink_val * ag
                 ref[:, :, 2] *= 1.0 - ink_val * ab
-            return Image.fromarray((ref.clip(0, 1) * 255).astype(np.uint8), "RGB")
+            out = _linear_to_srgb(ref.clip(0.0, 1.0))
+            return Image.fromarray((out * 255.0 + 0.5).astype(np.uint8), "RGB")
 
         # n_ch < 4 but > 1: pure absorption compositing (RGB/CMY devices)
         h, w = data.shape[:2]
