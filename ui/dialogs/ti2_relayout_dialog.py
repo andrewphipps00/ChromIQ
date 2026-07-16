@@ -1100,7 +1100,7 @@ class _NewChartDialog(QDialog):
         self._ink_limit.setObjectName("compact_input")
         _as_compact(self._ink_limit)
         lrow.addWidget(self._ink_limit)
-        _limit_tip = _magenta_tip(
+        self._limit_tip = _magenta_tip(
             tr("Ink limit"),
             tr("The most total ink one patch may lay down, as a percentage. "
                "100 % per ink — so a four-ink printer could in theory reach "
@@ -1121,7 +1121,9 @@ class _NewChartDialog(QDialog):
         # Limit row spans the content columns; its ⓘ sits in the shared
         # right-edge icon column, aligned under the other ⓘs (Basti).
         dvg.addWidget(self._nch_limit_row, 2, 0, 1, 2)
-        dvg.addWidget(_limit_tip, 2, 2)
+        # The ⓘ lives in the shared right-edge icon column (not inside the row),
+        # so it must be hidden explicitly alongside the row for RGB devices.
+        dvg.addWidget(self._limit_tip, 2, 2)
 
         # Preconditioning profile — optional; unlocks the look-based sets.
         self._nch_prof_row = QWidget(dev_box)
@@ -1598,6 +1600,7 @@ class _NewChartDialog(QDialog):
         multi = dt != "rgb"
         self._nch_inks_row.setVisible(dt == "cmykplus")
         self._nch_limit_row.setVisible(multi)
+        self._limit_tip.setVisible(multi)   # ⓘ is in the grid, not the row
         self._nch_prof_row.setVisible(multi)
         self._rebuild_ink_chips()
         self._nch_prof_edit.setText(self._precond_path)

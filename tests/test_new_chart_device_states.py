@@ -49,6 +49,21 @@ def _pick_device(d, data: str) -> None:
     d._device_type.setCurrentIndex(d._device_type.findData(data))
 
 
+def test_ink_limit_tooltip_follows_the_row(dlg):
+    """The ink-limit ⓘ sits in the grid's shared icon column, not inside the
+    row, so it must hide with the row for Print RGB — where ink limit doesn't
+    apply (regression: the ⓘ used to stay visible on RGB)."""
+    assert dlg._nch_state() == 1                  # default: Print RGB
+    assert dlg._nch_limit_row.isHidden()
+    assert dlg._limit_tip.isHidden()              # ⓘ hidden too, not orphaned
+    _pick_device(dlg, "cmyk")
+    assert not dlg._nch_limit_row.isHidden()
+    assert not dlg._limit_tip.isHidden()
+    _pick_device(dlg, "rgb")
+    assert dlg._nch_limit_row.isHidden()
+    assert dlg._limit_tip.isHidden()
+
+
 def test_state2_reveals_rows_and_gates_modes(dlg):
     assert dlg._nch_state() == 1
     assert dlg._nch_limit_row.isHidden() and dlg._nch_prof_row.isHidden()
