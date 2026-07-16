@@ -13,6 +13,8 @@ env/
 # Distribution / PyInstaller
 dist/
 build/
+# Toolchains downloaded by native/gammap_helper/build_windows_arm64.ps1
+.tools/
 *.egg-info/
 *.dmg
 dmg_arm64/
