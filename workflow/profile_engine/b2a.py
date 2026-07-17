@@ -214,6 +214,52 @@ def k_locus(lightness: np.ndarray, *, k_max: float = 1.0,
     return k_max * t ** gamma
 
 
+# colprof -k letter rules as (stle, stpo, enpo, enle, shape) curve parameters
+# (colprof.html: -kr ≡ -kp 0 0 1 1 1; z/h/x are the constant curves).
+K_RULE_PARAMS = {
+    "z": (0.0, 0.0, 1.0, 0.0, 1.0),
+    "h": (0.5, 0.0, 1.0, 0.5, 1.0),
+    "x": (1.0, 0.0, 1.0, 1.0, 1.0),
+    "r": (0.0, 0.0, 1.0, 1.0, 1.0),
+}
+
+
+def argyll_k_curve(l_star: np.ndarray, *, params: tuple,
+                   l_min: float = 5.0, l_max: float = 100.0,
+                   skew: float = 2.0) -> np.ndarray:
+    """colprof's inking curve — a faithful port of ``icxKcurveNF``
+    (ArgyllCMS xicc/xlut.c): K target as a function of L*.
+
+    L* is normalised over the device's printable range [``l_min``,
+    ``l_max``] and inverted (0 = white, 1 = black), exactly as Argyll
+    normalises over its profile's Lmin..Lmax. Below ``stpo`` the curve sits
+    at ``stle``, above ``enpo`` at ``enle``; the transition applies
+    Argyll's shape mapping under the default skew of 2.0
+    (``ICXINKDEFSKEW`` — "matches typical device behaviour").
+    """
+    stle, stpo, enpo, enle, shape = (float(v) for v in params)
+    if stpo > enpo:                            # Argyll reorders swapped stops
+        stle, stpo, enpo, enle = enle, enpo, stpo, stle
+    shape = min(max(shape, 0.01), 1.99)
+    ln = np.clip((np.asarray(l_star, float) - l_min)
+                 / max(l_max - l_min, 1e-6), 0.0, 1.0)
+    p = 1.0 - ln                               # 0 = white, 1 = black
+    out = np.empty_like(p)
+    lo = p <= stpo
+    hi = p >= enpo
+    out[lo] = stle
+    out[hi] = enle
+    mid = ~(lo | hi)
+    if mid.any():
+        lp = (p[mid] - stpo) / max(enpo - stpo, 1e-9)
+        lp = lp ** skew
+        g = shape / 2.0
+        lp = lp / ((1.0 / g - 2.0) * (1.0 - lp) + 1.0)
+        lp = lp ** (1.0 / skew)
+        out[mid] = stle + lp * (enle - stle)
+    return out
+
+
 def extra_ink_amount(target: np.ndarray, letter: str, *,
                      power: float = 3.0,
                      hue_override: float | None = None) -> np.ndarray:
@@ -244,6 +290,7 @@ def invert_to_device(model: ForwardModel, target: np.ndarray, *,
                      accurate: bool = False,
                      extra_hues: dict[str, float] | None = None,
                      black_l: float | None = None,
+                     k_gen: dict | None = None,
                      progress=None,
                      progress_label: str = "Inverting the model",
                      ) -> tuple[np.ndarray, np.ndarray]:
@@ -284,6 +331,21 @@ def invert_to_device(model: ForwardModel, target: np.ndarray, *,
             prior[:, 3] = np.interp(target[:, 0], k_prior["l_axis"],
                                     k_prior["k_curve"])
             prior_w[:, 3] = 0.15
+        elif k_gen is not None and k_gen.get("rule"):
+            # Explicit colprof -k/-K rule from the user. -K (locus) is
+            # approximated on the full 0..1 K range: on the neutral axis —
+            # where the prior does its work — the feasible K range spans
+            # nearly the full scale, so locus and value curves coincide;
+            # the true per-colour feasible range would need a nested
+            # inversion per node. The soft prior keeps colour accuracy
+            # dominant either way.
+            params = (k_gen.get("params")
+                      or K_RULE_PARAMS[k_gen["rule"]])
+            prior[:, 3] = argyll_k_curve(
+                target[:, 0], params=params,
+                l_min=max(float(black_l), 2.0)
+                if black_l is not None else 5.0)
+            prior_w[:, 3] = 0.10          # explicit user intent: firmer
         elif accurate and black_l is not None:
             prior[:, 3] = k_locus(target[:, 0],
                                   l_full=max(float(black_l), 2.0))
@@ -376,6 +438,7 @@ def build_b2a_clut(model: ForwardModel, grid: int, *,
                    accurate: bool = False,
                    extra_hues: dict[str, float] | None = None,
                    black_l: float | None = None,
+                   k_gen: dict | None = None,
                    progress=None,
                    ) -> tuple[np.ndarray, np.ndarray]:
     """Full B2A CLUT: (grid³, n) device fractions + (grid³,) OOG distance.
@@ -388,7 +451,7 @@ def build_b2a_clut(model: ForwardModel, grid: int, *,
                             is_additive=is_additive, ink_limit=ink_limit,
                             k_prior=k_prior, accurate=accurate,
                             extra_hues=extra_hues, black_l=black_l,
-                            progress=progress)
+                            k_gen=k_gen, progress=progress)
 
 
 def refine_b2a_clut(model: ForwardModel, dev_clut: np.ndarray,
@@ -404,6 +467,7 @@ def refine_b2a_clut(model: ForwardModel, dev_clut: np.ndarray,
                     accurate: bool = False,
                     extra_hues: dict[str, float] | None = None,
                     black_l: float | None = None,
+                    k_gen: dict | None = None,
                     progress=None) -> np.ndarray:
     """Refit the B2A CLUT as one smooth field over exact inverse samples.
 
@@ -454,7 +518,7 @@ def refine_b2a_clut(model: ForwardModel, dev_clut: np.ndarray,
             model, lab_targets, channel_letters=channel_letters or [],
             is_additive=is_additive, ink_limit=ink_limit, k_prior=k_prior,
             accurate=accurate, extra_hues=extra_hues, black_l=black_l,
-            progress=progress,
+            k_gen=k_gen, progress=progress,
             progress_label="Inverting the model: sampling the separation")
         keep = res_s < 1.0
         dev_s, lab_s = dev_s[keep], lab_targets[keep]

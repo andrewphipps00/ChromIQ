@@ -98,6 +98,21 @@ def _apply_extra_args(extra: str, s: BuildSettings) -> None:
                 s.b2a_quality = "l"         # bare -b = low (colprof.c)
         elif t.startswith("-a"):
             s.algorithm = val(t, "-a")
+        elif t.startswith("-k") or t.startswith("-K"):
+            s.k_locus = t.startswith("-K")
+            rule = val(t, t[:2])
+            if rule not in ("z", "h", "x", "r", "p"):
+                raise ExtraArgsError(t)
+            s.k_rule = rule
+            if rule == "p":            # five curve values follow
+                if i + 5 >= len(toks):
+                    raise ExtraArgsError(t)
+                try:
+                    s.k_curve_params = tuple(
+                        float(toks[i + j]) for j in range(1, 6))
+                except ValueError as exc:
+                    raise ExtraArgsError(t) from exc
+                i += 5
         elif t == "-ni" or t == "-np":
             s.no_input_shaper = True
         elif t == "-no":
@@ -188,6 +203,11 @@ def settings_from_params(params: "ProfileParams") -> BuildSettings:
         wp_scale=(params.wp_scale
                   if params.wp_mode == "scale" and params.wp_scale > 0
                   else None),
+        k_rule=params.k_rule,
+        k_locus=params.k_locus,
+        k_curve_params=((params.k_stle, params.k_stpo, params.k_enpo,
+                         params.k_enle, params.k_shape)
+                        if params.k_rule == "p" else None),
         z_attributes="".join(filter(None, [
             params.z_surface, params.z_media_type, params.z_polarity,
             params.z_color_mode])),

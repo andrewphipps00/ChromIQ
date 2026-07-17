@@ -95,6 +95,13 @@ class BuildSettings:
     embed_ti3: bool = True                   # False = colprof -nc
     wp_scale: float | None = None            # colprof -u <scale>
     clip_primaries: bool = False             # colprof -R
+    # Black generation (colprof -k/-K): rule "z"/"h"/"x"/"r"/"p"; "" = the
+    # default ramp. k_curve_params = (stle, stpo, enpo, enle, shape) for "p".
+    # k_locus True = -K (proportion of the possible black range). Ignored
+    # for devices without a K channel — exactly like colprof.
+    k_rule: str = ""
+    k_locus: bool = False
+    k_curve_params: tuple | None = None
     z_attributes: str = ""                   # colprof -Z letters (m/t/n/b)
     z_default_intent: str = ""               # colprof -Z p/r/s/a
     # Gamut mapping (colprof -s/-S; ChromIQ passes ClayRGB by default, #121)
@@ -297,9 +304,16 @@ def _build_profile_impl(ti3_path: Path | str, out_path: Path | str,
         meas.average_endpoints()
     extra_hues = meas.extra_ink_hues() if accurate else None
     # Measured black L* anchors the GCR locus in accurate mode (shadow-
-    # banding fix); None keeps the parity locus.
+    # banding fix) and any explicit -k/-K curve (Argyll normalises its
+    # inking curve over the profile's own L range); None keeps the parity
+    # locus.
     black_l = float(meas.lab_relative[meas.black_index, 0]) \
-        if accurate else None
+        if (accurate or settings.k_rule) else None
+    k_gen = None
+    if settings.k_rule:
+        k_gen = {"rule": settings.k_rule,
+                 "params": settings.k_curve_params,
+                 "locus": settings.k_locus}
 
     a2b_grid = (_A2B_GRID_34 if n >= 4 else _A2B_GRID_23)[q]
     b2a_grid = _B2A_GRID[qb]
@@ -354,7 +368,7 @@ def _build_profile_impl(ti3_path: Path | str, out_path: Path | str,
         model, b2a_grid, channel_letters=meas.channel_letters,
         is_additive=meas.is_additive, ink_limit=ink_limit,
         node_lab=node_lab, k_prior=anchor, accurate=accurate,
-        extra_hues=extra_hues, black_l=black_l,
+        extra_hues=extra_hues, black_l=black_l, k_gen=k_gen,
         progress=lambda m: _emit(settings, m))
     # refine_b2a_clut returns *curve-space* values — written straight into
     # the CLUT, with the inverse shaper curves as B2A output tables.
@@ -364,7 +378,7 @@ def _build_profile_impl(ti3_path: Path | str, out_path: Path | str,
         channel_letters=meas.channel_letters,
         node_lab=node_lab, lab_to01=codec.lab_to01, k_prior=anchor,
         accurate=accurate, extra_hues=extra_hues, black_l=black_l,
-        progress=lambda m: _emit(settings, m))
+        k_gen=k_gen, progress=lambda m: _emit(settings, m))
     in_gamut = residual <= 1.0
 
     _emit(settings, "Writing the profile…")

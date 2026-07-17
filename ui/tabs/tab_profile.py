@@ -1806,6 +1806,11 @@ class TabProfile(QWidget):
             "no_output_shaper":    self._m_no_output_cb.isChecked(),
             "no_grid_pos":         self._m_no_grid_pos_cb.isChecked(),
             "no_embedded":         self._m_no_embedded_cb.isChecked(),
+            "kgen_rule":           self._m_kgen_combo.currentData() or "",
+            "kgen_locus":          self._m_kgen_locus_cb.isChecked(),
+            "kgen_curve":          [self._m_kgen_spins[k].value()
+                                    for k in ("stle", "stpo", "enpo",
+                                              "enle", "shape")],
         }
 
     def _m_apply_preset_data(self, data: dict) -> None:
@@ -1854,6 +1859,11 @@ class TabProfile(QWidget):
         self._m_no_output_cb.setChecked(bool(data.get("no_output_shaper", False)))
         self._m_no_grid_pos_cb.setChecked(bool(data.get("no_grid_pos",   False)))
         self._m_no_embedded_cb.setChecked(bool(data.get("no_embedded",   False)))
+        _set_combo(self._m_kgen_combo, "kgen_rule", "")
+        self._m_kgen_locus_cb.setChecked(bool(data.get("kgen_locus", False)))
+        curve = data.get("kgen_curve") or [0.0, 0.1, 0.9, 1.0, 1.0]
+        for key, v in zip(("stle", "stpo", "enpo", "enle", "shape"), curve):
+            self._m_kgen_spins[key].setValue(float(v))
 
     def _on_m_preset_selected(self, index: int) -> None:
         self._m_preset_del_btn.setEnabled(index > 0)
@@ -1899,6 +1909,13 @@ class TabProfile(QWidget):
             self._m_no_output_cb.setChecked(bool(s.get("manual2_colprof_no_output_shaper", False)))
             self._m_no_grid_pos_cb.setChecked(bool(s.get("manual2_colprof_no_grid_pos",   False)))
             self._m_no_embedded_cb.setChecked(bool(s.get("manual2_colprof_no_embedded",   False)))
+            _set_combo(self._m_kgen_combo, "manual2_colprof_kgen_rule", "")
+            self._m_kgen_locus_cb.setChecked(
+                bool(s.get("manual2_colprof_kgen_locus", False)))
+            for key, dflt in (("stle", 0.0), ("stpo", 0.1), ("enpo", 0.9),
+                              ("enle", 1.0), ("shape", 1.0)):
+                self._m_kgen_spins[key].setValue(
+                    float(s.get(f"manual2_colprof_kgen_{key}", dflt)))
         else:
             name = self._m_preset_combo.currentData()
             presets = self._m_load_presets()
@@ -2217,6 +2234,113 @@ class TabProfile(QWidget):
             min_width=500,
         ))
         g.addLayout(fwa_row)
+
+        kgen_row = QHBoxLayout()
+        kgen_row.addWidget(QLabel(tr("Black generation (-k):"), grp))
+        self._m_kgen_combo = NoScrollComboBox(grp)
+        for label, val in [
+            (tr("Default (black ramp)"), ""),
+            (tr("No black (z)"), "z"),
+            (tr("Half black (h)"), "h"),
+            (tr("Maximum black (x)"), "x"),
+            (tr("Black ramp (r)"), "r"),
+            (tr("Custom curve (p)"), "p"),
+        ]:
+            self._m_kgen_combo.addItem(label, val)
+        self._m_kgen_combo.setObjectName("compact_input")
+        self._m_kgen_combo.style().unpolish(self._m_kgen_combo)
+        self._m_kgen_combo.style().polish(self._m_kgen_combo)
+        kgen_row.addWidget(self._m_kgen_combo, stretch=1)
+        self._m_kgen_locus_cb = QCheckBox(tr("Proportional (-K)"), grp)
+        self._m_kgen_locus_cb.setEnabled(False)
+        kgen_row.addWidget(self._m_kgen_locus_cb)
+        kgen_row.addWidget(TooltipButton(
+            tr("Black Generation (-k / -K)"),
+            tr("Printers with a black ink (CMYK and multi-ink printers) can "
+            "mix dark colours in two ways: from the colour inks alone, or by "
+            "letting black ink carry part of the density. This setting "
+            "decides how much black ink the profile's colour tables will use "
+            "— often called black generation or GCR (Grey Component "
+            "Replacement).\n\n"
+            "It only takes effect when your measurement comes from a printer "
+            "with a black channel. For an RGB printer driver — the usual "
+            "ChromIQ workflow — it is simply ignored, exactly as Argyll "
+            "colprof ignores it.\n\n"
+            "Why would you care? More black usually means steadier neutrals "
+            "(greys built from black ink drift less when the light or the "
+            "ink batch changes), less total ink on the paper and solid deep "
+            "shadows. Less black can look smoother on some inkjets, where "
+            "black dots read as grain in dark areas. Neither is wrong — it "
+            "depends on printer, paper and taste.\n\n"
+            "The choices:\n\n"
+            "  • Default (black ramp) — black starts at zero in the "
+            "highlights and rises steadily to maximum in the shadows. A good "
+            "all-round choice, and what you get when you leave this "
+            "untouched.\n\n"
+            "  • No black (z) — dark colours are built from the colour inks "
+            "only. Mostly useful for diagnosing ink behaviour.\n\n"
+            "  • Half black (h) — a constant, moderate amount of black "
+            "everywhere.\n\n"
+            "  • Maximum black (x) — as much black as possible. The most "
+            "stable greys under changing light; can look grainy on some "
+            "papers.\n\n"
+            "  • Black ramp (r) — the same behaviour as the default, stated "
+            "explicitly.\n\n"
+            "  • Custom curve (p) — shape the black behaviour yourself with "
+            "the five values that appear: Start level (black in the "
+            "highlights), Start and End position (where along the "
+            "light-to-dark axis the transition begins and ends — 0 is white, "
+            "1 is black), End level (black in the deepest shadows) and Shape "
+            "(1.0 = straight line, below 1 eases in gradually, above 1 rises "
+            "quickly and then levels off). A typical gentle curve is "
+            "0 / 0.1 / 0.9 / 1 / 1.\n\n"
+            "Proportional (-K): normally the curve sets the black value "
+            "itself. With this ticked, the curve sets the proportion of the "
+            "black that is possible at each colour instead — strong colours "
+            "leave less room for black ink, and the proportional form "
+            "scales down gracefully there instead of clipping.\n\n"
+            "Every build path honours this setting the same way — Argyll "
+            "colprof and all three ChromIQ engine modes — so profiles stay "
+            "comparable when you switch engines. The choice is baked into "
+            "the profile when it is built; to try a different black "
+            "behaviour, change it here and build again."),
+            grp,
+            min_width=560,
+        ))
+        g.addLayout(kgen_row)
+
+        self._m_kgen_curve_widget = QWidget(grp)
+        kcurve_row = QHBoxLayout(self._m_kgen_curve_widget)
+        kcurve_row.setContentsMargins(24, 0, 0, 0)
+        kcurve_row.setSpacing(6)
+        self._m_kgen_spins: dict[str, NoScrollDoubleSpinBox] = {}
+        for key, label, lo, hi, default in (
+                ("stle", tr("Start level"), 0.0, 1.0, 0.0),
+                ("stpo", tr("Start pos"), 0.0, 1.0, 0.1),
+                ("enpo", tr("End pos"), 0.0, 1.0, 0.9),
+                ("enle", tr("End level"), 0.0, 1.0, 1.0),
+                ("shape", tr("Shape"), 0.0, 2.0, 1.0)):
+            kcurve_row.addWidget(QLabel(label, self._m_kgen_curve_widget))
+            spin = NoScrollDoubleSpinBox(self._m_kgen_curve_widget)
+            spin.setRange(lo, hi)
+            spin.setSingleStep(0.05)
+            spin.setDecimals(2)
+            spin.setValue(default)
+            spin.setObjectName("compact_input")
+            kcurve_row.addWidget(spin)
+            self._m_kgen_spins[key] = spin
+        kcurve_row.addStretch()
+        self._m_kgen_curve_widget.setVisible(False)
+        g.addWidget(self._m_kgen_curve_widget)
+
+        def _on_kgen_rule_changed() -> None:
+            rule = self._m_kgen_combo.currentData() or ""
+            self._m_kgen_curve_widget.setVisible(rule == "p")
+            self._m_kgen_locus_cb.setEnabled(bool(rule))
+            if not rule:
+                self._m_kgen_locus_cb.setChecked(False)
+        self._m_kgen_combo.currentIndexChanged.connect(
+            lambda _i: _on_kgen_rule_changed())
 
         src_vc_row = QHBoxLayout()
         src_vc_row.addWidget(QLabel(tr("Source viewing (-c):"), grp))
@@ -3966,6 +4090,13 @@ class TabProfile(QWidget):
             sat_intent       = (self._m_sat_intent_combo.currentData() or "") if self._m_sat_intent_check.isChecked() else "",
             no_grid_pos      = self._m_no_grid_pos_cb.isChecked(),
             no_embedded_data = self._m_no_embedded_cb.isChecked(),
+            k_rule           = self._m_kgen_combo.currentData() or "",
+            k_locus          = self._m_kgen_locus_cb.isChecked(),
+            k_stle           = self._m_kgen_spins["stle"].value(),
+            k_stpo           = self._m_kgen_spins["stpo"].value(),
+            k_enpo           = self._m_kgen_spins["enpo"].value(),
+            k_enle           = self._m_kgen_spins["enle"].value(),
+            k_shape          = self._m_kgen_spins["shape"].value(),
         )
 
     # ------------------------------------------------------------------
@@ -4043,6 +4174,11 @@ class TabProfile(QWidget):
             s.set("manual2_colprof_no_output_shaper",   self._m_no_output_cb.isChecked())
             s.set("manual2_colprof_no_grid_pos",        self._m_no_grid_pos_cb.isChecked())
             s.set("manual2_colprof_no_embedded",        self._m_no_embedded_cb.isChecked())
+            s.set("manual2_colprof_kgen_rule",          self._m_kgen_combo.currentData() or "")
+            s.set("manual2_colprof_kgen_locus",         self._m_kgen_locus_cb.isChecked())
+            for key in ("stle", "stpo", "enpo", "enle", "shape"):
+                s.set(f"manual2_colprof_kgen_{key}",
+                      self._m_kgen_spins[key].value())
         self._log.appendPlainText("Profile settings saved as defaults.")
         self._log.ensureCursorVisible()
 

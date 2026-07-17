@@ -452,6 +452,19 @@ class OracleUnavailable(RuntimeError):
     """colprof can't provide the mapping oracle for this build."""
 
 
+def _k_args(settings) -> list[str]:
+    """colprof -k/-K arguments matching the build's black-generation rule,
+    so oracle and proxy runs separate exactly like the requested build."""
+    rule = getattr(settings, "k_rule", "")
+    if not rule:
+        return []
+    args = [("-K" if getattr(settings, "k_locus", False) else "-k") + rule]
+    if rule == "p":
+        params = getattr(settings, "k_curve_params", None) or             (0.0, 0.1, 0.9, 1.0, 1.0)
+        args += [f"{v:g}" for v in params]
+    return args
+
+
 # In-process cache for the colprof oracle: a full colprof build per engine
 # build is the dominant cost of the ≤4-channel saturation table, and the
 # iterate-on-settings workflow rebuilds the same measurement repeatedly.
@@ -481,6 +494,9 @@ def _oracle_cache_key(meas: Ti3Measurement, source_gamut, settings,
             getattr(settings, "observer", ""),
             getattr(settings, "fwa", False),
             getattr(settings, "fwa_illum", ""),
+            getattr(settings, "k_rule", ""),
+            getattr(settings, "k_locus", False),
+            getattr(settings, "k_curve_params", None),
             node_key)
 
 
@@ -555,6 +571,7 @@ def fit_colprof_mappers(meas: Ti3Measurement, source_gamut: Path | str,
         if getattr(settings, "fwa", False):
             args.append(f"-f{settings.fwa_illum}" if settings.fwa_illum
                         else "-f")
+        args += _k_args(settings)
         r = subprocess.run(args + [str(base)], capture_output=True, text=True)
         icc = base.with_suffix(".icc")
         if r.returncode != 0 or not icc.exists():
@@ -738,7 +755,8 @@ def fit_multiink_anchor(model: ForwardModel, meas: Ti3Measurement,
         lines.append("END_DATA")
         base.with_suffix(".ti3").write_text("\n".join(lines))
         r = subprocess.run([str(colprof), "-qm", "-S", str(source_gamut),
-                            str(base)], capture_output=True, text=True)
+                            *_k_args(settings), str(base)],
+                           capture_output=True, text=True)
         icc = base.with_suffix(".icc")
         if r.returncode != 0 or not icc.exists():
             raise OracleUnavailable(
@@ -802,6 +820,14 @@ def build_mapped_b2a(model: ForwardModel, meas: Ti3Measurement, grid: int,
     if accurate and meas is not None and hasattr(meas, "extra_ink_hues"):
         extra_hues = meas.extra_ink_hues() or None
         black_l = float(meas.lab_relative[meas.black_index, 0])
+    k_gen = None
+    if getattr(settings, "k_rule", ""):
+        k_gen = {"rule": settings.k_rule,
+                 "params": getattr(settings, "k_curve_params", None),
+                 "locus": getattr(settings, "k_locus", False)}
+        if black_l is None and meas is not None \
+                and hasattr(meas, "lab_relative"):
+            black_l = float(meas.lab_relative[meas.black_index, 0])
     # colprof default computes the source surface through the source
     # profile's perceptual/saturation intent per table; -nP/-nS switch that
     # table's source to the colorimetric intent (xicc: noptop/nostos).
@@ -900,7 +926,7 @@ def build_mapped_b2a(model: ForwardModel, meas: Ti3Measurement, grid: int,
             model, mapped, channel_letters=channel_letters,
             is_additive=is_additive, ink_limit=ink_limit,
             accurate=accurate, extra_hues=extra_hues, black_l=black_l,
-            progress=progress,
+            k_gen=k_gen, progress=progress,
             progress_label="Gamut mapping: building the final colour table")
         shaped = model.shape_device(dev)
         out[tag] = icw.make_mft2(

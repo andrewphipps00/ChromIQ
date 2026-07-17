@@ -148,6 +148,17 @@ class ProfileParams:
     wp_mode: str = ""
     wp_scale: float = 0.0
     clip_primaries: bool = False
+    # Black generation (-k/-K): rule ∈ {"", "z", "h", "x", "r", "p"} ("" =
+    # colprof's default ramp, flag not passed). k_locus True = uppercase -K
+    # (curve is the proportion of the possible black range, not the K value).
+    # The five curve parameters are used only with rule "p".
+    k_rule: str = ""
+    k_locus: bool = False
+    k_stle: float = 0.0
+    k_stpo: float = 0.1
+    k_enpo: float = 0.9
+    k_enle: float = 1.0
+    k_shape: float = 1.0
 
 
 class ProfileBuilder:
@@ -293,6 +304,13 @@ class ProfileBuilder:
             args += [f"-V{p.dark_emphasis:.1f}"]
         if p.gamut_src:
             args += ["-s", p.gamut_src]
+        if p.k_rule:
+            # -kz/-kh/-kx/-kr/-kp … (uppercase -K = locus variant); the five
+            # curve values follow a "p" rule as separate arguments.
+            args.append(("-K" if p.k_locus else "-k") + p.k_rule)
+            if p.k_rule == "p":
+                args += [f"{p.k_stle:g}", f"{p.k_stpo:g}", f"{p.k_enpo:g}",
+                         f"{p.k_enle:g}", f"{p.k_shape:g}"]
         # Always stamp a manufacturer + model description so the profile is
         # self-identifying: colprof writes these as the 'dmnd'/'dmdd' device-ID
         # tags, which a device-link then copies into its profile-sequence ('pseq')
