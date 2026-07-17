@@ -2,56 +2,107 @@
 
 ## v3.13.8
 
-This release finishes the work of issue #123 and, deliberately, also
-documents everything the last v3.13.7 rebuilds quietly shipped without a
-changelog entry. Nothing that existed before v3.13.7 changes behaviour;
-every new capability is opt-in or engine-only.
+A stable release with two jobs: it ships this cycle's new work, and it
+properly tells the story that the v3.13.7 stable notes compressed into two
+bullets — several major features only ever appeared in beta notes that
+stable-channel users never saw. Nothing that existed before v3.13.7
+changes behaviour; every new capability is opt-in or only appears for the
+devices it concerns.
 
-### The friendly version — what's new, in plain words
+### The ChromIQ profile engine — the proper introduction
 
-- **Maximum accuracy mode** (Settings → Beta → Accuracy) — this actually
-  arrived in the final v3.13.7 rebuild without being announced; consider
-  this its official introduction. It is the ChromIQ engine's most careful
-  way of building a profile: it averages your repeated white/black
-  patches, picks the smoothing for your specific chart, survives a
-  smudged patch instead of baking it in (and tells you which patches to
-  remeasure), and keeps deep shadows from collapsing. On our test bench
-  it matched or beat classic colprof on colours it had never seen.
-- **Black generation (-k / -K)** in Build Profile → Manual — also from
-  that unannounced rebuild: control how much black ink your profiles use
-  for dark colours, with a plain-language tooltip explaining every rule.
-  Honoured identically by colprof and all engine modes.
-- **Four new engine-only options** in Build Profile → Manual → Color
-  Science, visible only while Maximum accuracy is active, all with
-  extensive tooltips, all saved with your defaults and presets:
-  - *Spectral physics model* — lets the engine try a physical model of
-    ink-on-paper for multi-ink printers with spectral measurements. It
-    proves itself on your own chart before it is used, so it can only
-    win or change nothing. On the test bench, multi-ink profiles came
-    out 20–36% closer to the true colours.
-  - *Measurement noise handling* — diagnoses how noisy your measurement
-    really was (from the repeated patches) and only engages when the
-    chart is measurably noisy; on a clean chart your profile is
-    bit-for-bit unchanged. Also prints a per-region confidence map.
-  - *ICC profile version* — v2 (classic), v4 (modern, with a built-in
-    checksum), or Both (writes a "-v4.icc" twin next to the normal
-    file).
-  - *Out-of-gamut rendering* — keep the Argyll-matched rendering
-    (default) or try ChromIQ's new mathematically-exact mapping and
-    judge the look on your own prints.
-- **Progress with time remaining**: engine builds now show
-  "42% · ~3 min left · …" instead of a bare percentage.
-- **New Patch Set / Add window** (multi-ink devices): two new colour
-  sets — *Ink-triple overprints* (the dark three-ink mixtures) and
-  *Rich-black ramp* (dark greys from colour ink plus black, exactly
-  what black generation has to learn) — plus a round of fixes: the
-  gap-filler now always respects the ink limit, grey-balance rings are
-  genuinely re-centred through a preconditioning profile when one is
-  set, counts and greyed-out rows behave honestly, and the build order
-  matches the panel order.
+ChromIQ now contains its own profile builder next to Argyll colprof. It is
+**off by default**; turn it on under Settings → Beta ("ChromIQ profile
+engine"). With it enabled, the Build Profile tab lets you build with
+colprof (still the default and the reference) or with the engine — same
+measurement files, same options, so you can build both and compare.
 
-### The honest part — how much to trust this (assessment by Claude,
-### ChromIQ's development assistant, not by the project owner)
+Why it exists: colprof cannot build profiles for printers with more than
+four inks. The engine can — CMYK plus orange, green, violet, light inks —
+which closes the whole multi-ink loop inside ChromIQ: design the chart,
+print, measure, build, refine.
+
+It comes in three flavours (Settings → Beta → Accuracy):
+- **Fast** — ChromIQ's own implementation of colprof's method, validated
+  against Argyll; quickest.
+- **Bit-exact** — for standard printers the profile is built by real
+  colprof (identical to Argyll); for multi-ink printers a bundled helper
+  runs Argyll's genuine gamut-mapping code.
+- **Maximum accuracy** — the most careful build: your repeated
+  white/black patches are averaged instead of trusting one reading, the
+  smoothing is chosen for your specific chart by cross-validation, a
+  smudged patch is survived rather than baked in (and named, so you can
+  remeasure it), deep shadows keep their resolution, and the total-ink
+  limit is honoured in the least-damaging way. On our synthetic test
+  bench it matched or beat colprof on colours it had never seen. Builds
+  show live progress with an estimated remaining time.
+
+Also part of this cycle and honoured by colprof and all engine modes
+alike: **Black generation (-k / -K)** in Build Profile → Manual — control
+how much black ink your profiles use for dark colours, every rule
+explained in plain language.
+
+### Multi-ink chart creation — also finally in a stable changelog
+
+The New Patch Set and Add windows (Create Chart → patch-set tools) design
+charts for ink devices, not just RGB:
+- **Device choice**: Print RGB (the unchanged default), CMYK, or CMYK +
+  extra inks as removable chips — with a first-class ink limit and an
+  optional preconditioning profile, validated against the ink set.
+- **Multi-ink colour sets**: even coverage (targen), per-ink ramps,
+  ink-pair overprints, grey-balance rings, white/black ink anchors — and
+  with a preconditioning profile, all the look-based sets (skin tones,
+  oceans, foliage…) translate into real ink values, with an honest note
+  for colours outside the printer's gamut.
+- **New in this release**: *Ink-triple overprints* (the dark three-ink
+  mixtures that pairs never reach) and a *Rich-black ramp* (dark greys
+  from colour ink plus black — exactly the measurements black generation
+  learns from). Plus a round of correctness fixes: the gap filler now
+  always respects the ink limit (it could previously exceed it), ramps
+  and anchors honour limits below 100%, the grey-balance rings are now
+  genuinely re-centred on the printer's measured neutral when a
+  preconditioning profile is set (the tooltip had promised it; now the
+  code does it), the build order matches the panel order, targen's count
+  reads "≈", and greyed-out rows grey their size controls too.
+- Charts save as true separated TIFFs (each ink a named channel, opens
+  correctly in Photoshop and RIPs) with an optional press-ready
+  **vector-PDF** export.
+
+### The chart preview (TIFF viewer) — the multi-ink upgrades
+
+- **True-colour preview**: with a preconditioning profile the preview
+  renders a multi-ink chart's actual colours through it, with a badge
+  saying so; without one, the approximate composite is clearly labelled
+  and blends extra inks physically (linear light, measured absorption).
+- **Per-ink inspector**: an "Inks:" row for device-native charts — hide
+  individual inks to see what the others lay down, and read exact ink
+  values under the cursor.
+- **Honest 3D views**: with a preconditioning profile, the patch-set 3D
+  panels plot multi-ink patches where the profile predicts them in Lab.
+
+### New engine options in this release
+
+Four options in Build Profile → Manual → Color Science, visible only
+while the engine's Maximum accuracy mode is active, each with an
+extensive plain-language tooltip, each saved with defaults and presets:
+- **Spectral physics model** — a physical model of ink-on-paper for
+  multi-ink printers with spectral measurements. It must beat the
+  standard model on your own chart before it is used, so it can only win
+  or change nothing. On the test bench, multi-ink profiles came out
+  20–36% closer to the true colours.
+- **Measurement noise handling** — diagnoses how noisy your measurement
+  really was (from the repeated patches) and only engages when the chart
+  is measurably noisy; on a clean chart your profile is bit-for-bit
+  unchanged. Prints a per-region confidence map either way.
+- **ICC profile version** — v2 (classic, most compatible), v4 (modern,
+  with a built-in integrity checksum), or Both (a "-v4.icc" twin next to
+  the normal file).
+- **Out-of-gamut rendering** — keep the Argyll-matched rendering
+  (default) or try ChromIQ's new mathematically-exact mapping and judge
+  the look on your own prints.
+
+### How much to trust all this (assessment by Claude, ChromIQ's
+### development assistant — not by the project owner)
 
 None of the new colour machinery has been validated on real printing
 hardware yet. What it HAS been validated against: a synthetic test bench
@@ -59,11 +110,11 @@ of six mathematically exact "printers" (where the true colour of every
 patch is known), held-out benchmarks on real measurements, ~2 000
 automated tests including bit-identity checks, and ArgyllCMS's own tools
 (iccdump, icclu, ColorSync, littleCMS). My confidence, stated plainly:
-**high** that nothing that worked in v3.13.7 behaves differently — the
-defaults are untouched and the opt-ins are built to stand aside rather
-than degrade anything; **medium-high** that the measured accuracy gains
-(spectral physics, noise handling) carry over to real prints — the test
-bench was built to be realistic, but paper and ink get the final vote;
+**high** that nothing that worked before behaves differently — defaults
+are untouched, colprof paths are untouched, and the opt-ins are built to
+stand aside rather than degrade anything; **medium-high** that the
+measured accuracy gains carry over to real prints — the test bench was
+built to be realistic, but paper and ink get the final vote;
 **deliberately unproven** for how the new out-of-gamut rendering LOOKS —
 numbers cannot judge taste, which is why it is not the default. Print a
 test image before trusting any newly built profile for real work — that
@@ -95,12 +146,13 @@ advice is not new, but it carries extra weight for these features.
   (C(n,3) trios ≤ L/3 by construction); rich_black_ramp (neutral CMY ×
   K-substitution grid); profile-recentred grey-balance rings
   (device-space ring offsets preserved); nch build order = panel order.
-- Backfilled from the unannounced v3.13.7 rebuilds: Maximum accuracy
-  mode (endpoint averaging, cross-validated smoothing, Huber IRLS with
-  remeasure report, boundary-aware inversion, Euclidean TAC projection,
-  hue-preserving clip, measured extra-ink hues, shaped XYZ-PCS tables),
-  black generation -k/-K (faithful icxKcurveNF port), granular build
-  progress; Windows/ARM vector-PDF FreeType bundling fix.
+- Maximum accuracy internals (shipped across the v3.13.7 rebuilds,
+  documented here): endpoint averaging, cross-validated smoothing,
+  Huber IRLS with remeasure report, boundary-aware inversion, Euclidean
+  TAC projection, hue-preserving clip, measured extra-ink hues, shaped
+  XYZ-PCS tables; black generation -k/-K as a faithful icxKcurveNF
+  port; granular build progress, now with a smoothed remaining-time
+  estimate; Windows/ARM vector-PDF FreeType bundling fix.
 - Test suite is now two-tiered: `pytest` runs the everyday tier,
   `pytest --runslow` adds the heavy end-to-end build tests and is the
   release gate.
