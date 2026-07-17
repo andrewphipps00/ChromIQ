@@ -37,6 +37,11 @@ class LabPcs:
         """A2B CLUT output encoding from Lab values."""
         return icw.lab_to_u16(lab)
 
+    @staticmethod
+    def b2a_in_tables(entries: int) -> np.ndarray:
+        """B2A/gamt input shaper tables (PCS value → grid coordinate)."""
+        return np.tile(icw._identity_table(entries), (3, 1))
+
 
 class XyzPcs:
     signature = b"XYZ "
@@ -57,6 +62,43 @@ class XyzPcs:
     def encode(lab: np.ndarray) -> np.ndarray:
         return icw.xyz_to_u16(lab_to_xyz(lab) / 100.0)
 
+    b2a_in_tables = LabPcs.b2a_in_tables
 
-def codec_for(algorithm: str):
-    return XyzPcs if algorithm == "x" else LabPcs
+
+class XyzPcsShaped(XyzPcs):
+    """XYZ PCS with cube-root-shaped B2A/gamt input curves (accurate mode).
+
+    A CLUT grid laid out uniformly in XYZ starves the shadows: L* goes with
+    the cube root of Y, so the bottom *sixth* of the L* axis is squeezed
+    into the first grid cell (measured on a real chart: B2A round-trip
+    median ≈ 4 ΔE, p95 ≈ 17). Shaping the B2A input tables by the cube
+    root places the very same grid uniformly in L*-like coordinates —
+    CIE-lightness maths, not a tuning constant — which is exactly what the
+    mft2 input curves exist for. The A2B side is untouched (its output
+    *encoding* must stay u1.15 XYZ per the spec).
+    """
+
+    @staticmethod
+    def node_lab(grid: int) -> np.ndarray:
+        u = np.linspace(0.0, 1.0, grid)
+        ax = icw.XYZ16_MAX * u ** 3          # grid coord u ↦ PCS value u³
+        xyz1 = np.stack(np.meshgrid(ax, ax, ax, indexing="ij"),
+                        -1).reshape(-1, 3)
+        return xyz_to_lab(xyz1 * 100.0)
+
+    @staticmethod
+    def lab_to01(lab: np.ndarray) -> np.ndarray:
+        xyz1 = lab_to_xyz(lab) / 100.0
+        return np.clip(np.cbrt(xyz1 / icw.XYZ16_MAX), 0.0, 1.0)
+
+    @staticmethod
+    def b2a_in_tables(entries: int) -> np.ndarray:
+        u = np.cbrt(np.linspace(0.0, 1.0, entries))
+        table = np.clip(u * 0xFFFF, 0, 0xFFFF).round().astype(">u2")
+        return np.tile(table, (3, 1))
+
+
+def codec_for(algorithm: str, accurate: bool = False):
+    if algorithm == "x":
+        return XyzPcsShaped if accurate else XyzPcs
+    return LabPcs

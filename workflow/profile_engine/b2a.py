@@ -88,26 +88,34 @@ def project_tac(d: np.ndarray, limit: float) -> np.ndarray:
     return d
 
 
-# Hue-preserving clip weights: error components in the (ΔL*, ΔC*, Δh)
-# frame of the target colour. Hue errors are punished hardest — a clipped
-# saturated colour should lose chroma, not change colour family.
-_CLIP_W_L, _CLIP_W_C, _CLIP_W_H = 1.0, 0.7, 3.0
+# Hue-preservation factor on top of the ΔE2000 metric for clipping: gamut-
+# mapping practice (hue-preserving minimum-ΔE clipping, Morovič) deliberately
+# weights hue beyond the plain metric — a clipped saturated colour should
+# lose chroma, not change colour family. 3× keeps the hue weight dominant
+# over the chroma weight across the whole chroma range (γ·S_C/S_H ≥ ~4).
+_CLIP_HUE_FACTOR = 3.0
 
 
 def _hue_weight_matrices(target: np.ndarray) -> np.ndarray:
-    """(N,3,3) weighting matrices W so ``W·ΔLab`` measures the error in a
-    hue-preserving norm at each target (identity for near-neutrals, where
-    there is no hue to preserve)."""
+    """(N,3,3) weighting matrices W so ``W·ΔLab`` measures the clip error
+    in a first-order local ΔE2000 metric at each target — component
+    weights are the formula's own 1/S_L, 1/S_C, 1/S_H (see
+    :func:`metrics.de00_scale_factors`), with hue further emphasised by
+    :data:`_CLIP_HUE_FACTOR`. Identity for near-neutrals, where there is
+    no hue to preserve."""
+    from workflow.profile_engine.metrics import de00_scale_factors
     n = len(target)
     chroma = np.hypot(target[:, 1], target[:, 2])
     h = np.arctan2(target[:, 2], target[:, 1])
     ch, sh = np.cos(h), np.sin(h)
+    sl, sc, s_h = de00_scale_factors(target)
+    wl, wc, wh = 1.0 / sl, 1.0 / sc, _CLIP_HUE_FACTOR / s_h
     w = np.zeros((n, 3, 3))
-    w[:, 0, 0] = _CLIP_W_L
-    w[:, 1, 1] = _CLIP_W_C * ch * ch + _CLIP_W_H * sh * sh
-    w[:, 1, 2] = (_CLIP_W_C - _CLIP_W_H) * ch * sh
+    w[:, 0, 0] = wl
+    w[:, 1, 1] = wc * ch * ch + wh * sh * sh
+    w[:, 1, 2] = (wc - wh) * ch * sh
     w[:, 2, 1] = w[:, 1, 2]
-    w[:, 2, 2] = _CLIP_W_C * sh * sh + _CLIP_W_H * ch * ch
+    w[:, 2, 2] = wc * sh * sh + wh * ch * ch
     neutral = chroma < 5.0
     w[neutral] = np.eye(3)
     return w
@@ -120,7 +128,8 @@ def _gauss_newton(model: ForwardModel, target: np.ndarray, seed: np.ndarray,
                   prior_w: np.ndarray | None = None,
                   boundary_fd: bool = False,
                   tac_projection: bool = False,
-                  err_weights: np.ndarray | None = None) -> np.ndarray:
+                  err_weights: np.ndarray | None = None,
+                  progress=None, progress_label: str = "") -> np.ndarray:
     """Batched damped Gauss–Newton on the free channels.
 
     ``prior``/``prior_w``: optional per-channel soft targets over the free
@@ -134,7 +143,9 @@ def _gauss_newton(model: ForwardModel, target: np.ndarray, seed: np.ndarray,
     """
     d = seed.copy()
     eye = np.eye(len(free))
-    for _ in range(iters):
+    for it in range(iters):
+        if progress is not None and progress_label:
+            progress(f"{progress_label} {it + 1}/{iters}…")
         f0 = model.predict(d)
         r = target - f0
         jac = _model_jacobian(model, d, free, f0, boundary_fd=boundary_fd)
@@ -233,6 +244,8 @@ def invert_to_device(model: ForwardModel, target: np.ndarray, *,
                      accurate: bool = False,
                      extra_hues: dict[str, float] | None = None,
                      black_l: float | None = None,
+                     progress=None,
+                     progress_label: str = "Inverting the model",
                      ) -> tuple[np.ndarray, np.ndarray]:
     """Invert the forward model at ``target`` Lab points.
 
@@ -295,9 +308,11 @@ def invert_to_device(model: ForwardModel, target: np.ndarray, *,
             prior_w[:, ch] = 0.05
         d[:, 3:] = prior[:, 3:]
 
-    gn_kw = dict(boundary_fd=accurate, tac_projection=accurate)
+    gn_kw = dict(boundary_fd=accurate, tac_projection=accurate,
+                 progress=progress)
     d = _gauss_newton(model, target, d, free, iters=iters, damping=damping,
-                      ink_limit=limit, prior=prior, prior_w=prior_w, **gn_kw)
+                      ink_limit=limit, prior=prior, prior_w=prior_w,
+                      progress_label=f"{progress_label}: converging", **gn_kw)
     residual = np.linalg.norm(model.predict(d) - target, axis=1)
 
     # Projected GN can stall with a channel pinned against the wrong cube
@@ -325,7 +340,9 @@ def invert_to_device(model: ForwardModel, target: np.ndarray, *,
             model, sub, seeds2, free, iters=iters, damping=damping,
             ink_limit=limit,
             prior=None if prior is None else prior[retry],
-            prior_w=None if prior_w is None else prior_w[retry], **gn_kw)
+            prior_w=None if prior_w is None else prior_w[retry],
+            progress_label=f"{progress_label}: retrying difficult nodes",
+            **gn_kw)
         res_retry = np.linalg.norm(model.predict(d_retry) - sub, axis=1)
         better = res_retry < residual[retry]
         idx = np.flatnonzero(retry)[better]
@@ -345,7 +362,9 @@ def invert_to_device(model: ForwardModel, target: np.ndarray, *,
                 model, target[oog], d[oog], free, iters=8, damping=damping,
                 ink_limit=limit, err_weights=wm,
                 prior=None if prior is None else prior[oog],
-                prior_w=None if prior_w is None else prior_w[oog], **gn_kw)
+                prior_w=None if prior_w is None else prior_w[oog],
+                progress_label=f"{progress_label}: hue-preserving clip",
+                **gn_kw)
     return d, residual
 
 
@@ -357,6 +376,7 @@ def build_b2a_clut(model: ForwardModel, grid: int, *,
                    accurate: bool = False,
                    extra_hues: dict[str, float] | None = None,
                    black_l: float | None = None,
+                   progress=None,
                    ) -> tuple[np.ndarray, np.ndarray]:
     """Full B2A CLUT: (grid³, n) device fractions + (grid³,) OOG distance.
 
@@ -367,7 +387,8 @@ def build_b2a_clut(model: ForwardModel, grid: int, *,
     return invert_to_device(model, target, channel_letters=channel_letters,
                             is_additive=is_additive, ink_limit=ink_limit,
                             k_prior=k_prior, accurate=accurate,
-                            extra_hues=extra_hues, black_l=black_l)
+                            extra_hues=extra_hues, black_l=black_l,
+                            progress=progress)
 
 
 def refine_b2a_clut(model: ForwardModel, dev_clut: np.ndarray,
@@ -382,7 +403,8 @@ def refine_b2a_clut(model: ForwardModel, dev_clut: np.ndarray,
                     k_prior: dict | None = None,
                     accurate: bool = False,
                     extra_hues: dict[str, float] | None = None,
-                    black_l: float | None = None) -> np.ndarray:
+                    black_l: float | None = None,
+                    progress=None) -> np.ndarray:
     """Refit the B2A CLUT as one smooth field over exact inverse samples.
 
     Every random device point is an *exact* sample of the inverse function
@@ -431,7 +453,9 @@ def refine_b2a_clut(model: ForwardModel, dev_clut: np.ndarray,
         dev_s, res_s = invert_to_device(
             model, lab_targets, channel_letters=channel_letters or [],
             is_additive=is_additive, ink_limit=ink_limit, k_prior=k_prior,
-            accurate=accurate, extra_hues=extra_hues, black_l=black_l)
+            accurate=accurate, extra_hues=extra_hues, black_l=black_l,
+            progress=progress,
+            progress_label="Inverting the model: sampling the separation")
         keep = res_s < 1.0
         dev_s, lab_s = dev_s[keep], lab_targets[keep]
 
@@ -462,7 +486,11 @@ def refine_b2a_clut(model: ForwardModel, dev_clut: np.ndarray,
     x0 = model.shape_device(dev_clut)
     refined = x0
     probe_dev = rng.uniform(0.0, 1.0, (4000, n)) if n <= 3 else None
-    for round_ in range(3 if n <= 3 else 1):
+    rounds_total = 3 if n <= 3 else 1
+    for round_ in range(rounds_total):
+        if progress is not None:
+            progress(f"Inverting the model: smoothing refit "
+                     f"{round_ + 1}/{rounds_total}…")
         w, cols = _interp_weights(p_all, grid, 3)
         sw = np.sqrt(w_all)[:, None]
         refined = np.clip(_grid_solve(w * sw, cols, y_all * sw, grid, 3, lam,

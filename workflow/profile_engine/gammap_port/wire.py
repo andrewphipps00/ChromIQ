@@ -245,9 +245,12 @@ def fit_gammap_argyll_mappers(model, meas, source_gamut: Path | str,
     if not is_available():
         raise HelperUnavailable("bit-exact helper binary not bundled")
 
+    _mode = ("maximum accuracy"
+             if getattr(settings, "gammap_mode", "") == "accurate"
+             else "bit-exact")
     gres, mapres = gres_mapres_for_quality(getattr(settings, "quality", "m"))
     if progress:
-        progress("Gamut mapping (bit-exact): reading the source colour "
+        progress(f"Gamut mapping ({_mode}): reading the source colour "
                  "space…")
 
     # Persistent working dir shared by both intents; kept alive on the mappers.
@@ -282,11 +285,15 @@ def fit_gammap_argyll_mappers(model, meas, source_gamut: Path | str,
         """Destination shell sampled from the model — the same thing colprof's
         own get_gamut does, and the only route for CMY+N."""
         if progress:
-            progress("Gamut mapping (bit-exact): meshing the printer's "
+            progress(f"Gamut mapping ({_mode}): meshing the printer's "
                      "colour shell…")
         dst_lab = destination_surface_lab(model, mesh=33, ink_limit=ink_limit,
                                           is_additive=is_additive,
                                           dense=dense)
+        if dense and meas is not None and hasattr(meas, "lab_relative"):
+            # Measured patches are ground truth — Argyll's expand() keeps
+            # whichever points lie outermost.
+            dst_lab = np.vstack([dst_lab, meas.lab_relative])
         return ap_dst.lab_to_jab(dst_lab)
 
     dst_gam: Path | None = None
@@ -298,7 +305,7 @@ def fit_gammap_argyll_mappers(model, meas, source_gamut: Path | str,
         # profile doesn't have ("Unable to locate usable conversion") — so on
         # any iccgamut failure, fall back to the model-sampled cloud.
         if progress:
-            progress("Gamut mapping (bit-exact): building the destination "
+            progress(f"Gamut mapping ({_mode}): building the destination "
                      "gamut…")
         from workflow.profile_engine import icc_writer as icw
         n = model.n_channels
@@ -404,6 +411,9 @@ def fit_gammap_port_mappers(model, meas, source_gamut: Path | str,
         dst_lab = destination_surface_lab(
             model, mesh=33, ink_limit=ink_limit, is_additive=is_additive,
             dense=getattr(settings, "gammap_mode", "") == "accurate")
+        if getattr(settings, "gammap_mode", "") == "accurate" \
+                and meas is not None and hasattr(meas, "lab_relative"):
+            dst_lab = np.vstack([dst_lab, meas.lab_relative])
         dst_jab = ap_dst.lab_to_jab(dst_lab)
         dverts, dtris = mesh_from_cloud(dst_jab, nh=48, nb=24)
         d_cusps = cusps_from_cloud(dst_jab)

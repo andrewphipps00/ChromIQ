@@ -25,6 +25,7 @@ builds:
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -172,7 +173,15 @@ _STAGE_PCT: list[tuple[str, int]] = [
     ("Writing the profile", 20),
     ("Building the perceptual and saturation", 24),
     ("Gamut mapping: reading the source", 26),
+    ("Gamut mapping (bit-exact): reading the source", 26),
+    ("Gamut mapping (maximum accuracy): reading the source", 26),
     ("Gamut mapping: measuring the printer", 30),
+    ("Gamut mapping (bit-exact): building the destination", 30),
+    ("Gamut mapping (maximum accuracy): building the destination", 30),
+    ("Gamut mapping (bit-exact): meshing the printer", 30),
+    ("Gamut mapping (maximum accuracy): meshing the printer", 30),
+    ("Gamut mapping (bit-exact): rendering", 26),
+    ("Gamut mapping (maximum accuracy): rendering", 26),
     ("Gamut mapping: preparing colour surfaces", 40),
     ("Gamut mapping: matching source colours", 46),
     ("Gamut mapping: smoothing", 54),
@@ -186,19 +195,35 @@ _STAGE_PCT: list[tuple[str, int]] = [
 class _PercentProgress:
     """Wraps the user's progress callback and prefixes each line with a
     monotonic percentage (``"42% · …"``), so the output field shows how
-    far along the build is. The progress bar keeps its own pulse."""
+    far along the build is. The progress bar keeps its own pulse.
+
+    Long stages report sub-steps as ``… k/n …`` fractions; those
+    interpolate the percentage between the stage's anchor and the next
+    one, so the number keeps moving during the minutes-long phases
+    instead of sitting on the anchor value.
+    """
+
+    _FRACTION = re.compile(r"(\d+)\s*/\s*(\d+)")
 
     def __init__(self, inner) -> None:
         self._inner = inner
-        self._pct = 0
+        self._pct = 0.0
 
     def __call__(self, msg: str) -> None:
-        for prefix, pct in _STAGE_PCT:
-            if msg.startswith(prefix) and pct > self._pct:
-                self._pct = pct
-                break
+        for i, (prefix, pct) in enumerate(_STAGE_PCT):
+            if not msg.startswith(prefix):
+                continue
+            target = float(pct)
+            m = self._FRACTION.search(msg[len(prefix):])
+            if m and int(m.group(2)) > 0:
+                nxt = _STAGE_PCT[i + 1][1] if i + 1 < len(_STAGE_PCT) else 100
+                frac = min(int(m.group(1)), int(m.group(2))) / int(m.group(2))
+                target = pct + (nxt - pct) * frac
+            if target > self._pct:
+                self._pct = target
+            break
         if self._inner is not None:
-            self._inner(f"{self._pct}% · {msg}")
+            self._inner(f"{self._pct:.0f}% · {msg}")
 
 
 def build_profile(ti3_path: Path | str, out_path: Path | str,
@@ -226,7 +251,10 @@ def _build_profile_impl(ti3_path: Path | str, out_path: Path | str,
         raise EngineError(_CLUT_ONLY_MSG)
     q = _QUALITY_INDEX[settings.quality]
     qb = _QUALITY_INDEX.get(settings.b2a_quality, q)
-    codec = codec_for(settings.algorithm)
+    # Accurate mode gets the shadow-resolving shaped XYZ-PCS layout; the
+    # parity modes keep colprof's identity layout.
+    codec = codec_for(settings.algorithm,
+                      accurate=settings.gammap_mode == "accurate")
 
     _emit(settings, "Reading the measurement…")
     meas = read_ti3(ti3_path)
@@ -326,7 +354,8 @@ def _build_profile_impl(ti3_path: Path | str, out_path: Path | str,
         model, b2a_grid, channel_letters=meas.channel_letters,
         is_additive=meas.is_additive, ink_limit=ink_limit,
         node_lab=node_lab, k_prior=anchor, accurate=accurate,
-        extra_hues=extra_hues, black_l=black_l)
+        extra_hues=extra_hues, black_l=black_l,
+        progress=lambda m: _emit(settings, m))
     # refine_b2a_clut returns *curve-space* values — written straight into
     # the CLUT, with the inverse shaper curves as B2A output tables.
     dev_clut_shaped = b2a_mod.refine_b2a_clut(
@@ -334,7 +363,8 @@ def _build_profile_impl(ti3_path: Path | str, out_path: Path | str,
         ink_limit=ink_limit, is_additive=meas.is_additive,
         channel_letters=meas.channel_letters,
         node_lab=node_lab, lab_to01=codec.lab_to01, k_prior=anchor,
-        accurate=accurate, extra_hues=extra_hues, black_l=black_l)
+        accurate=accurate, extra_hues=extra_hues, black_l=black_l,
+        progress=lambda m: _emit(settings, m))
     in_gamut = residual <= 1.0
 
     _emit(settings, "Writing the profile…")
@@ -344,21 +374,26 @@ def _build_profile_impl(ti3_path: Path | str, out_path: Path | str,
         n, 3, a2b_grid, codec.encode(model.clut_lab()),
         in_tables=icw.curves_to_tables(model.curves, entries_a2b),
         out_tables=np.tile(icw._identity_table(entries_a2b), (3, 1)))
+    # B2A/gamt input tables come from the codec: identity for Lab and the
+    # parity XYZ layout, cube-root-shaped for accurate XYZ (the node targets
+    # above were laid out through the same codec, so grid and curves agree).
+    b2a_in = codec.b2a_in_tables(entries_b2a)
     if settings.no_output_shaper:
         b2a_col = icw.make_mft2(
             3, n, b2a_grid,
             icw.device_to_u16(model.unshape_device(dev_clut_shaped)),
-            in_tables=np.tile(icw._identity_table(entries_b2a), (3, 1)),
+            in_tables=b2a_in,
             out_tables=np.tile(icw._identity_table(entries_b2a), (n, 1)))
     else:
         inv = b2a_mod.inverse_curves(model.curves)
         b2a_col = icw.make_mft2(
             3, n, b2a_grid, icw.device_to_u16(dev_clut_shaped),
-            in_tables=np.tile(icw._identity_table(entries_b2a), (3, 1)),
+            in_tables=b2a_in,
             out_tables=icw.curves_to_tables(inv, entries_b2a))
     gamt = icw.make_mft2(
         3, 1, b2a_grid,
-        (np.clip(residual, 0, 128)[:, None] / 128 * 0xFFFF).round())
+        (np.clip(residual, 0, 128)[:, None] / 128 * 0xFFFF).round(),
+        in_tables=codec.b2a_in_tables(256))
 
     # The colorimetric tables own the bytes; the other intents alias them
     # (colprof's default A2B0/1/2 are byte-identical — verified) and mapped

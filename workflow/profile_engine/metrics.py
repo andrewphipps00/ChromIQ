@@ -15,6 +15,34 @@ from __future__ import annotations
 import numpy as np
 
 
+def de00_scale_factors(lab: np.ndarray) -> tuple[np.ndarray, np.ndarray,
+                                                 np.ndarray]:
+    """CIEDE2000's (S_L, S_C, S_H) at each Lab point.
+
+    These are the formula's own per-component tolerances — the larger the
+    S, the less a difference in that direction is seen. ``1/S`` therefore
+    is the *perceptual weight* of an error component at that colour, which
+    is what the maximum-accuracy clip uses (a first-order local ΔE2000
+    metric; the R_T rotation term is a refinement of the C–H cross term in
+    the blue region and is deliberately omitted from the weighting).
+    """
+    lab = np.atleast_2d(np.asarray(lab, float))
+    l, a, b = lab[:, 0], lab[:, 1], lab[:, 2]
+    c = np.hypot(a, b)
+    g = 0.5 * (1.0 - np.sqrt(c ** 7 / (c ** 7 + 25.0 ** 7)))
+    cp = np.hypot((1.0 + g) * a, b)
+    hp = np.where((a == 0) & (b == 0), 0.0,
+                  np.degrees(np.arctan2(b, (1.0 + g) * a)) % 360.0)
+    t = (1.0 - 0.17 * np.cos(np.radians(hp - 30.0))
+         + 0.24 * np.cos(np.radians(2.0 * hp))
+         + 0.32 * np.cos(np.radians(3.0 * hp + 6.0))
+         - 0.20 * np.cos(np.radians(4.0 * hp - 63.0)))
+    sl = 1.0 + 0.015 * (l - 50.0) ** 2 / np.sqrt(20.0 + (l - 50.0) ** 2)
+    sc = 1.0 + 0.045 * cp
+    sh = 1.0 + 0.015 * cp * t
+    return sl, sc, sh
+
+
 def delta_e_2000(lab1: np.ndarray, lab2: np.ndarray,
                  kl: float = 1.0, kc: float = 1.0, kh: float = 1.0
                  ) -> np.ndarray:

@@ -809,6 +809,11 @@ def build_mapped_b2a(model: ForwardModel, meas: Ti3Measurement, grid: int,
     sat_int = 1 if getattr(settings, "sat_src_colorimetric", False) else 2
     dst = destination_surface_lab(model, ink_limit=ink_limit,
                                   is_additive=is_additive, dense=accurate)
+    if accurate and meas is not None and hasattr(meas, "lab_relative"):
+        # The measured patches are ground truth — they carry no model error,
+        # and solid-ink/boundary patches can reach past the fitted shell.
+        # The radial-maximum binning keeps whichever is outermost.
+        dst = np.vstack([dst, meas.lab_relative])
     node_lab = codec.node_lab(grid)
     inv_curves = b2a_mod.inverse_curves(model.curves)
     out: dict[str, bytes | str] = {}
@@ -845,7 +850,10 @@ def build_mapped_b2a(model: ForwardModel, meas: Ti3Measurement, grid: int,
                 progress(f"Ported gammap unavailable ({exc}) — "
                          "matching colprof's rendering instead.")
     elif _bitexact_le4 and progress:
-        progress("Gamut mapping (bit-exact): rendering with ArgyllCMS "
+        progress("Gamut mapping (maximum accuracy): rendering intents "
+                 "matched to ArgyllCMS colprof."
+                 if accurate else
+                 "Gamut mapping (bit-exact): rendering with ArgyllCMS "
                  "colprof directly.")
     if settings is not None and meas is not None and (
             "B2A0" not in oracle or "B2A2" not in oracle):
@@ -878,6 +886,11 @@ def build_mapped_b2a(model: ForwardModel, meas: Ti3Measurement, grid: int,
             out[tag] = "B2A1"
             continue
         mappers[tag] = mapper
+        if progress is not None and getattr(mapper, "expensive_map", False):
+            # The helper rebuilds Argyll's new_gammap per call (~20 s).
+            progress(f"Gamut mapping: matching source colours "
+                     f"({'1' if tag == 'B2A0' else '2'}/2, Argyll's "
+                     f"mapper)…")
         mapped = mapper.map_lab(node_lab)
         mapped_by_tag[tag] = mapped
         # Mapped targets land inside (or at) the gamut surface, so per-node
@@ -886,11 +899,13 @@ def build_mapped_b2a(model: ForwardModel, meas: Ti3Measurement, grid: int,
         dev, _residual = b2a_mod.invert_to_device(
             model, mapped, channel_letters=channel_letters,
             is_additive=is_additive, ink_limit=ink_limit,
-            accurate=accurate, extra_hues=extra_hues, black_l=black_l)
+            accurate=accurate, extra_hues=extra_hues, black_l=black_l,
+            progress=progress,
+            progress_label="Gamut mapping: building the final colour table")
         shaped = model.shape_device(dev)
         out[tag] = icw.make_mft2(
             3, model.n_channels, grid, icw.device_to_u16(shaped),
-            in_tables=np.tile(icw._identity_table(entries), (3, 1)),
+            in_tables=codec.b2a_in_tables(entries),
             out_tables=icw.curves_to_tables(inv_curves, entries))
 
     if getattr(settings, "inverse_gamut_a2b", False) and mappers \

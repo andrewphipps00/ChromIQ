@@ -15,6 +15,14 @@ open-loop:
   B2A neighbourhood. Down-weighting patches whose residual is far above the
   bulk makes the fit resistant to smudges and misreads, and the patches
   that were down-weighted are reported so the user can remeasure them.
+
+Both loops judge residuals in **ΔE2000**, not Euclidean Lab: near black the
+cube-root lightness slope blows ordinary Lab residuals up for differences
+nobody can see, so a ΔE76 criterion over-smooths shadows and cries wolf on
+dark patches. The robust scale uses the textbook constants — σ from the
+median absolute deviation (1.4826·MAD) and Huber's k = 1.345σ (the 95%-
+Gaussian-efficiency tuning constant) — with a floor at instrument
+repeatability so a clean chart is never touched.
 """
 from __future__ import annotations
 
@@ -24,6 +32,7 @@ import numpy as np
 
 from workflow.profile_engine.forward_model import (ForwardModel,
                                                    fit_forward_model)
+from workflow.profile_engine.metrics import delta_e_2000
 
 # λ search ladder, as factors on the parity table's value (settings -r
 # included — it scales the base before the search).
@@ -52,44 +61,65 @@ def fit_forward_model_accurate(
         nho = max(30, npts // 10)
         ho, trn = idx[:nho], idx[nho:]
         best_err, best_lam = np.inf, base_lam
-        for f in _LAMBDA_FACTORS:
+        for ci, f in enumerate(_LAMBDA_FACTORS):
+            if progress is not None:
+                progress(f"Fitting the printer model: smoothing search "
+                         f"{ci + 1}/{len(_LAMBDA_FACTORS)}…")
             m = fit_forward_model(device[trn], lab[trn], grid=grid,
                                   lam=base_lam * f, cg_iters=350,
                                   curve_rounds=min(curve_rounds, 1),
                                   cg_rtol=_CG_RTOL)
-            err = float(np.median(np.linalg.norm(
-                m.predict(device[ho]) - lab[ho], axis=1)))
+            err = float(np.median(delta_e_2000(
+                m.predict(device[ho]), lab[ho])))
             if err < best_err:
                 best_err, best_lam = err, base_lam * f
         lam = best_lam
         if progress is not None:
             progress(f"Smoothing chosen by cross-validation: "
                      f"×{lam / base_lam:g} of the standard value "
-                     f"(held-out median {best_err:.2f} ΔE).")
+                     f"(held-out median {best_err:.2f} ΔE2000).")
 
+    # Outlier scan on a deliberately STIFF fit: a smudge cannot hide from
+    # the residuals of a stiff surface, whereas a low cross-validated λ can
+    # absorb it locally and mask it. Weights: Huber (1 inside the scale,
+    # scale/r beyond), scale = Huber's k = 1.345 × the MAD estimate of σ,
+    # floored at instrument repeatability (≈0.35 ΔE2000); gross outliers
+    # (beyond 8× scale) are rejected outright, and rejections are sticky —
+    # once out, a patch cannot pull itself back in through the refit.
+    if progress is not None:
+        progress("Fitting the printer model: scanning for misread "
+                 "patches…")
+    scan = fit_forward_model(device, lab, grid=grid,
+                             lam=max(4.0 * base_lam, lam),
+                             curve_rounds=min(curve_rounds, 1),
+                             cg_iters=350, cg_rtol=_CG_RTOL)
+    res = delta_e_2000(scan.predict(device), lab)
+    sigma = 1.4826 * float(np.median(np.abs(res - np.median(res))))
+    scale = max(1.345 * sigma, 0.35)
+    w = np.minimum(1.0, scale / np.maximum(res, 1e-9))
+    w[res > 8.0 * scale] = 0.0
+
+    if progress is not None:
+        progress("Fitting the printer model: robust fit 1/2…")
     model = fit_forward_model(device, lab, grid=grid, lam=lam,
-                              curve_rounds=curve_rounds, cg_rtol=_CG_RTOL)
-    res = np.linalg.norm(model.predict(device) - lab, axis=1)
-
-    # Robust IRLS: Huber weights (1 inside the scale, scale/r beyond it)
-    # with a redescending cut — a *gross* outlier gets weight zero outright,
-    # otherwise a low-smoothing fit keeps chasing it across the rounds and
-    # a partial weight never lets go. The scale rides on the bulk residual
-    # level so a clean chart is left untouched (all weights 1 → no refit).
-    for _ in range(3):
-        scale = max(2.5 * float(np.median(res)), 0.75)
-        w = np.minimum(1.0, scale / np.maximum(res, 1e-9))
-        w[res > 8.0 * scale] = 0.0
-        if not (w < 0.999).any():
-            break
+                              curve_rounds=curve_rounds,
+                              weights=w if (w < 0.999).any() else None,
+                              cg_rtol=_CG_RTOL)
+    res = delta_e_2000(model.predict(device), lab)
+    # One tightening pass against the final fit (never loosening).
+    w2 = np.minimum(w, np.minimum(1.0, scale / np.maximum(res, 1e-9)))
+    w2[res > 8.0 * scale] = 0.0
+    if (w2 < w - 1e-9).any():
+        if progress is not None:
+            progress("Fitting the printer model: robust fit 2/2…")
         model = fit_forward_model(device, lab, grid=grid, lam=lam,
-                                  curve_rounds=curve_rounds, weights=w,
+                                  curve_rounds=curve_rounds, weights=w2,
                                   cg_rtol=_CG_RTOL)
-        res = np.linalg.norm(model.predict(device) - lab, axis=1)
+        res = delta_e_2000(model.predict(device), lab)
+        w = w2
 
-    # Report only likely misreads. Dark patches carry legitimately large
-    # Lab noise (the cube-root slope amplifies XYZ noise near black), so the
-    # naming threshold sits well above the down-weighting scale — IRLS
-    # quietly handles the tail either way.
-    outliers = np.flatnonzero(res > max(6.0 * float(np.median(res)), 4.0))
+    # Report likely misreads: everything rejected outright, plus whatever
+    # still sits clearly visible (3 ΔE2000) above the bulk after the refit.
+    named = res > max(6.0 * float(np.median(res)), 3.0)
+    outliers = np.flatnonzero(named | (w == 0.0))
     return model, outliers, lam

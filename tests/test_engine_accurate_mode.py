@@ -231,10 +231,18 @@ def test_hue_preserving_clip_keeps_colour_family():
     assert (res_plain > 1.0).all() and (res_acc > 1.0).all()   # truly OOG
     # gamt residual stays the nearest-clip metric distance.
     assert np.allclose(res_acc, res_plain, atol=1.0)
-    # The accurate clip never lands farther off in hue, and is strictly
-    # better in aggregate.
+    # The accurate clip is perceptually no worse anywhere and clearly
+    # better in aggregate (per-row ΔE2000 — the metric the weights encode;
+    # small per-row tolerance for solver noise).
+    from workflow.profile_engine.metrics import delta_e_2000
+    ce_p = delta_e_2000(model.predict(d_plain), target)
+    ce_a = delta_e_2000(model.predict(d_acc), target)
+    assert (ce_a <= ce_p + 0.5).all()
+    assert ce_a.mean() < ce_p.mean() - 1.0
+    # And it never flips colour family: gross hue errors are gone (the
+    # plain nearest clip shifted one blue by 26°), mean hue error improves.
     he_p, he_a = hue_err(d_plain, target), hue_err(d_acc, target)
-    assert (he_a <= he_p + 1.0).all()
+    assert he_a.max() < 10.0
     assert he_a.mean() < he_p.mean()
 
 
@@ -374,6 +382,88 @@ def test_accurate_cmyk_build_and_separation_smoothness(tmp_path):
     assert np.abs(np.diff(k)).sum() < (k[0] - k[-1]) + 0.30
     # And no channel jumps by near half scale between adjacent nodes.
     assert np.abs(np.diff(neutral_col, axis=0)).max() < 0.45
+
+
+def test_shaped_xyz_pcs_codec_roundtrips_and_resolves_shadows():
+    from workflow.profile_engine import icc_writer as icw
+    from workflow.profile_engine.pcs import XyzPcs, XyzPcsShaped, codec_for
+    assert codec_for("x") is XyzPcs
+    assert codec_for("x", accurate=True) is XyzPcsShaped
+    assert codec_for("l", accurate=True).signature == b"Lab "
+    # node targets and lab_to01 agree: node i maps back to coordinate i.
+    grid = 9
+    nodes = XyzPcsShaped.node_lab(grid)
+    u = XyzPcsShaped.lab_to01(nodes)
+    axes = np.linspace(0.0, 1.0, grid)
+    expect = np.stack(np.meshgrid(axes, axes, axes, indexing="ij"),
+                      -1).reshape(-1, 3)
+    assert np.allclose(u, expect, atol=1e-4)   # Lab↔XYZ float roundtrip
+    # the input tables encode the same cube root, monotonically.
+    t = XyzPcsShaped.b2a_in_tables(2048).astype(float) / 0xFFFF
+    assert (np.diff(t, axis=1) >= 0).all()
+    assert t[0, 1024] == pytest.approx(np.cbrt(1024 / 2047), abs=1e-3)
+    # shadow resolution: the darkest grid step covers a small L* span now
+    # (L* rides on the Y axis — the middle meshgrid dimension).
+    l_axis_shaped = XyzPcsShaped.node_lab(33)[0:33 * 33:33, 0]
+    l_axis_plain = XyzPcs.node_lab(33)[0:33 * 33:33, 0]
+    assert l_axis_shaped[1] < 5.0           # first step ends deep in shadow
+    assert l_axis_plain[1] > 15.0           # identity layout skips L* 0..20+
+
+
+def test_accurate_xyz_build_carries_shaped_tables(tmp_path):
+    ti3 = write_synth_ti3(tmp_path / "rgb.ti3", "RGB",
+                          ["RGB_R", "RGB_G", "RGB_B"], additive=True,
+                          n_per_axis=6)
+    st = BuildSettings(quality="l", gammap_mode="accurate", algorithm="x")
+    res = build_profile(ti3, tmp_path / "rgb.icc", st)
+    import struct
+    data = res.icc_path.read_bytes()
+    ntags = struct.unpack(">I", data[128:132])[0]
+    off = None
+    for i in range(ntags):
+        sig, o, _ = struct.unpack(">4sII", data[132 + 12 * i:144 + 12 * i])
+        if sig == b"B2A1":
+            off = o
+    nie, _ = struct.unpack(">HH", data[off + 48:off + 52])
+    table = np.frombuffer(data, dtype=">u2", count=nie,
+                          offset=off + 52).astype(float) / 0xFFFF
+    # cube-root input curve, not identity.
+    assert table[nie // 2] == pytest.approx(np.cbrt(0.5), abs=0.01)
+
+
+def test_percent_progress_interpolates_substeps():
+    from workflow.profile_engine.builder import _PercentProgress
+    seen: list[str] = []
+    p = _PercentProgress(seen.append)
+    p("Fitting the printer model (900 patches, grid 9)…")
+    p("Fitting the printer model: smoothing search 1/5…")
+    p("Fitting the printer model: smoothing search 4/5…")
+    p("Inverting the model (B2A grid 17)…")
+    p("Inverting the model: converging 5/10…")
+    pcts = [int(s.split("%")[0]) for s in seen]
+    assert pcts[0] == 8
+    assert 8 < pcts[1] < pcts[2] < 14      # interpolates toward next anchor
+    assert pcts[3] == 14
+    assert 14 < pcts[4] < 18
+    # monotonic even if an out-of-order message arrives
+    p("Fitting the printer model: smoothing search 1/5…")
+    assert int(seen[-1].split("%")[0]) >= pcts[4]
+
+
+def test_accurate_build_emits_granular_progress(tmp_path):
+    ti3 = write_synth_ti3(tmp_path / "rgb.ti3", "RGB",
+                          ["RGB_R", "RGB_G", "RGB_B"], additive=True,
+                          n_per_axis=6)
+    msgs: list[str] = []
+    st = BuildSettings(quality="l", gammap_mode="accurate",
+                       progress=msgs.append)
+    build_profile(ti3, tmp_path / "rgb.icc", st)
+    assert any("smoothing search" in m for m in msgs)
+    assert any("converging" in m for m in msgs)
+    assert any("smoothing refit" in m for m in msgs)
+    # more distinct percentages than plain stage anchors would give
+    pcts = {m.split("%")[0] for m in msgs if "%" in m}
+    assert len(pcts) >= 8
 
 
 def test_fast_mode_unchanged_by_default(tmp_path):
