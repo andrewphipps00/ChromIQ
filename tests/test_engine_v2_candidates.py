@@ -38,6 +38,7 @@ def _cmyk_setup(tmp_path):
     return p, ti3
 
 
+@pytest.mark.slow
 def test_joint_separation_feasible_and_smooth(tmp_path):
     from workflow.profile_engine import b2a as b2a_mod
     from workflow.profile_engine.forward_model import fit_forward_model
@@ -68,6 +69,7 @@ def test_joint_separation_feasible_and_smooth(tmp_path):
     assert tv(out) <= tv(dev0) * 1.05
 
 
+@pytest.mark.slow
 def test_joint_sep_build_changes_bytes(tmp_path):
     p, ti3 = _cmyk_setup(tmp_path)
     from datetime import datetime, timezone
@@ -87,6 +89,7 @@ def test_joint_sep_build_changes_bytes(tmp_path):
 # W4 — spectral hybrid
 # ---------------------------------------------------------------------------
 
+@pytest.mark.slow
 def test_ynsn_fits_halftone_physics(tmp_path):
     from workflow.profile_engine.spectral_model import fit_ynsn
     p, ti3 = _cmyk_setup(tmp_path)
@@ -101,6 +104,7 @@ def test_ynsn_fits_halftone_physics(tmp_path):
     assert 1.0 <= m.nu <= 10.0
 
 
+@pytest.mark.slow
 def test_spectral_inapplicable_paths(tmp_path):
     from workflow.profile_engine.spectral_model import fit_spectral_hybrid
     p = PRINTERS["S1"]                       # RGB → not applicable
@@ -121,15 +125,18 @@ def test_spectral_inapplicable_paths(tmp_path):
     assert fit_spectral_hybrid(meas2, base2, base_lam=0.05) is None
 
 
+@pytest.mark.slow
 def test_spectral_challenge_wins_sparse_multiink(tmp_path):
-    # 6 channels × 700 patches = sparse coverage: physics must win the
-    # held-out challenge there (the whole W4 pitch).
+    # 5 channels × 500 patches = sparse coverage: physics must win the
+    # held-out challenge there (the whole W4 pitch). CMYKV instead of the
+    # original CMYKOG cuts the primaries 64→32 and the runtime ~4 min
+    # with the identical assertion.
     from workflow.profile_engine.accuracy import fit_forward_model_accurate
     from workflow.profile_engine.spectral_model import fit_spectral_hybrid
-    p = PRINTERS["S5"]
-    chart = make_chart(p, 700)
+    p = PRINTERS["S6"]
+    chart = make_chart(p, 500)
     xyz, refl, _ = measure(p, chart)
-    ti3 = write_ti3(tmp_path / "s5.ti3", p, chart, xyz, refl)
+    ti3 = write_ti3(tmp_path / "s6.ti3", p, chart, xyz, refl)
     meas = read_ti3(ti3)
     meas.average_endpoints()
     base, _, _ = fit_forward_model_accurate(
@@ -139,7 +146,7 @@ def test_spectral_challenge_wins_sparse_multiink(tmp_path):
     assert ch is not None
     model, line = ch
     assert "wins the held-out challenge" in line
-    assert model.grid == base.grid and model.n_channels == 6
+    assert model.grid == base.grid and model.n_channels == 5
 
 
 # ---------------------------------------------------------------------------
@@ -192,6 +199,7 @@ def test_radial_mapper_midtones_protected():
     assert white[0] > 95.0 and abs(white[1]) < 1 and abs(white[2]) < 1
 
 
+@pytest.mark.slow
 def test_render2_build_distinct_and_invertible(tmp_path):
     p = PRINTERS["S1"]
     chart = make_chart(p, 500)

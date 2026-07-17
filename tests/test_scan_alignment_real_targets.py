@@ -231,6 +231,7 @@ def test_large_area_hits_are_the_known_distortion_zones(target):
         assert n <= 80, f"{n} boxes at {frac:.0%} — beyond the known zones"
 
 
+@pytest.mark.slow
 def test_aligned_agreement_holds_at_every_sample_area(target):
     """Knut's #119 report: on his aligned LaserSoft the worst-patch number
     must stay above the default floor (85 %) at every Patch-sample-area

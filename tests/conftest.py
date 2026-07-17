@@ -36,3 +36,23 @@ def _no_real_editor_render(monkeypatch):
         return
     monkeypatch.setattr(Ti2RelayoutDialog, "_regenerate",
                         lambda self, *a, **k: None, raising=False)
+
+
+# ---------------------------------------------------------------------------
+# Two-tier suite (#123 follow-up): heavy end-to-end profile builds carry
+# @pytest.mark.slow and are skipped in everyday runs — `pytest --runslow`
+# includes them, and the release gate always runs with --runslow.
+# ---------------------------------------------------------------------------
+
+def pytest_addoption(parser):
+    parser.addoption("--runslow", action="store_true", default=False,
+                     help="also run the slow end-to-end build tests")
+
+
+def pytest_collection_modifyitems(config, items):
+    if config.getoption("--runslow"):
+        return
+    skip = pytest.mark.skip(reason="slow end-to-end build — use --runslow")
+    for item in items:
+        if "slow" in item.keywords:
+            item.add_marker(skip)

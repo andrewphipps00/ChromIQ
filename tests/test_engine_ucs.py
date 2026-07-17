@@ -84,6 +84,7 @@ def test_invert_converges_in_ucs_mode():
         assert res.max() < 1.5
 
 
+@pytest.mark.slow
 def test_build_with_ucs_candidate(tmp_path):
     p = PRINTERS["S1"]
     chart = make_chart(p, 500)
@@ -105,6 +106,7 @@ def test_build_with_ucs_candidate(tmp_path):
     assert res.fit_median_de00 < 1.0
 
 
+@pytest.mark.slow
 def test_candidates_ignored_outside_accurate(tmp_path):
     p = PRINTERS["S1"]
     chart = make_chart(p, 400)

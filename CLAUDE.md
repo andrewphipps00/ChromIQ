@@ -20,14 +20,21 @@ python main.py
 
 ```bash
 source .venv/bin/activate
-QT_QPA_PLATFORM=offscreen pytest      # ~6–7 min, ~1900 tests
+QT_QPA_PLATFORM=offscreen pytest            # everyday tier, ~2050 tests
+QT_QPA_PLATFORM=offscreen pytest --runslow  # FULL suite — the release gate
 ```
 
-`pytest.ini` scopes collection to `tests/` (via `testpaths`). Without it a bare
-`pytest` recurses into `.venv/` and — with `pytest-qt` active — collection
-appears to hang for many minutes. A full run takes ~6–7 minutes; anything far
-beyond that means something is wrong (a test opening a modal dialog `.exec()`,
-or `.venv` being scanned again), not just "slow tests".
+The suite is two-tiered: ~20 heavy end-to-end profile-build tests carry
+`@pytest.mark.slow` and are skipped by a plain `pytest` run; `--runslow`
+includes them. **Any merge/release decision requires a green `--runslow`
+run** — the everyday tier alone is not a gate.
+
+`pytest.ini` scopes collection to `tests/` (via `testpaths`). Without it a
+bare `pytest` recurses into `.venv/` and — with `pytest-qt` active —
+collection appears to hang for many minutes. The everyday tier takes
+~10 minutes, `--runslow` a few minutes more; anything far beyond that
+means something is wrong (a test opening a modal dialog `.exec()`, or
+`.venv` being scanned again), not just "slow tests".
 
 ## Build distributable
 

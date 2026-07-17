@@ -91,6 +91,7 @@ def test_scanner_sidecar_recipes_use_two_nearneutral_rings():
         assert rec["sp"]["fill_to"] == p.patches, p.key
 
 
+@pytest.mark.slow
 def test_scanner_recipes_reproduce_declared_page_count():
     """The bundled recipe + .ti1 must lay out to exactly the advertised page
     count — a threshold/margin regression in the engine would silently

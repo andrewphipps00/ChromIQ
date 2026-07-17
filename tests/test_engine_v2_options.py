@@ -93,6 +93,7 @@ def test_v4_profile_header_id_and_metadata(_s1_ti3, tmp_path):
     assert "Vier" in ImageCms.getProfileDescription(p)
 
 
+@pytest.mark.slow
 def test_v4_luts_identical_to_v2(_s1_ti3, tmp_path):
     from datetime import datetime, timezone
     ts = datetime(2026, 1, 1, tzinfo=timezone.utc)
@@ -125,6 +126,7 @@ def test_v2_default_untouched(_s1_ti3, tmp_path):
 # Spectral-physics option (opt-in flag)
 # ---------------------------------------------------------------------------
 
+@pytest.mark.slow
 def test_spectral_physics_flag_runs_challenge(tmp_path):
     p = PRINTERS["S5"]
     chart = make_chart(p, 700)
@@ -138,6 +140,7 @@ def test_spectral_physics_flag_runs_challenge(tmp_path):
     assert any("spectral physics" in ln for ln in lines)
 
 
+@pytest.mark.slow
 def test_spectral_physics_off_is_bit_identical(tmp_path):
     p = PRINTERS["S1"]
     chart = make_chart(p, 400)
@@ -228,6 +231,7 @@ def test_settings_from_params_maps_new_fields():
     assert s.spectral_physics is True and s.icc_version == "4"
 
 
+@pytest.mark.slow
 def test_both_versions_writes_v2_and_v4_twin(_s1_ti3, tmp_path):
     icc = tmp_path / "twin.icc"
     lines = []
@@ -309,6 +313,7 @@ def _noisy_chart(tmp_path, noise_scale):
     return write_ti3(tmp_path / f"n{noise_scale:g}.ti3", p, chart, xyz, refl), p
 
 
+@pytest.mark.slow
 def test_noise_option_stands_aside_on_clean_chart(tmp_path):
     ti3, p = _noisy_chart(tmp_path, 1.0)
     lines = []
@@ -329,6 +334,7 @@ def test_noise_option_stands_aside_on_clean_chart(tmp_path):
     assert any("Confidence map" in ln for ln in lines)
 
 
+@pytest.mark.slow
 def test_noise_option_wins_on_noisy_chart(tmp_path):
     ti3, p = _noisy_chart(tmp_path, 4.0)
     lines = []
@@ -339,6 +345,7 @@ def test_noise_option_wins_on_noisy_chart(tmp_path):
     assert any("noise handling engaged" in ln for ln in lines)
 
 
+@pytest.mark.slow
 def test_render_style_option_uses_bijective_mapper(tmp_path):
     p = PRINTERS["S1"]
     chart = make_chart(p, 450)

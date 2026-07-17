@@ -1,5 +1,110 @@
 # Changelog
 
+## v3.13.8
+
+This release finishes the work of issue #123 and, deliberately, also
+documents everything the last v3.13.7 rebuilds quietly shipped without a
+changelog entry. Nothing that existed before v3.13.7 changes behaviour;
+every new capability is opt-in or engine-only.
+
+### The friendly version — what's new, in plain words
+
+- **Maximum accuracy mode** (Settings → Beta → Accuracy) — this actually
+  arrived in the final v3.13.7 rebuild without being announced; consider
+  this its official introduction. It is the ChromIQ engine's most careful
+  way of building a profile: it averages your repeated white/black
+  patches, picks the smoothing for your specific chart, survives a
+  smudged patch instead of baking it in (and tells you which patches to
+  remeasure), and keeps deep shadows from collapsing. On our test bench
+  it matched or beat classic colprof on colours it had never seen.
+- **Black generation (-k / -K)** in Build Profile → Manual — also from
+  that unannounced rebuild: control how much black ink your profiles use
+  for dark colours, with a plain-language tooltip explaining every rule.
+  Honoured identically by colprof and all engine modes.
+- **Four new engine-only options** in Build Profile → Manual → Color
+  Science, visible only while Maximum accuracy is active, all with
+  extensive tooltips, all saved with your defaults and presets:
+  - *Spectral physics model* — lets the engine try a physical model of
+    ink-on-paper for multi-ink printers with spectral measurements. It
+    proves itself on your own chart before it is used, so it can only
+    win or change nothing. On the test bench, multi-ink profiles came
+    out 20–36% closer to the true colours.
+  - *Measurement noise handling* — diagnoses how noisy your measurement
+    really was (from the repeated patches) and only engages when the
+    chart is measurably noisy; on a clean chart your profile is
+    bit-for-bit unchanged. Also prints a per-region confidence map.
+  - *ICC profile version* — v2 (classic), v4 (modern, with a built-in
+    checksum), or Both (writes a "-v4.icc" twin next to the normal
+    file).
+  - *Out-of-gamut rendering* — keep the Argyll-matched rendering
+    (default) or try ChromIQ's new mathematically-exact mapping and
+    judge the look on your own prints.
+- **Progress with time remaining**: engine builds now show
+  "42% · ~3 min left · …" instead of a bare percentage.
+- **New Patch Set / Add window** (multi-ink devices): two new colour
+  sets — *Ink-triple overprints* (the dark three-ink mixtures) and
+  *Rich-black ramp* (dark greys from colour ink plus black, exactly
+  what black generation has to learn) — plus a round of fixes: the
+  gap-filler now always respects the ink limit, grey-balance rings are
+  genuinely re-centred through a preconditioning profile when one is
+  set, counts and greyed-out rows behave honestly, and the build order
+  matches the panel order.
+
+### The honest part — how much to trust this (assessment by Claude,
+### ChromIQ's development assistant, not by the project owner)
+
+None of the new colour machinery has been validated on real printing
+hardware yet. What it HAS been validated against: a synthetic test bench
+of six mathematically exact "printers" (where the true colour of every
+patch is known), held-out benchmarks on real measurements, ~2 000
+automated tests including bit-identity checks, and ArgyllCMS's own tools
+(iccdump, icclu, ColorSync, littleCMS). My confidence, stated plainly:
+**high** that nothing that worked in v3.13.7 behaves differently — the
+defaults are untouched and the opt-ins are built to stand aside rather
+than degrade anything; **medium-high** that the measured accuracy gains
+(spectral physics, noise handling) carry over to real prints — the test
+bench was built to be realistic, but paper and ink get the final vote;
+**deliberately unproven** for how the new out-of-gamut rendering LOOKS —
+numbers cannot judge taste, which is why it is not the default. Print a
+test image before trusting any newly built profile for real work — that
+advice is not new, but it carries extra weight for these features.
+
+### The technical version
+
+- Engine (issue #123): candidate framework with a synthetic ground-truth
+  battery, ICC-byte referee and pre-registered promotion gates
+  (benchmarks/). Implemented and benchmarked: CAM16-UCS fitting, ADMM
+  joint separation, heteroscedastic noise model (GLS with banded
+  model-error floor, λ hill-climb, z-score outlier logic with a
+  reject/report split), cellular-free YNSN spectral hybrid with
+  Saunderson flare (deployed via held-out challenge + L² projection onto
+  the CLUT lattice), bijective radial rendering intents in CAM16-UCS
+  (closed-form inverse ⇒ exact -nI). Gates verdict: nothing promoted
+  into the accurate-mode defaults; spectral physics and noise handling
+  ship as safe-by-construction user options, CAM16-UCS fitting and
+  joint separation remain dark (measurably not better under the ΔE2000
+  referee), the bijective renderer ships as an explicit style choice.
+  Full data in issue #123.
+- ICC v4 output: v4.4 header, mluc metadata, MD5 profile ID per
+  ICC.1 §7.2.18; LUTs remain lut16Type (legal in v4, legacy PCS
+  encoding preserved — colour tables byte-identical to v2). Verified
+  against ColorSync and littleCMS.
+- Patch generators (N-channel): ink-limit enforcement in fill_gaps_nd
+  (simplex projection of candidates and Lloyd samples), per-ink ramps
+  and K anchor capped at min(100, limit); ink_triple_overprints
+  (C(n,3) trios ≤ L/3 by construction); rich_black_ramp (neutral CMY ×
+  K-substitution grid); profile-recentred grey-balance rings
+  (device-space ring offsets preserved); nch build order = panel order.
+- Backfilled from the unannounced v3.13.7 rebuilds: Maximum accuracy
+  mode (endpoint averaging, cross-validated smoothing, Huber IRLS with
+  remeasure report, boundary-aware inversion, Euclidean TAC projection,
+  hue-preserving clip, measured extra-ink hues, shaped XYZ-PCS tables),
+  black generation -k/-K (faithful icxKcurveNF port), granular build
+  progress; Windows/ARM vector-PDF FreeType bundling fix.
+- Test suite is now two-tiered: `pytest` runs the everyday tier,
+  `pytest --runslow` adds the heavy end-to-end build tests and is the
+  release gate.
+
 ## v3.13.7
 
 Stable.

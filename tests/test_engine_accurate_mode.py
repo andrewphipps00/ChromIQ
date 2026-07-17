@@ -327,6 +327,7 @@ def test_dense_shell_is_denser_and_respects_the_ink_limit(tmp_path):
 # End-to-end builds
 # ---------------------------------------------------------------------------
 
+@pytest.mark.slow
 def test_accurate_rgb_build_end_to_end(tmp_path):
     ti3 = write_synth_ti3(tmp_path / "rgb.ti3", "RGB",
                           ["RGB_R", "RGB_G", "RGB_B"], additive=True,
@@ -344,6 +345,7 @@ def test_accurate_rgb_build_end_to_end(tmp_path):
     assert any("cross-validation" in m for m in msgs)
 
 
+@pytest.mark.slow
 def test_accurate_cmyk_build_and_separation_smoothness(tmp_path):
     ti3 = write_synth_ti3(tmp_path / "cmyk.ti3", "CMYK",
                           [f"CMYK_{c}" for c in "CMYK"], additive=False,
@@ -410,6 +412,7 @@ def test_shaped_xyz_pcs_codec_roundtrips_and_resolves_shadows():
     assert l_axis_plain[1] > 15.0           # identity layout skips L* 0..20+
 
 
+@pytest.mark.slow
 def test_accurate_xyz_build_carries_shaped_tables(tmp_path):
     ti3 = write_synth_ti3(tmp_path / "rgb.ti3", "RGB",
                           ["RGB_R", "RGB_G", "RGB_B"], additive=True,
@@ -450,6 +453,7 @@ def test_percent_progress_interpolates_substeps():
     assert int(seen[-1].split("%")[0]) >= pcts[4]
 
 
+@pytest.mark.slow
 def test_accurate_build_emits_granular_progress(tmp_path):
     ti3 = write_synth_ti3(tmp_path / "rgb.ti3", "RGB",
                           ["RGB_R", "RGB_G", "RGB_B"], additive=True,
@@ -466,6 +470,7 @@ def test_accurate_build_emits_granular_progress(tmp_path):
     assert len(pcts) >= 8
 
 
+@pytest.mark.slow
 def test_fast_mode_unchanged_by_default(tmp_path):
     # The parity path must not pick up any accurate-mode behaviour.
     ti3 = write_synth_ti3(tmp_path / "rgb.ti3", "RGB",

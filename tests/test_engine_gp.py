@@ -67,6 +67,7 @@ def test_uncertainty_lines_cover_regions():
     assert any("shadows" in ln for ln in lines)
 
 
+@pytest.mark.slow
 def test_gp_fit_flags_misread_not_clean(tmp_path):
     p, chart, lab, mis = _chart_with_lab("S1", 600)
     lab = lab.copy()
@@ -82,6 +83,7 @@ def test_gp_fit_flags_misread_not_clean(tmp_path):
     assert any("cross-validation" in x for x in msgs)
 
 
+@pytest.mark.slow
 def test_gp_lambda_can_leave_the_ladder():
     # The hill-climb explores beyond the 5 fixed factors when it pays;
     # at minimum it must run and return a positive λ.
@@ -92,6 +94,7 @@ def test_gp_lambda_can_leave_the_ladder():
     assert lam > 0
 
 
+@pytest.mark.slow
 def test_gp_build_emits_confidence_map(tmp_path):
     p = PRINTERS["S1"]
     chart = make_chart(p, 500)

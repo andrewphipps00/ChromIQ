@@ -721,6 +721,7 @@ def test_area_first_fills_box_for_fixed_count():
     assert pages_over >= 2 and 7.4 <= pw_over <= 7.8
 
 
+@pytest.mark.slow
 def test_area_first_height_is_a_minimum_floor():
     """The height-% is a MINIMUM, like the width: the patch height is never below
     width × (% / 100). When the area-fill would make it shorter, the patch must be
