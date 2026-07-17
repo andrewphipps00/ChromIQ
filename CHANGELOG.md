@@ -1,5 +1,66 @@
 # Changelog
 
+## v3.13.9
+
+A quick patch release for the first round of user feedback on the
+multi-ink chart tools (issue #124) — one real display bug, one silent
+behaviour made visible, and a long-overdue rewrite of the chart
+generator's help. Nothing else changes.
+
+### Fixed: extra-ink patches showed as white swatches
+
+On a CMYK + extra inks chart, patches made only of an extra ink — an
+orange ramp, a red/green pair overprint, an orange+green+violet triple —
+appeared as pure white in the patch-set editor's swatch grid (and in the
+chart preview). The preview colour was computed from the CMYK channels
+alone, so a patch with no CMYK in it looked like bare paper.
+
+Every extra ink now contributes its real colour to the preview, using the
+same per-ink colour model the separated-TIFF view already used. A 32-step
+orange ramp shows 32 distinct swatches from pale peach to full orange.
+Plain CMYK and RGB charts render exactly as before, to the pixel.
+
+### Explained: the patch count that grew on its own
+
+Designing 896 patches and ending up with a 910-patch chart was correct —
+measuring instruments read whole strips, so the layout tops up a partial
+last strip with paper-white patches, exactly as Argyll's printtarg has
+always done (they are printed and measured like any others; the profile
+just gets a few extra readings of the paper). But it happened silently.
+
+Now the Create Chart log spells it out after applying a chart ("896
+designed + 14 paper-white fill-up patches completing the last strip =
+910 total"), the editor's save summary carries the same note for engine
+charts, and the help documents the behaviour.
+
+### The "Generate colour sets" help, rewritten
+
+The main help still said "these five sets" while the panel had grown to
+sixteen, never mentioned the multi-ink sets at all, and left three
+things unexplained that this release's bug report reasonably read as
+bugs:
+
+- why the RGB-cube sets are greyed out on multi-ink devices (they trace
+  the RGB colour cube, which a multi-ink printer doesn't have — "Even
+  coverage" is their replacement), and why the look-based sets unlock
+  once a preconditioning profile is set;
+- why the 3D preview disappears for a multi-ink chart until a
+  preconditioning profile provides an honest colour model;
+- why "Pure white & black · each: 1" can add 0 patches (whites and
+  blacks the other ticked sets already contribute count toward your
+  number, so the chart ends with exactly N of each, never doubles).
+
+The help now describes every set in on-screen order — including
+Gamut-corner emphasis, Sunrises, Flamingos, Colour extremes and Pure
+white & black, which were missing entirely — plus a "Multi-ink devices"
+section with the exact availability rules, the white/black arithmetic
+with a worked example, and the strip fill-up behaviour. Fully translated
+into all 13 languages, as usual.
+
+One small visual fix rode along: the info icon of "Highlights & shadows"
+sat on the wrong row (overlapping the Near-neutral greys icon) — every
+set now has its own.
+
 ## v3.13.8
 
 A stable release with two jobs: it ships this cycle's new work, and it
