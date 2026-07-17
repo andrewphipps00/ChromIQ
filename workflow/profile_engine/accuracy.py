@@ -45,15 +45,32 @@ def fit_forward_model_accurate(
         device: np.ndarray, lab: np.ndarray, *, grid: int, base_lam: float,
         curve_rounds: int = 2,
         progress: Callable[[str], None] | None = None,
+        ucs: bool = False,
         ) -> tuple[ForwardModel, np.ndarray, float]:
     """Cross-validated, outlier-robust forward fit.
 
     Returns ``(model, outlier_indices, lam_used)`` — outliers are patch row
     indices whose residual stayed far above the bulk even after the robust
     refit (worth remeasuring; they carry almost no weight in the fit).
+
+    ``ucs`` (candidate ``"ucs"``, issue #123): fit in CAM16-UCS instead of
+    CIELAB — residuals, curvature penalty and CV criterion all become
+    perceptually uniform *by construction* (Euclidean UCS ≈ ΔE2000), and
+    the ΔE00 formula drops out of the loops. The returned model's nodes
+    are converted back to Lab, so everything downstream is unchanged.
     """
     npts = len(device)
     lam = base_lam
+    space = None
+    if ucs:
+        from workflow.profile_engine.ucs import print_ucs
+        space = print_ucs()
+        lab = space.lab_to_ucs(lab)
+
+    def dist(pred: np.ndarray, ref: np.ndarray) -> np.ndarray:
+        if ucs:
+            return np.linalg.norm(pred - ref, axis=1)
+        return delta_e_2000(pred, ref)
 
     if npts >= _HOLDOUT_MIN_PATCHES:
         rng = np.random.default_rng(4242)
@@ -69,8 +86,8 @@ def fit_forward_model_accurate(
                                   lam=base_lam * f, cg_iters=350,
                                   curve_rounds=min(curve_rounds, 1),
                                   cg_rtol=_CG_RTOL)
-            err = float(np.median(delta_e_2000(
-                m.predict(device[ho]), lab[ho])))
+            err = float(np.median(dist(m.predict(device[ho]),
+                                       lab[ho])))
             if err < best_err:
                 best_err, best_lam = err, base_lam * f
         lam = best_lam
@@ -93,7 +110,7 @@ def fit_forward_model_accurate(
                              lam=max(4.0 * base_lam, lam),
                              curve_rounds=min(curve_rounds, 1),
                              cg_iters=350, cg_rtol=_CG_RTOL)
-    res = delta_e_2000(scan.predict(device), lab)
+    res = dist(scan.predict(device), lab)
     sigma = 1.4826 * float(np.median(np.abs(res - np.median(res))))
     scale = max(1.345 * sigma, 0.35)
     w = np.minimum(1.0, scale / np.maximum(res, 1e-9))
@@ -105,7 +122,7 @@ def fit_forward_model_accurate(
                               curve_rounds=curve_rounds,
                               weights=w if (w < 0.999).any() else None,
                               cg_rtol=_CG_RTOL)
-    res = delta_e_2000(model.predict(device), lab)
+    res = dist(model.predict(device), lab)
     # One tightening pass against the final fit (never loosening).
     w2 = np.minimum(w, np.minimum(1.0, scale / np.maximum(res, 1e-9)))
     w2[res > 8.0 * scale] = 0.0
@@ -115,11 +132,15 @@ def fit_forward_model_accurate(
         model = fit_forward_model(device, lab, grid=grid, lam=lam,
                                   curve_rounds=curve_rounds, weights=w2,
                                   cg_rtol=_CG_RTOL)
-        res = delta_e_2000(model.predict(device), lab)
+        res = dist(model.predict(device), lab)
         w = w2
 
     # Report likely misreads: everything rejected outright, plus whatever
     # still sits clearly visible (3 ΔE2000) above the bulk after the refit.
     named = res > max(6.0 * float(np.median(res)), 3.0)
     outliers = np.flatnonzero(named | (w == 0.0))
+    if space is not None:
+        # The fit lived in UCS; hand back a Lab-speaking model so the
+        # writer, inversion seeds and statistics stay unchanged.
+        model.nodes = space.ucs_to_lab(model.nodes)
     return model, outliers, lam

@@ -926,7 +926,10 @@ def build_mapped_b2a(model: ForwardModel, meas: Ti3Measurement, grid: int,
             model, mapped, channel_letters=channel_letters,
             is_additive=is_additive, ink_limit=ink_limit,
             accurate=accurate, extra_hues=extra_hues, black_l=black_l,
-            k_gen=k_gen, progress=progress,
+            k_gen=k_gen,
+            ucs=accurate and "ucs" in getattr(settings, "engine_candidates",
+                                              frozenset()),
+            progress=progress,
             progress_label="Gamut mapping: building the final colour table")
         shaped = model.shape_device(dev)
         out[tag] = icw.make_mft2(

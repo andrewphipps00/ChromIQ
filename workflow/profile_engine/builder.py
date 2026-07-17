@@ -353,11 +353,15 @@ def _build_profile_impl(ti3_path: Path | str, out_path: Path | str,
     lam = _fit_lambda(a2b_grid) * (max(settings.smoothing, 0.01) / 0.5) ** 2
     curve_rounds = 0 if settings.no_input_shaper else settings.curve_rounds
     outliers = np.array([], dtype=int)
+    use_ucs = "ucs" in candidates
+    if candidates:
+        _emit(settings, "Candidate pipeline active: "
+                        f"{', '.join(sorted(candidates))}.")
     if accurate:
         from workflow.profile_engine.accuracy import fit_forward_model_accurate
         model, outliers, _lam_used = fit_forward_model_accurate(
             meas.device, meas.lab_relative, grid=a2b_grid, base_lam=lam,
-            curve_rounds=curve_rounds,
+            curve_rounds=curve_rounds, ucs=use_ucs,
             progress=lambda m: _emit(settings, m))
         if len(outliers):
             ids = ", ".join(str(i + 1) for i in outliers[:8])
@@ -394,7 +398,7 @@ def _build_profile_impl(ti3_path: Path | str, out_path: Path | str,
         is_additive=meas.is_additive, ink_limit=ink_limit,
         node_lab=node_lab, k_prior=anchor, accurate=accurate,
         extra_hues=extra_hues, black_l=black_l, k_gen=k_gen,
-        progress=lambda m: _emit(settings, m))
+        ucs=use_ucs, progress=lambda m: _emit(settings, m))
     # refine_b2a_clut returns *curve-space* values — written straight into
     # the CLUT, with the inverse shaper curves as B2A output tables.
     dev_clut_shaped = b2a_mod.refine_b2a_clut(
@@ -403,7 +407,7 @@ def _build_profile_impl(ti3_path: Path | str, out_path: Path | str,
         channel_letters=meas.channel_letters,
         node_lab=node_lab, lab_to01=codec.lab_to01, k_prior=anchor,
         accurate=accurate, extra_hues=extra_hues, black_l=black_l,
-        k_gen=k_gen, progress=lambda m: _emit(settings, m))
+        k_gen=k_gen, ucs=use_ucs, progress=lambda m: _emit(settings, m))
     in_gamut = residual <= 1.0
 
     _emit(settings, "Writing the profile…")

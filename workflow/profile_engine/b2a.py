@@ -121,6 +121,40 @@ def _hue_weight_matrices(target: np.ndarray) -> np.ndarray:
     return w
 
 
+class _UcsView:
+    """Forward-model view predicting CAM16-UCS instead of Lab (issue #123,
+    candidate ``"ucs"``): with it, Gauss–Newton minimises a perceptually
+    uniform residual, so no per-point metric weighting is needed."""
+
+    def __init__(self, model: ForwardModel, space) -> None:
+        self._model = model
+        self._space = space
+        self.n_channels = model.n_channels
+
+    def predict(self, dev: np.ndarray) -> np.ndarray:
+        return self._space.lab_to_ucs(self._model.predict(dev))
+
+
+def _ucs_hue_weight_matrices(target_ucs: np.ndarray) -> np.ndarray:
+    """(N,3,3) clip-weight matrices in CAM16-UCS. The space is already
+    perceptually uniform, so only the *deliberate* hue emphasis remains —
+    :data:`_CLIP_HUE_FACTOR` on the hue direction of the (J', a', b')
+    frame, identity near neutral (no hue to preserve)."""
+    n = len(target_ucs)
+    chroma = np.hypot(target_ucs[:, 1], target_ucs[:, 2])
+    h = np.arctan2(target_ucs[:, 2], target_ucs[:, 1])
+    ch, sh = np.cos(h), np.sin(h)
+    wh = _CLIP_HUE_FACTOR
+    w = np.zeros((n, 3, 3))
+    w[:, 0, 0] = 1.0
+    w[:, 1, 1] = ch * ch + wh * sh * sh
+    w[:, 1, 2] = (1.0 - wh) * ch * sh
+    w[:, 2, 1] = w[:, 1, 2]
+    w[:, 2, 2] = sh * sh + wh * ch * ch
+    w[chroma < 3.0] = np.eye(3)
+    return w
+
+
 def _gauss_newton(model: ForwardModel, target: np.ndarray, seed: np.ndarray,
                   free: np.ndarray, *, iters: int, damping: float,
                   ink_limit: float | None,
@@ -291,6 +325,7 @@ def invert_to_device(model: ForwardModel, target: np.ndarray, *,
                      extra_hues: dict[str, float] | None = None,
                      black_l: float | None = None,
                      k_gen: dict | None = None,
+                     ucs: bool = False,
                      progress=None,
                      progress_label: str = "Inverting the model",
                      ) -> tuple[np.ndarray, np.ndarray]:
@@ -312,8 +347,18 @@ def invert_to_device(model: ForwardModel, target: np.ndarray, *,
     limit = None if ink_limit is None or is_additive else ink_limit / 100.0
     if n > 3:
         iters = max(iters, 10)      # surplus dof converge slower with priors
+    # Candidate "ucs": GN minimises the residual in CAM16-UCS (a true
+    # perceptual metric) — targets/seeds/retries all run through the UCS
+    # view; the returned *residual* stays plain Lab ΔE76, because the gamt
+    # tag encodes distance-from-gamut and must stay metric in PCS terms.
+    gn_model, gn_target = model, target
+    if ucs:
+        from workflow.profile_engine.ucs import print_ucs
+        _space = print_ucs()
+        gn_model = _UcsView(model, _space)
+        gn_target = _space.lab_to_ucs(target)
     if seed is None:
-        seed = _seed_nearest(model, target, seed_res if n <= 4 else 5)
+        seed = _seed_nearest(gn_model, gn_target, seed_res if n <= 4 else 5)
     d = seed.copy()
 
     free = np.arange(n)
@@ -372,7 +417,8 @@ def invert_to_device(model: ForwardModel, target: np.ndarray, *,
 
     gn_kw = dict(boundary_fd=accurate, tac_projection=accurate,
                  progress=progress)
-    d = _gauss_newton(model, target, d, free, iters=iters, damping=damping,
+    d = _gauss_newton(gn_model, gn_target, d, free, iters=iters,
+                      damping=damping,
                       ink_limit=limit, prior=prior, prior_w=prior_w,
                       progress_label=f"{progress_label}: converging", **gn_kw)
     residual = np.linalg.norm(model.predict(d) - target, axis=1)
@@ -390,8 +436,8 @@ def invert_to_device(model: ForwardModel, target: np.ndarray, *,
             total = cloud.sum(1)
             over = total > limit
             cloud[over] *= (limit / total[over])[:, None]
-        cloud_lab = model.predict(cloud)
-        sub = target[retry]
+        cloud_lab = gn_model.predict(cloud)
+        sub = gn_target[retry]
         seeds2 = np.empty((len(sub), n))
         cl2 = (cloud_lab ** 2).sum(1)
         for lo in range(0, len(sub), 2048):
@@ -399,13 +445,14 @@ def invert_to_device(model: ForwardModel, target: np.ndarray, *,
             d2 = cl2[None, :] - 2.0 * chunk @ cloud_lab.T
             seeds2[lo:lo + 2048] = cloud[np.argmin(d2, 1)]
         d_retry = _gauss_newton(
-            model, sub, seeds2, free, iters=iters, damping=damping,
+            gn_model, sub, seeds2, free, iters=iters, damping=damping,
             ink_limit=limit,
             prior=None if prior is None else prior[retry],
             prior_w=None if prior_w is None else prior_w[retry],
             progress_label=f"{progress_label}: retrying difficult nodes",
             **gn_kw)
-        res_retry = np.linalg.norm(model.predict(d_retry) - sub, axis=1)
+        res_retry = np.linalg.norm(model.predict(d_retry) - target[retry],
+                                   axis=1)
         better = res_retry < residual[retry]
         idx = np.flatnonzero(retry)[better]
         d[idx] = d_retry[better]
@@ -419,9 +466,13 @@ def invert_to_device(model: ForwardModel, target: np.ndarray, *,
         # ``gamt`` tag encodes distance-from-gamut and must stay metric.
         oog = residual > 1.0
         if oog.any():
-            wm = _hue_weight_matrices(target[oog])
+            # In UCS the metric is already perceptual — only the deliberate
+            # hue emphasis remains; in Lab the full local-ΔE2000 weights.
+            wm = _ucs_hue_weight_matrices(gn_target[oog]) if ucs \
+                else _hue_weight_matrices(target[oog])
             d[oog] = _gauss_newton(
-                model, target[oog], d[oog], free, iters=8, damping=damping,
+                gn_model, gn_target[oog], d[oog], free, iters=8,
+                damping=damping,
                 ink_limit=limit, err_weights=wm,
                 prior=None if prior is None else prior[oog],
                 prior_w=None if prior_w is None else prior_w[oog],
@@ -439,6 +490,7 @@ def build_b2a_clut(model: ForwardModel, grid: int, *,
                    extra_hues: dict[str, float] | None = None,
                    black_l: float | None = None,
                    k_gen: dict | None = None,
+                   ucs: bool = False,
                    progress=None,
                    ) -> tuple[np.ndarray, np.ndarray]:
     """Full B2A CLUT: (grid³, n) device fractions + (grid³,) OOG distance.
@@ -451,7 +503,7 @@ def build_b2a_clut(model: ForwardModel, grid: int, *,
                             is_additive=is_additive, ink_limit=ink_limit,
                             k_prior=k_prior, accurate=accurate,
                             extra_hues=extra_hues, black_l=black_l,
-                            k_gen=k_gen, progress=progress)
+                            k_gen=k_gen, ucs=ucs, progress=progress)
 
 
 def refine_b2a_clut(model: ForwardModel, dev_clut: np.ndarray,
@@ -468,6 +520,7 @@ def refine_b2a_clut(model: ForwardModel, dev_clut: np.ndarray,
                     extra_hues: dict[str, float] | None = None,
                     black_l: float | None = None,
                     k_gen: dict | None = None,
+                    ucs: bool = False,
                     progress=None) -> np.ndarray:
     """Refit the B2A CLUT as one smooth field over exact inverse samples.
 
@@ -518,7 +571,7 @@ def refine_b2a_clut(model: ForwardModel, dev_clut: np.ndarray,
             model, lab_targets, channel_letters=channel_letters or [],
             is_additive=is_additive, ink_limit=ink_limit, k_prior=k_prior,
             accurate=accurate, extra_hues=extra_hues, black_l=black_l,
-            k_gen=k_gen, progress=progress,
+            k_gen=k_gen, ucs=ucs, progress=progress,
             progress_label="Inverting the model: sampling the separation")
         keep = res_s < 1.0
         dev_s, lab_s = dev_s[keep], lab_targets[keep]
