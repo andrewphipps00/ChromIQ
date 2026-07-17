@@ -159,6 +159,11 @@ class ProfileParams:
     k_enpo: float = 0.9
     k_enle: float = 1.0
     k_shape: float = 1.0
+    # Engine-only options (#123) — no colprof flags exist for these; the
+    # UI only offers them when the engine's maximum-accuracy mode is
+    # active, so the colprof path never sees them set.
+    spectral_physics: bool = False
+    icc_version: str = "2"
 
 
 class ProfileBuilder:

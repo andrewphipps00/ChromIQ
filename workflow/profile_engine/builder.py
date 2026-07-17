@@ -159,6 +159,18 @@ class BuildSettings:
     # from the UI; the empty set is bit-for-bit the shipped accurate mode.
     # Only honoured when gammap_mode == "accurate".
     engine_candidates: frozenset = frozenset()
+    # #123 W4, user-facing opt-in (Manual module, accurate mode only):
+    # challenge the grid fit with the spectral YNSN physics model. Needs
+    # SPEC_* data and an ink-count device; silently a no-op otherwise.
+    # Measured on the battery: multi-ink A2B/B2A accuracy improves 20–36%
+    # where it applies, at slightly reduced A2B↔B2A self-consistency —
+    # hence opt-in rather than default until that tail is closed.
+    spectral_physics: bool = False
+    # #123 W6: ICC container version, "2" (classic v2.2, maximum
+    # compatibility) or "4" (v4.4 header, unicode metadata, profile ID).
+    # The LUTs stay lut16Type — explicitly legal in v4, and the spec keeps
+    # the legacy PCS encoding for them, so table bytes are identical.
+    icc_version: str = "2"
 
 
 @dataclass
@@ -222,20 +234,44 @@ _STAGE_PCT: list[tuple[str, int]] = [
 
 class _PercentProgress:
     """Wraps the user's progress callback and prefixes each line with a
-    monotonic percentage (``"42% · …"``), so the output field shows how
-    far along the build is. The progress bar keeps its own pulse.
+    monotonic percentage and, once the pace is readable, an estimated
+    remaining time (``"42% · ~3 min left · …"``). The progress bar keeps
+    its own pulse.
 
     Long stages report sub-steps as ``… k/n …`` fractions; those
     interpolate the percentage between the stage's anchor and the next
     one, so the number keeps moving during the minutes-long phases
     instead of sitting on the anchor value.
+
+    The remaining-time estimate is elapsed·(100−p)/p, exponentially
+    smoothed so single slow stages don't make it jump around; it only
+    appears after 10 % / 3 s (earlier numbers are noise) and is rounded
+    to friendly units — an estimate should read like one.
     """
 
     _FRACTION = re.compile(r"(\d+)\s*/\s*(\d+)")
 
-    def __init__(self, inner) -> None:
+    def __init__(self, inner, clock=None) -> None:
+        import time
         self._inner = inner
         self._pct = 0.0
+        self._clock = clock or time.monotonic
+        self._t0 = self._clock()
+        self._eta = None
+
+    def _eta_text(self) -> str:
+        elapsed = self._clock() - self._t0
+        if self._pct < 10.0 or elapsed < 3.0:
+            return ""
+        raw = elapsed * (100.0 - self._pct) / max(self._pct, 1e-6)
+        self._eta = raw if self._eta is None else \
+            0.6 * self._eta + 0.4 * raw
+        secs = self._eta
+        if secs < 5.0:
+            return "almost done"
+        if secs < 90.0:
+            return f"~{int(round(secs / 10.0) * 10)}s left"
+        return f"~{int(np.ceil(secs / 60.0))} min left"
 
     def __call__(self, msg: str) -> None:
         for i, (prefix, pct) in enumerate(_STAGE_PCT):
@@ -251,7 +287,9 @@ class _PercentProgress:
                 self._pct = target
             break
         if self._inner is not None:
-            self._inner(f"{self._pct:.0f}% · {msg}")
+            eta = self._eta_text()
+            head = f"{self._pct:.0f}%" + (f" · {eta}" if eta else "")
+            self._inner(f"{head} · {msg}")
 
 
 def build_profile(ti3_path: Path | str, out_path: Path | str,
@@ -375,7 +413,7 @@ def _build_profile_impl(ti3_path: Path | str, out_path: Path | str,
         model = fit_forward_model(meas.device, meas.lab_relative,
                                   grid=a2b_grid, lam=lam,
                                   curve_rounds=curve_rounds)
-    if "spectral" in candidates:
+    if "spectral" in candidates or (accurate and settings.spectral_physics):
         # #123 W4: challenge the grid with the YNSN physics hybrid — the
         # standard model stays unless the physics wins on held-out
         # patches (silently inapplicable without SPEC data / on RGB).
@@ -514,6 +552,7 @@ def _build_profile_impl(ti3_path: Path | str, out_path: Path | str,
         rendering_intent=_Z_INTENT.get(settings.z_default_intent, 1),
         attributes=attributes,
         timestamp=settings.timestamp,
+        version=(4, 4) if str(settings.icc_version) == "4" else (2, 2),
     )
     icw.write_profile(out, spec, luts)
 

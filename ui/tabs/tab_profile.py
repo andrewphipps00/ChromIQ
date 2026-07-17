@@ -540,6 +540,24 @@ class TabProfile(QWidget):
                 "Building with colprof.").format(what=why))
         return "colprof"
 
+    def _accurate_engine_active(self) -> bool:
+        """True while builds run through the engine's Maximum accuracy
+        mode (Settings → Beta) — the only state with engine-only options."""
+        return (bool(self._settings.get("profile_engine_beta", False))
+                and str(self._settings.get("gammap_mode", "fast"))
+                == "accurate")
+
+    def _refresh_engine_rows(self) -> None:
+        """Show/hide the engine-only Manual rows (#123). Called on tab
+        show, so a Settings change takes effect on the next visit."""
+        w = getattr(self, "_m_engine_rows_widget", None)
+        if w is not None:
+            w.setVisible(self._accurate_engine_active())
+
+    def showEvent(self, event) -> None:  # noqa: N802 (Qt override)
+        super().showEvent(event)
+        self._refresh_engine_rows()
+
     def set_calibration_mode(self, enabled: bool) -> None:
         """Switch between normal (GUIDED/MANUAL) and calibration (3-module) mode."""
         self._cal_mode_row_widget.setVisible(enabled)
@@ -1811,6 +1829,8 @@ class TabProfile(QWidget):
             "kgen_curve":          [self._m_kgen_spins[k].value()
                                     for k in ("stle", "stpo", "enpo",
                                               "enle", "shape")],
+            "spectral_physics":    self._m_spectral_cb.isChecked(),
+            "icc_version":         self._m_iccver_combo.currentData() or "2",
         }
 
     def _m_apply_preset_data(self, data: dict) -> None:
@@ -1864,6 +1884,9 @@ class TabProfile(QWidget):
         curve = data.get("kgen_curve") or [0.0, 0.1, 0.9, 1.0, 1.0]
         for key, v in zip(("stle", "stpo", "enpo", "enle", "shape"), curve):
             self._m_kgen_spins[key].setValue(float(v))
+        self._m_spectral_cb.setChecked(bool(data.get("spectral_physics",
+                                                     False)))
+        _set_combo(self._m_iccver_combo, "icc_version", "2")
 
     def _on_m_preset_selected(self, index: int) -> None:
         self._m_preset_del_btn.setEnabled(index > 0)
@@ -1916,6 +1939,9 @@ class TabProfile(QWidget):
                               ("enle", 1.0), ("shape", 1.0)):
                 self._m_kgen_spins[key].setValue(
                     float(s.get(f"manual2_colprof_kgen_{key}", dflt)))
+            self._m_spectral_cb.setChecked(
+                bool(s.get("manual2_colprof_spectral", False)))
+            _set_combo(self._m_iccver_combo, "manual2_colprof_iccver", "2")
         else:
             name = self._m_preset_combo.currentData()
             presets = self._m_load_presets()
@@ -2342,6 +2368,81 @@ class TabProfile(QWidget):
         self._m_kgen_combo.currentIndexChanged.connect(
             lambda _i: _on_kgen_rule_changed())
 
+        # Engine-only options (#123) — only shown while the ChromIQ engine
+        # runs in its Maximum accuracy mode (Settings → Beta); colprof has
+        # no equivalent flags, so they stay hidden on every other path.
+        self._m_engine_rows_widget = QWidget(grp)
+        eng_col = QVBoxLayout(self._m_engine_rows_widget)
+        eng_col.setContentsMargins(0, 0, 0, 0)
+        eng_col.setSpacing(6)
+
+        spec_row = QHBoxLayout()
+        self._m_spectral_cb = QCheckBox(tr("Spectral physics model"), grp)
+        spec_row.addWidget(self._m_spectral_cb)
+        spec_row.addStretch()
+        spec_row.addWidget(TooltipButton(
+            tr("Spectral physics model"),
+            tr("Lets the engine try a physical model of how your printer's "
+               "inks mix on paper (halftone dot physics, including paper "
+               "gloss), instead of relying on curve fitting alone.\n\n"
+               "How it works: the engine builds both models and holds back "
+               "a share of your measured patches as an exam. Only if the "
+               "physics model predicts those unseen patches clearly better "
+               "is it used for the profile — otherwise the build silently "
+               "keeps the standard model. Ticking this can therefore never "
+               "make a profile worse; it can only win or change nothing.\n\n"
+               "When it helps most: printers with many inks (CMYK plus "
+               "orange, green, violet …), where a chart can never cover "
+               "every ink combination — physics fills those gaps far "
+               "better than interpolation. On ChromIQ's synthetic test "
+               "bench, multi-ink profiles came out 20–36% closer to the "
+               "true colours with this enabled.\n\n"
+               "What it needs: a chart measured in spectral mode (the "
+               "high-resolution setting in the Measure tab) and a printer "
+               "driven through its real ink channels. RGB printer drivers "
+               "— the usual ChromIQ workflow — hide the inks, so there "
+               "this option simply does nothing.\n\n"
+               "Why it is off by default: the resulting tables trade a "
+               "small amount of internal round-trip consistency for the "
+               "accuracy gain. For proofing-style work where soft-proof "
+               "round-trips matter more than absolute accuracy, leave it "
+               "off.\n\nDefault: off."),
+            grp,
+            min_width=560,
+        ))
+        eng_col.addLayout(spec_row)
+
+        iccver_row = QHBoxLayout()
+        iccver_row.addWidget(QLabel(tr("ICC profile version:"), grp))
+        self._m_iccver_combo = NoScrollComboBox(grp)
+        self._m_iccver_combo.addItem(tr("Version 2 (most compatible)"), "2")
+        self._m_iccver_combo.addItem(tr("Version 4"), "4")
+        self._m_iccver_combo.setObjectName("compact_input")
+        self._m_iccver_combo.style().unpolish(self._m_iccver_combo)
+        self._m_iccver_combo.style().polish(self._m_iccver_combo)
+        iccver_row.addWidget(self._m_iccver_combo, stretch=1)
+        iccver_row.addWidget(TooltipButton(
+            tr("ICC profile version"),
+            tr("The file-format generation of the profile that gets "
+               "written. The colour tables inside are identical either "
+               "way — this changes the container, not the colours.\n\n"
+               "  • Version 2 — the classic format every application and "
+               "RIP understands, and what Argyll colprof writes. When in "
+               "doubt, use this.\n\n"
+               "  • Version 4 — the current ICC standard: proper Unicode "
+               "text fields and a built-in checksum (profile ID) that "
+               "lets applications detect a damaged or tampered profile. "
+               "Choose it when a modern workflow or a client explicitly "
+               "asks for v4 profiles. Verified against macOS ColorSync "
+               "and littleCMS; some very old print software may not "
+               "accept v4.\n\nDefault: Version 2."),
+            grp,
+            min_width=520,
+        ))
+        eng_col.addLayout(iccver_row)
+        g.addWidget(self._m_engine_rows_widget)
+        self._refresh_engine_rows()
+
         src_vc_row = QHBoxLayout()
         src_vc_row.addWidget(QLabel(tr("Source viewing (-c):"), grp))
         self._m_src_viewing_combo = NoScrollComboBox(grp)
@@ -2725,8 +2826,10 @@ class TabProfile(QWidget):
         g.addLayout(colorimetric_row)
 
         inv_row = QHBoxLayout()
-        self._m_inv_gamut_cb = QCheckBox(tr("Inverse gamut mapping (-nI)"), grp)
+        self._m_inv_gamut_cb = QCheckBox(tr("Inverse gamut mapping (-nI):"),
+                                         grp)
         inv_row.addWidget(self._m_inv_gamut_cb)
+        inv_row.addStretch()
         inv_row.addWidget(TooltipButton(
             tr("Inverse Gamut Mapping (-nI)"),
             tr("The B2A tables in an ICC profile go from the Profile Connection "
@@ -4097,6 +4200,10 @@ class TabProfile(QWidget):
             k_enpo           = self._m_kgen_spins["enpo"].value(),
             k_enle           = self._m_kgen_spins["enle"].value(),
             k_shape          = self._m_kgen_spins["shape"].value(),
+            spectral_physics = (self._m_spectral_cb.isChecked()
+                                and self._accurate_engine_active()),
+            icc_version      = ((self._m_iccver_combo.currentData() or "2")
+                                if self._accurate_engine_active() else "2"),
         )
 
     # ------------------------------------------------------------------
@@ -4179,6 +4286,10 @@ class TabProfile(QWidget):
             for key in ("stle", "stpo", "enpo", "enle", "shape"):
                 s.set(f"manual2_colprof_kgen_{key}",
                       self._m_kgen_spins[key].value())
+            s.set("manual2_colprof_spectral",
+                  self._m_spectral_cb.isChecked())
+            s.set("manual2_colprof_iccver",
+                  self._m_iccver_combo.currentData() or "2")
         self._log.appendPlainText("Profile settings saved as defaults.")
         self._log.ensureCursorVisible()
 

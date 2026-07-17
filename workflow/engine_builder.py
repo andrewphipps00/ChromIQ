@@ -208,6 +208,8 @@ def settings_from_params(params: "ProfileParams") -> BuildSettings:
         k_curve_params=((params.k_stle, params.k_stpo, params.k_enpo,
                          params.k_enle, params.k_shape)
                         if params.k_rule == "p" else None),
+        spectral_physics=params.spectral_physics,
+        icc_version=params.icc_version or "2",
         z_attributes="".join(filter(None, [
             params.z_surface, params.z_media_type, params.z_polarity,
             params.z_color_mode])),

@@ -162,6 +162,20 @@ def curves_to_tables(curves: np.ndarray, entries: int = 2048) -> np.ndarray:
     return np.clip(out * 0xFFFF, 0, 0xFFFF).round().astype(">u2")
 
 
+def make_mluc(text: str) -> bytes:
+    """``multiLocalizedUnicodeType`` (ICC v4 metadata) — one en/US record.
+
+    v4 requires desc/cprt (and dmnd/dmdd) as mluc instead of the v2
+    textDescription/text types; the string is UTF-16BE per the spec.
+    """
+    payload = text.encode("utf-16-be")
+    return (b"mluc" + b"\0" * 4
+            + struct.pack(">II", 1, 12)              # count, record size
+            + b"enUS"
+            + struct.pack(">II", len(payload), 28)   # length, offset
+            + payload)
+
+
 def make_desc(text: str) -> bytes:
     t = text.encode("ascii", "replace") + b"\0"
     return (b"desc" + b"\0" * 4 + struct.pack(">I", len(t)) + t
@@ -243,15 +257,22 @@ def assemble_profile(spec: ProfileSpec,
     data block via identical (offset, size) tag-table entries, exactly
     colprof's shared-table layout.
     """
+    v4 = spec.version[0] >= 4
+    # v4 metadata is multiLocalizedUnicodeType; v2 keeps the classic
+    # textDescription/text types. Everything else in the tag set is
+    # version-neutral (lut16Type stays legal in v4, with the legacy PCS
+    # encoding preserved by the spec — table bytes identical).
+    meta = make_mluc if v4 else make_desc
     tags: list[tuple[bytes, bytes | str]] = [
-        (b"desc", make_desc(spec.description)),
-        (b"cprt", make_text(spec.copyright)),
+        (b"desc", meta(spec.description)),
+        (b"cprt", make_mluc(spec.copyright) if v4
+         else make_text(spec.copyright)),
         (b"wtpt", make_xyz(spec.wtpt)),
     ]
     if spec.manufacturer:
-        tags.append((b"dmnd", make_desc(spec.manufacturer)))
+        tags.append((b"dmnd", meta(spec.manufacturer)))
     if spec.model:
-        tags.append((b"dmdd", make_desc(spec.model)))
+        tags.append((b"dmdd", meta(spec.model)))
     if spec.bkpt is not None:
         tags.append((b"bkpt", make_xyz(spec.bkpt)))
     if spec.targ is not None:
@@ -307,7 +328,17 @@ def assemble_profile(spec: ProfileSpec,
     assert len(header) == 128, len(header)
 
     icc = header + struct.pack(">I", len(tags)) + table + body
-    return struct.pack(">I", len(icc)) + icc[4:]
+    icc = struct.pack(">I", len(icc)) + icc[4:]
+    if v4:
+        # v4 profile ID: MD5 over the profile with the flags, rendering
+        # intent and ID fields zeroed (ICC.1 clause 7.2.18).
+        import hashlib
+        z = bytearray(icc)
+        z[44:48] = b"\0" * 4
+        z[64:68] = b"\0" * 4
+        z[84:100] = b"\0" * 16
+        icc = icc[:84] + hashlib.md5(bytes(z)).digest() + icc[100:]
+    return icc
 
 
 def write_profile(path: Path | str, spec: ProfileSpec,
