@@ -37,18 +37,22 @@ def _clamp(v: float) -> float:
 # N-native sets (state 2 — no profile needed)
 # ---------------------------------------------------------------------------
 
-def per_ink_ramps(n_inks: int, steps: int) -> list[tuple[float, ...]]:
-    """``steps`` tones of each ink alone: ``v_i = i·100/steps, i = 1…steps``.
+def per_ink_ramps(n_inks: int, steps: int,
+                  ink_limit: float = 300.0) -> list[tuple[float, ...]]:
+    """``steps`` tones of each ink alone: ``v_i = i·top/steps, i = 1…steps``
+    with ``top = min(100, ink_limit)`` — the UI allows limits below 100 %,
+    and a single-ink patch must honour them like every other set.
 
-    The 100 % endpoint is deliberately included; the cross-set dedupe absorbs
+    The top endpoint is deliberately included; the cross-set dedupe absorbs
     overlap with white/black and the pair-ramp ends (#72 appendix F).
     """
     n_inks, steps = int(n_inks), int(steps)
+    top = min(100.0, float(ink_limit))
     out: list[tuple[float, ...]] = []
     for ink in range(n_inks):
         for i in range(1, steps + 1):
             row = [0.0] * n_inks
-            row[ink] = i * 100.0 / steps
+            row[ink] = i * top / steps
             out.append(tuple(row))
     return out
 
@@ -78,6 +82,102 @@ def ink_pair_overprints(n_inks: int, steps: int,
 def ink_pair_overprints_count(n_inks: int, steps: int) -> int:
     n = max(0, int(n_inks))
     return (n * (n - 1) // 2) * max(0, int(steps))
+
+
+def ink_triple_overprints(n_inks: int, steps: int,
+                          ink_limit: float = 300.0) -> list[tuple[float, ...]]:
+    """Three-ink overprint ramps for every ink triple: each ink at
+    ``v_i = i·min(100, L/3)/steps`` — the ``L/3`` cap keeps every triple
+    patch inside the ink limit *by construction*, exactly like the pair
+    set's ``L/2``. The systematic three-ink counterpart to the pairs: the
+    dark composite region (CMY, CMK, … overprints) that neither pairs nor
+    statistical coverage sample deliberately — where GCR/black-generation
+    behaviour lives. ``C(n_inks, 3) × steps`` patches; the count grows
+    quickly with many inks, so small step counts are the intended use.
+    """
+    n_inks, steps = int(n_inks), int(steps)
+    vmax = min(100.0, float(ink_limit) / 3.0)
+    out: list[tuple[float, ...]] = []
+    for a, b, c in itertools.combinations(range(n_inks), 3):
+        for i in range(1, steps + 1):
+            row = [0.0] * n_inks
+            row[a] = row[b] = row[c] = i * vmax / steps
+            out.append(tuple(row))
+    return out
+
+
+def ink_triple_overprints_count(n_inks: int, steps: int) -> int:
+    n = max(0, int(n_inks))
+    return (n * (n - 1) * (n - 2) // 6) * max(0, int(steps))
+
+
+def rich_black_ramp(steps: int, k_levels: int, n_channels: int,
+                    k_index: int | None = 3,
+                    ink_limit: float = 300.0) -> list[tuple[float, ...]]:
+    """Neutral CMY ramp × K-substitution grid — the "rich black" set.
+
+    For each K level ``K_j = j·min(100, L/2)/k_levels`` and each CMY step
+    ``i``, equal CMY at ``i·min(100, (L − K_j)/3)/steps``: dark neutrals
+    built from colour ink plus increasing black — exactly the region the
+    profile's black generation (colprof -k / the engine's GCR) has to
+    resolve, sampled systematically instead of statistically. Inside the
+    ink limit by construction (K ≤ L/2 and CMY fills at most the rest).
+    Returns ``[]`` for K-less ink sets (there is no substitution axis).
+    """
+    steps, k_levels = int(steps), int(k_levels)
+    if k_index is None or not 0 <= k_index < n_channels or n_channels < 4:
+        return []
+    limit = float(ink_limit)
+    k_top = min(100.0, limit / 2.0)
+    out: list[tuple[float, ...]] = []
+    for j in range(1, k_levels + 1):
+        k_val = j * k_top / k_levels
+        cmy_top = min(100.0, max(0.0, (limit - k_val)) / 3.0)
+        for i in range(1, steps + 1):
+            v = i * cmy_top / steps
+            row = [0.0] * n_channels
+            row[0] = row[1] = row[2] = v
+            row[k_index] = k_val
+            out.append(tuple(row))
+    return out
+
+
+def rich_black_ramp_count(steps: int, k_levels: int,
+                          n_channels: int = 4,
+                          k_index: int | None = 3) -> int:
+    if k_index is None or n_channels < 4:
+        return 0
+    return max(0, int(steps)) * max(0, int(k_levels))
+
+
+def project_ink_limit(patches, ink_limit: float) -> list[tuple[float, ...]]:
+    """Euclidean projection of each patch onto ``{0 ≤ v ≤ 100, Σv ≤ L}``.
+
+    The same simplex projection the profile engine uses for its TAC
+    (subtract a common amount from the inks that stay positive) —
+    implemented locally so this module stays dependency-free for the
+    standalone chromiq-patches vendoring. Patches under the limit pass
+    through unchanged.
+    """
+    limit = float(ink_limit)
+    out: list[tuple[float, ...]] = []
+    for p in patches:
+        vals = [_clamp(v) for v in p]
+        if sum(vals) <= limit:
+            out.append(tuple(vals))
+            continue
+        u = sorted(vals, reverse=True)
+        css = 0.0
+        theta = 0.0
+        for k, uk in enumerate(u, start=1):
+            css += uk
+            t = (css - limit) / k
+            if uk - t > 0:
+                theta = t
+            else:
+                break
+        out.append(tuple(max(0.0, v - theta) for v in vals))
+    return out
 
 
 def _invert_rgb_to_cmy(rgb: tuple[float, float, float], n_channels: int,
@@ -120,6 +220,53 @@ def near_neutrals_device(steps: int, offset: float, rings: int,
 from workflow.patch_generators import near_neutrals_count as near_neutrals_device_count  # noqa: E402,F401
 
 
+def near_neutrals_device_recentred(steps: int, offset: float, rings: int,
+                                   n_channels: int, centers: dict,
+                                   ink_limit: float = 300.0
+                                   ) -> list[tuple[float, ...]]:
+    """The grey-balance rings re-centred on the printer's ACTUAL neutral.
+
+    Same ring geometry as :func:`near_neutrals_device`; each patch's
+    naive equal-CMY centre is replaced by the profile-measured device
+    neutral for its grey level (``centers``: grey value 0–100 → device
+    tuple, computed by the caller through the preconditioning profile).
+    The ring *offsets* stay in device space, so the bracket geometry the
+    set exists for is preserved exactly — only the aim point moves.
+    Grey levels without a centre fall back to the naive inversion, and
+    every patch gets the grey-axis ink-limit shift.
+    """
+    if n_channels < 3:
+        raise ValueError("near_neutrals_device_recentred needs CMY inks")
+    out: list[tuple[float, ...]] = []
+    for rgb in near_neutrals(steps, offset, rings):
+        grey = round((rgb[0] + rgb[1] + rgb[2]) / 3.0, 2)
+        naive = _invert_rgb_to_cmy(rgb, n_channels, 1e9)      # unclamped
+        centre = centers.get(grey)
+        if centre is None:
+            out.append(_invert_rgb_to_cmy(rgb, n_channels, ink_limit))
+            continue
+        # The rounded grey is both the dict key and the naive-centre input,
+        # so centre − naive_centre is exactly the profile's correction.
+        naive_centre = _invert_rgb_to_cmy((grey, grey, grey),
+                                          n_channels, 1e9)
+        row = [_clamp(c + (nv - nc)) for c, nv, nc in
+               zip(centre, naive, naive_centre)]
+        t = max(0.0, (sum(row) - float(ink_limit)) / max(1, len(row)))
+        out.append(tuple(max(0.0, v - t) for v in row))
+    return out
+
+
+def ring_grey_levels(steps: int, offset: float, rings: int) -> list[float]:
+    """The distinct grey levels (0–100, rounded to the centres-dict key)
+    the ring set uses — what the caller feeds through the profile."""
+    seen: list[float] = []
+    for rgb in near_neutrals(steps, offset, rings):
+        g = round((rgb[0] + rgb[1] + rgb[2]) / 3.0, 2)
+        if g not in seen:
+            seen.append(g)
+    return seen
+
+
 def neutral_ramp_device(steps: int, n_channels: int,
                         ink_limit: float = 300.0) -> list[tuple[float, ...]]:
     """The pure grey ramp as equal-CMY device steps (naive inversion of the
@@ -141,7 +288,7 @@ def _device_anchors(n_channels: int, k_index: int | None,
     white = tuple([0.0] * n_channels)
     if k_index is not None and 0 <= k_index < n_channels:
         row = [0.0] * n_channels
-        row[k_index] = 100.0
+        row[k_index] = min(100.0, float(ink_limit))
         return white, tuple(row)
     v = min(100.0, float(ink_limit) / 3.0)
     return white, tuple([v if i < 3 else 0.0 for i in range(n_channels)])
@@ -312,13 +459,38 @@ def drop_too_close_nd(existing, new, min_dist: float = 2.0):
             if _min_d2_brute(tuple(_clamp(v) for v in p), kept) >= md2]
 
 
+def _project_rows_np(a, limit: float):
+    """Vectorised :func:`project_ink_limit` for numpy arrays (rows 0–100)."""
+    import numpy as np
+    a = np.clip(a, 0.0, 100.0)
+    over = a.sum(1) > limit
+    if not over.any():
+        return a
+    sub = a[over]
+    u = np.sort(sub, axis=1)[:, ::-1]
+    css = np.cumsum(u, axis=1) - limit
+    ks = np.arange(1, sub.shape[1] + 1)[None, :]
+    rho = (u - css / ks > 0).sum(1)
+    theta = css[np.arange(len(sub)), rho - 1] / rho
+    a[over] = np.maximum(sub - theta[:, None], 0.0)
+    return a
+
+
 def fill_gaps_nd(existing, total: int, n_channels: int | None = None,
                  candidates: int = 12, seed: int = 0,
-                 relax: int = 4) -> list[tuple[float, ...]]:
+                 relax: int = 4,
+                 ink_limit: float | None = None) -> list[tuple[float, ...]]:
     """N-D twin of ``patch_generators.fill_gaps`` (blue-noise seed + Lloyd
     relaxation in device space). Geometrically fine but perceptually blind in
     ink space — the issue recommends targen coverage for large N-channel
     fills; this is the small top-up fallback (e.g. the live Pages fill).
+
+    ``ink_limit``: candidates AND the Lloyd relaxation samples are
+    Euclidean-projected onto the limit simplex, so no fill patch can
+    exceed the total ink limit (the projection folds the infeasible
+    volume onto the limit face — extra weight exactly where the gamut
+    boundary lives, which suits a gap filler). The feasible set is
+    convex, so the relaxation means stay inside it too.
     """
     import numpy as np
 
@@ -335,6 +507,8 @@ def fill_gaps_nd(existing, total: int, n_channels: int | None = None,
     added = np.empty((n_add, n), dtype=float)
     for i in range(n_add):
         cand = rng.uniform(0.0, 100.0, size=(max(1, candidates), n))
+        if ink_limit is not None:
+            cand = _project_rows_np(cand, float(ink_limit))
         if len(arr):
             d2 = ((cand[:, None, :] - arr[None, :, :]) ** 2).sum(2).min(axis=1)
             pick = cand[int(np.argmax(d2))]
@@ -351,6 +525,8 @@ def fill_gaps_nd(existing, total: int, n_channels: int | None = None,
         for _ in range(passes):
             sites = np.vstack([fixed, added]) if base else added
             samp = rng.uniform(0.0, 100.0, size=(n_s, n))
+            if ink_limit is not None:
+                samp = _project_rows_np(samp, float(ink_limit))
             owner = _nearest_site(samp, sites)
             for j in range(n_add):
                 sel = samp[owner == base + j]

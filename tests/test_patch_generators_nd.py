@@ -155,3 +155,86 @@ def test_bridge_respects_ink_limit():
     dev, _ = to_device_via_profile(dark, GENERIC_CMYK, ARGYLL_BIN,
                                    ink_limit=250.0)
     assert all(sum(p) <= 250.0 + 1e-6 for p in dev)
+
+
+# ---------------------------------------------------------------------------
+# #123 follow-up: ink-limit everywhere, triples, rich black, recentred rings
+# ---------------------------------------------------------------------------
+
+def test_per_ink_ramps_respect_sub_100_limit():
+    out = ND.per_ink_ramps(4, 4, ink_limit=80.0)
+    assert max(max(p) for p in out) == 80.0
+    assert all(sum(p) <= 80.0 + 1e-9 for p in out)
+
+
+def test_black_anchor_respects_sub_100_limit():
+    _w, black = ND._device_anchors(4, 3, ink_limit=60.0)
+    assert black[3] == 60.0 and sum(black) == 60.0
+
+
+def test_ink_triple_overprints_counts_and_limit():
+    out = ND.ink_triple_overprints(4, 2, ink_limit=280.0)
+    assert len(out) == ND.ink_triple_overprints_count(4, 2) == 8   # C(4,3)*2
+    assert all(sum(p) <= 280.0 + 1e-9 for p in out)
+    assert all(sum(1 for v in p if v > 0) == 3 for p in out)
+    # L/3 cap by construction: at L=240 each ink tops out at 80.
+    tight = ND.ink_triple_overprints(6, 3, ink_limit=240.0)
+    assert len(tight) == ND.ink_triple_overprints_count(6, 3) == 60
+    assert max(max(p) for p in tight) == 80.0
+
+
+def test_rich_black_ramp_shape_and_limit():
+    out = ND.rich_black_ramp(3, 2, 4, k_index=3, ink_limit=280.0)
+    assert len(out) == ND.rich_black_ramp_count(3, 2) == 6
+    assert all(sum(p) <= 280.0 + 1e-9 for p in out)
+    # Every patch is neutral CMY + some K.
+    for p in out:
+        assert p[0] == p[1] == p[2] and p[3] > 0
+    # K-less ink set: the set adds nothing (and the count agrees).
+    assert ND.rich_black_ramp(3, 2, 3, k_index=None) == []
+    assert ND.rich_black_ramp_count(3, 2, 3, None) == 0
+
+
+def test_fill_gaps_nd_respects_ink_limit():
+    seed = [(0.0, 0.0, 0.0, 0.0), (10.0, 10.0, 10.0, 10.0)]
+    out = ND.fill_gaps_nd(seed, 60, n_channels=4, ink_limit=280.0)
+    assert len(out) == 58
+    assert all(sum(p) <= 280.0 + 1e-6 for p in out)
+    # Without a limit the old behaviour (full cube) is unchanged.
+    free = ND.fill_gaps_nd(seed, 60, n_channels=4)
+    assert any(sum(p) > 300.0 for p in free)
+
+
+def test_project_ink_limit_matches_euclidean_projection():
+    pts = [(100.0, 100.0, 100.0, 100.0), (10.0, 20.0, 5.0, 0.0)]
+    out = ND.project_ink_limit(pts, 280.0)
+    assert out[1] == (10.0, 20.0, 5.0, 0.0)          # under limit: untouched
+    assert abs(sum(out[0]) - 280.0) < 1e-9
+    assert out[0] == (70.0, 70.0, 70.0, 70.0)        # equal subtraction
+
+
+def test_recentred_rings_preserve_offsets_and_limit():
+    steps, offset, rings, n = 8, 4.0, 1, 4
+    greys = ND.ring_grey_levels(steps, offset, rings)
+    assert greys and all(0.0 <= g <= 100.0 for g in greys)
+    # A fake profile answer: the printer's neutral needs +5 C, -3 M vs naive.
+    centers = {}
+    for g in greys:
+        naive = ND._invert_rgb_to_cmy((g, g, g), n, 1e9)
+        centers[g] = (naive[0] + 5.0, naive[1] - 3.0, naive[2], 0.0)
+    naive_rings = ND.near_neutrals_device(steps, offset, rings, n,
+                                          ink_limit=300.0)
+    recentred = ND.near_neutrals_device_recentred(steps, offset, rings, n,
+                                                  centers, ink_limit=300.0)
+    assert len(recentred) == len(naive_rings)
+    # The ring geometry survives: pairwise offsets shift by the same
+    # (+5, -3) wherever no clamp bites.
+    moved = [(r[0] - v[0], r[1] - v[1]) for r, v in
+             zip(recentred, naive_rings)
+             if 10.0 < r[0] < 90.0 and 10.0 < r[1] < 90.0]
+    assert moved and all(abs(dx - 5.0) < 1e-6 and abs(dy + 3.0) < 1e-6
+                         for dx, dy in moved)
+    # Empty centres dict = graceful fallback to the naive rings.
+    fallback = ND.near_neutrals_device_recentred(steps, offset, rings, n,
+                                                 {}, ink_limit=300.0)
+    assert fallback == naive_rings

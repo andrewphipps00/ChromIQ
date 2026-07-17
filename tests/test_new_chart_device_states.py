@@ -154,7 +154,10 @@ def test_device_state_persists_and_round_trips(dlg, qapp, tmp_path):
     assert st["device"]["ink_limit"] == 280
     assert st["device"]["gen"] == {"targen": False, "targen_n": 1200,
                                    "perink": True, "perink_n": 12,
-                                   "pairs": False, "pairs_n": 4}
+                                   "pairs": False, "pairs_n": 4,
+                                   "triples": False, "triples_n": 2,
+                                   "richblack": False, "richblack_n": 6,
+                                   "richblack_k": 3}
     fresh = _NewChartDialog(tmp_path, _FakeSettings())
     fresh._apply_gen_state(st)
     assert fresh._device_type.currentData() == "cmykplus"
@@ -325,3 +328,125 @@ def test_on_ok_rgb_unchanged(dlg, monkeypatch):
     assert calls["extra_args"] == []
     assert dlg.result_spec.color_rep == "iRGB"
     assert dlg.result_spec.ink_limit is None
+
+
+# ---------------------------------------------------------------------------
+# #123 follow-up: triples + rich black rows, build order, recentred rings
+# ---------------------------------------------------------------------------
+
+def test_new_nd_rows_default_off_and_visible_only_multiink(dlg):
+    assert not dlg._nch_triples.isChecked()
+    assert not dlg._nch_richblack.isChecked()
+    assert dlg._nch_triples.isHidden()          # RGB state: hidden
+    _pick_device(dlg, "cmyk")
+    assert not dlg._nch_triples.isHidden()
+    assert not dlg._nch_richblack.isHidden()
+
+
+def test_new_nd_rows_persist_roundtrip(qapp, tmp_path):
+    settings = _FakeSettings()
+    first = _NewChartDialog(tmp_path, settings)
+    _pick_device(first, "cmyk")
+    first._nch_triples.setChecked(True)
+    first._nch_triples_n.setValue(3)
+    first._nch_richblack.setChecked(True)
+    first._nch_richblack_n.setValue(8)
+    first._nch_richblack_k.setValue(4)
+    settings.set("new_chart_gen", first._collect_gen_state())
+    first.deleteLater()
+    reopened = _NewChartDialog(tmp_path, settings)
+    assert reopened._nch_triples.isChecked()
+    assert reopened._nch_triples_n.value() == 3
+    assert reopened._nch_richblack.isChecked()
+    assert reopened._nch_richblack_n.value() == 8
+    assert reopened._nch_richblack_k.value() == 4
+    reopened.deleteLater()
+    # Absent keys (an old saved state) load the sets OFF.
+    old_state = dict(settings.get("new_chart_gen"))
+    old_state["device"] = dict(old_state["device"])
+    gen = dict(old_state["device"]["gen"])
+    for k in ("triples", "triples_n", "richblack", "richblack_n",
+              "richblack_k"):
+        gen.pop(k, None)
+    old_state["device"]["gen"] = gen
+    settings.set("new_chart_gen", old_state)
+    legacy = _NewChartDialog(tmp_path, settings)
+    assert not legacy._nch_triples.isChecked()
+    assert not legacy._nch_richblack.isChecked()
+    legacy.deleteLater()
+
+
+def test_nd_build_includes_new_sets_inside_limit(dlg, monkeypatch):
+    _pick_device(dlg, "cmyk")
+    dlg._ink_limit.setValue(280)
+    for cb in (dlg._nch_targen, dlg._nch_perink, dlg._nch_pairs):
+        cb.setChecked(False)
+    for name in ("neutral", "nearneutral", "whiteblack", "fill", "unique"):
+        getattr(dlg, f"_gen_{name}").setChecked(False)
+    dlg._nch_triples.setChecked(True)
+    dlg._nch_triples_n.setValue(2)
+    dlg._nch_richblack.setChecked(True)
+    dlg._nch_richblack_n.setValue(3)
+    dlg._nch_richblack_k.setValue(2)
+    program = dlg._build_generated_program()
+    from workflow import patch_generators_nd as ND
+    assert len(program) == (ND.ink_triple_overprints_count(4, 2)
+                            + ND.rich_black_ramp_count(3, 2))
+    assert all(sum(p) <= 280.0 + 1e-9 for p in program)
+    assert all(len(p) == 4 for p in program)
+
+
+def test_nd_fill_respects_ink_limit_through_dialog(dlg):
+    _pick_device(dlg, "cmyk")
+    dlg._ink_limit.setValue(240)
+    for cb in (dlg._nch_targen, dlg._nch_perink, dlg._nch_pairs,
+               dlg._nch_triples, dlg._nch_richblack):
+        cb.setChecked(False)
+    for name in ("neutral", "nearneutral", "whiteblack", "unique"):
+        getattr(dlg, f"_gen_{name}").setChecked(False)
+    dlg._gen_fill.setChecked(True)
+    dlg._gen_fill_to.setValue(80)
+    program = dlg._build_generated_program()
+    assert program and all(sum(p) <= 240.0 + 1e-6 for p in program)
+
+
+def test_nd_rings_recentre_through_profile(dlg, monkeypatch):
+    # State 3: the rings must run through the preconditioning profile —
+    # stub the xicclu bridge and check the centres actually shift.
+    _pick_device(dlg, "cmyk")
+    for cb in (dlg._nch_targen, dlg._nch_perink, dlg._nch_pairs,
+               dlg._nch_triples, dlg._nch_richblack):
+        cb.setChecked(False)
+    for name in ("neutral", "whiteblack", "fill", "unique"):
+        getattr(dlg, f"_gen_{name}").setChecked(False)
+    dlg._gen_nearneutral.setChecked(True)
+    dlg._precond_path = "/fake/profile.icc"
+    monkeypatch.setattr(dlg, "_nch_state", lambda: 3)
+
+    def fake_bridge(rgb, profile, bin_dir, ink_limit=None, **kw):
+        from workflow import patch_generators_nd as ND
+        out = []
+        for r in rgb:
+            naive = ND._invert_rgb_to_cmy(tuple(r), 4, 1e9)
+            out.append((naive[0] + 7.0, naive[1], naive[2], 0.0))
+        return out, 0
+    import workflow.xicclu_runner as XR
+    monkeypatch.setattr(XR, "to_device_via_profile", fake_bridge)
+    recentred = dlg._build_generated_program()
+    monkeypatch.setattr(dlg, "_nch_state", lambda: 2)
+    naive = dlg._build_generated_program()
+    assert len(recentred) == len(naive)
+    shifts = [r[0] - v[0] for r, v in zip(recentred, naive)
+              if 10.0 < r[0] < 90.0]
+    assert shifts and all(abs(s - 7.0) < 1e-6 for s in shifts)
+
+
+def test_nd_build_order_matches_panel(dlg):
+    # De-dup priority contract: look-based sets come BEFORE the grey sets
+    # in the panel, so the build must extend them in that order too.
+    import inspect
+    src = inspect.getsource(type(dlg)._build_generated_program_nch)
+    i_perc = src.index("_GEN_PERCEPTUAL")
+    i_neutral = src.index("neutral_ramp_device")
+    i_rings = src.index("near_neutrals_device")
+    assert i_perc < i_neutral < i_rings
