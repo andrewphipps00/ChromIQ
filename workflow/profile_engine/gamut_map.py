@@ -863,7 +863,20 @@ def build_mapped_b2a(model: ForwardModel, meas: Ti3Measurement, grid: int,
     _n = getattr(model, "n_channels", 0) if model is not None else 0
     _bitexact_le4 = (getattr(settings, "gammap_mode", "fast")
                      in ("argyll", "accurate") and 0 < _n <= 4)
-    if settings is not None and model is not None and not _bitexact_le4:
+    # #123 W5 (candidate "render2"): the bijective CAM16-UCS radial
+    # mapper replaces the Argyll-matched rendering for the DEFAULT
+    # perceptual/saturation intents — explicit -t/-T selections keep the
+    # Argyll behaviour. No oracle/port fitting needed at all then.
+    render2 = (accurate
+               and "render2" in getattr(settings, "engine_candidates",
+                                        frozenset())
+               and not getattr(settings, "perc_intent", "")
+               and not getattr(settings, "sat_intent", ""))
+    if render2 and progress:
+        progress("Gamut mapping (maximum accuracy): bijective CAM16-UCS "
+                 "rendering intents (candidate).")
+    if settings is not None and model is not None and not _bitexact_le4 \
+            and not render2:
         try:
             from workflow.profile_engine.gammap_port.wire import (
                 PortUnavailable, fit_gammap_port_mappers)
@@ -881,7 +894,7 @@ def build_mapped_b2a(model: ForwardModel, meas: Ti3Measurement, grid: int,
                  if accurate else
                  "Gamut mapping (bit-exact): rendering with ArgyllCMS "
                  "colprof directly.")
-    if settings is not None and meas is not None and (
+    if settings is not None and meas is not None and not render2 and (
             "B2A0" not in oracle or "B2A2" not in oracle):
         try:
             cp = fit_colprof_mappers(
@@ -902,7 +915,12 @@ def build_mapped_b2a(model: ForwardModel, meas: Ti3Measurement, grid: int,
             out[tag] = "B2A1"          # colorimetric-family intent: exact
             continue
         mapper = oracle.get(tag)
-        if mapper is None:
+        if render2:
+            from workflow.profile_engine.render2 import RadialUcsMapper
+            src = source_surface_from_profile(source_gamut, intent=s_int)
+            mapper = RadialUcsMapper(src, dst,
+                                     "p" if tag == "B2A0" else "s")
+        elif mapper is None:
             src = source_surface_from_profile(source_gamut, intent=s_int)
             mapper = _mapper_for(intent, default_kw, src, dst, settings)
             if anchor is not None and isinstance(mapper, GamutMapper):
@@ -945,6 +963,18 @@ def build_mapped_b2a(model: ForwardModel, meas: Ti3Measurement, grid: int,
         for a2b_tag, b2a_tag in (("A2B0", "B2A0"), ("A2B2", "B2A2")):
             mapper = mappers.get(b2a_tag)
             if mapper is None:
+                continue
+            if hasattr(mapper, "unmap_lab"):
+                # render2: the radial map has a closed-form inverse —
+                # A2B0/2 = exact algebra, no fixed-point iteration.
+                inv_lab = mapper.unmap_lab(model.clut_lab())
+                out[a2b_tag] = icw.make_mft2(
+                    n, 3, a2b_grid, codec.encode(inv_lab),
+                    in_tables=icw.curves_to_tables(
+                        model.curves, a2b_entries or entries),
+                    out_tables=np.tile(
+                        icw._identity_table(a2b_entries or entries),
+                        (3, 1)))
                 continue
             if getattr(mapper, "expensive_map", False) \
                     and b2a_tag in mapped_by_tag:

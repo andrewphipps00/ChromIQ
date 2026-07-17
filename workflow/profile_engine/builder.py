@@ -375,6 +375,18 @@ def _build_profile_impl(ti3_path: Path | str, out_path: Path | str,
         model = fit_forward_model(meas.device, meas.lab_relative,
                                   grid=a2b_grid, lam=lam,
                                   curve_rounds=curve_rounds)
+    if "spectral" in candidates:
+        # #123 W4: challenge the grid with the YNSN physics hybrid — the
+        # standard model stays unless the physics wins on held-out
+        # patches (silently inapplicable without SPEC data / on RGB).
+        from workflow.profile_engine.spectral_model import \
+            fit_spectral_hybrid
+        challenge = fit_spectral_hybrid(
+            meas, model, base_lam=lam,
+            progress=lambda m: _emit(settings, m))
+        if challenge is not None:
+            model, verdict = challenge
+            _emit(settings, verdict)
     fit_res = np.linalg.norm(model.predict(meas.device) - meas.lab_relative,
                              axis=1)
 
@@ -402,13 +414,34 @@ def _build_profile_impl(ti3_path: Path | str, out_path: Path | str,
         ucs=use_ucs, progress=lambda m: _emit(settings, m))
     # refine_b2a_clut returns *curve-space* values — written straight into
     # the CLUT, with the inverse shaper curves as B2A output tables.
-    dev_clut_shaped = b2a_mod.refine_b2a_clut(
-        model, dev_clut, residual, b2a_grid,
-        ink_limit=ink_limit, is_additive=meas.is_additive,
-        channel_letters=meas.channel_letters,
-        node_lab=node_lab, lab_to01=codec.lab_to01, k_prior=anchor,
-        accurate=accurate, extra_hues=extra_hues, black_l=black_l,
-        k_gen=k_gen, ucs=use_ucs, progress=lambda m: _emit(settings, m))
+    if n > 3 and "joint-sep" in candidates:
+        # #123 W2: re-solve the whole separation field as one global
+        # optimisation (smoothness in the objective, TAC by projection),
+        # warm-started from the per-node result above.
+        from workflow.profile_engine.joint_sep import joint_separation
+        prior, prior_w = b2a_mod.ink_priors(
+            node_lab, n, channel_letters=meas.channel_letters,
+            k_prior=anchor, k_gen=k_gen, accurate=accurate,
+            extra_hues=extra_hues, black_l=black_l)
+        gn_view = None
+        if use_ucs:
+            from workflow.profile_engine.b2a import _UcsView
+            from workflow.profile_engine.ucs import print_ucs
+            gn_view = _UcsView(model, print_ucs())
+        dev_joint = joint_separation(
+            model, node_lab, dev_clut, residual, b2a_grid,
+            ink_limit=None if meas.is_additive else ink_limit,
+            prior=prior, prior_w=prior_w, gn_model=gn_view,
+            progress=lambda m: _emit(settings, m))
+        dev_clut_shaped = np.clip(model.shape_device(dev_joint), 0.0, 1.0)
+    else:
+        dev_clut_shaped = b2a_mod.refine_b2a_clut(
+            model, dev_clut, residual, b2a_grid,
+            ink_limit=ink_limit, is_additive=meas.is_additive,
+            channel_letters=meas.channel_letters,
+            node_lab=node_lab, lab_to01=codec.lab_to01, k_prior=anchor,
+            accurate=accurate, extra_hues=extra_hues, black_l=black_l,
+            k_gen=k_gen, ucs=use_ucs, progress=lambda m: _emit(settings, m))
     in_gamut = residual <= 1.0
 
     _emit(settings, "Writing the profile…")

@@ -134,6 +134,10 @@ class _UcsView:
     def predict(self, dev: np.ndarray) -> np.ndarray:
         return self._space.lab_to_ucs(self._model.predict(dev))
 
+    def to_space(self, lab: np.ndarray) -> np.ndarray:
+        """Targets Lab → the view's residual space."""
+        return self._space.lab_to_ucs(lab)
+
 
 def _ucs_hue_weight_matrices(target_ucs: np.ndarray) -> np.ndarray:
     """(N,3,3) clip-weight matrices in CAM16-UCS. The space is already
@@ -314,6 +318,72 @@ def extra_ink_amount(target: np.ndarray, letter: str, *,
     return gate * sat
 
 
+def ink_priors(target: np.ndarray, n: int, *,
+               channel_letters: list[str],
+               k_prior: dict | None = None,
+               k_gen: dict | None = None,
+               accurate: bool = False,
+               extra_hues: dict[str, float] | None = None,
+               black_l: float | None = None,
+               ) -> tuple[np.ndarray, np.ndarray]:
+    """The ink policy as soft least-squares priors over the free channels.
+
+    All channels stay free (a hard policy shrinks the reachable gamut —
+    measured: median 18 ΔE on random in-gamut targets); the policy only
+    resolves the surplus degrees of freedom n > 3 devices have: K follows
+    the GCR locus (or the colprof oracle / an explicit -k rule), extra
+    inks their hue gates, C/M/Y are unconstrained. Shared by the per-node
+    Gauss–Newton inversion and the joint separation solve (#123 W2), so
+    both resolve metamerism with the same policy.
+    """
+    prior = np.zeros((len(target), n))
+    prior_w = np.zeros((len(target), n))
+    if k_prior is not None:
+        # colprof-calibrated K behaviour (CMYK proxy oracle) — a firmer
+        # prior than the generic locus, matching how colprof separates.
+        prior[:, 3] = np.interp(target[:, 0], k_prior["l_axis"],
+                                k_prior["k_curve"])
+        prior_w[:, 3] = 0.15
+    elif k_gen is not None and k_gen.get("rule"):
+        # Explicit colprof -k/-K rule from the user. -K (locus) is
+        # approximated on the full 0..1 K range: on the neutral axis —
+        # where the prior does its work — the feasible K range spans
+        # nearly the full scale, so locus and value curves coincide;
+        # the true per-colour feasible range would need a nested
+        # inversion per node. The soft prior keeps colour accuracy
+        # dominant either way.
+        params = (k_gen.get("params")
+                  or K_RULE_PARAMS[k_gen["rule"]])
+        prior[:, 3] = argyll_k_curve(
+            target[:, 0], params=params,
+            l_min=max(float(black_l), 2.0)
+            if black_l is not None else 5.0)
+        prior_w[:, 3] = 0.10          # explicit user intent: firmer
+    elif accurate and black_l is not None:
+        prior[:, 3] = k_locus(target[:, 0],
+                              l_full=max(float(black_l), 2.0))
+        prior_w[:, 3] = 0.05
+    else:
+        prior[:, 3] = k_locus(target[:, 0])
+        prior_w[:, 3] = 0.05
+    if accurate:
+        # Dark neutrals have the widest metameric freedom — a weak K
+        # prior lets adjacent B2A nodes settle on different K/CMY splits
+        # (visible as banding in shadow gradients). Firm the K prior up
+        # where that freedom lives and fade it out with chroma, so the
+        # gamut-relevant saturated targets keep their full freedom.
+        chroma_t = np.hypot(target[:, 1], target[:, 2])
+        neutral_w = np.exp(-(chroma_t / 25.0) ** 2)
+        prior_w[:, 3] = np.maximum(prior_w[:, 3], 2.0 * neutral_w)
+    hues = extra_hues or {}
+    for ch in range(4, n):
+        prior[:, ch] = extra_ink_amount(
+            target, channel_letters[ch],
+            hue_override=hues.get(channel_letters[ch]))
+        prior_w[:, ch] = 0.05
+    return prior, prior_w
+
+
 def invert_to_device(model: ForwardModel, target: np.ndarray, *,
                      channel_letters: list[str], is_additive: bool,
                      ink_limit: float | None = None,
@@ -364,55 +434,10 @@ def invert_to_device(model: ForwardModel, target: np.ndarray, *,
     free = np.arange(n)
     prior = prior_w = None
     if n > 3:
-        # All channels stay free (a hard policy shrinks the reachable gamut
-        # — measured: median 18 ΔE on random in-gamut targets). The policy
-        # enters as soft least-squares priors instead: K follows the GCR
-        # locus, extra inks their hue gates, C/M/Y are unconstrained.
-        prior = np.zeros((len(target), n))
-        prior_w = np.zeros((len(target), n))
-        if k_prior is not None:
-            # colprof-calibrated K behaviour (CMYK proxy oracle) — a firmer
-            # prior than the generic locus, matching how colprof separates.
-            prior[:, 3] = np.interp(target[:, 0], k_prior["l_axis"],
-                                    k_prior["k_curve"])
-            prior_w[:, 3] = 0.15
-        elif k_gen is not None and k_gen.get("rule"):
-            # Explicit colprof -k/-K rule from the user. -K (locus) is
-            # approximated on the full 0..1 K range: on the neutral axis —
-            # where the prior does its work — the feasible K range spans
-            # nearly the full scale, so locus and value curves coincide;
-            # the true per-colour feasible range would need a nested
-            # inversion per node. The soft prior keeps colour accuracy
-            # dominant either way.
-            params = (k_gen.get("params")
-                      or K_RULE_PARAMS[k_gen["rule"]])
-            prior[:, 3] = argyll_k_curve(
-                target[:, 0], params=params,
-                l_min=max(float(black_l), 2.0)
-                if black_l is not None else 5.0)
-            prior_w[:, 3] = 0.10          # explicit user intent: firmer
-        elif accurate and black_l is not None:
-            prior[:, 3] = k_locus(target[:, 0],
-                                  l_full=max(float(black_l), 2.0))
-            prior_w[:, 3] = 0.05
-        else:
-            prior[:, 3] = k_locus(target[:, 0])
-            prior_w[:, 3] = 0.05
-        if accurate:
-            # Dark neutrals have the widest metameric freedom — a weak K
-            # prior lets adjacent B2A nodes settle on different K/CMY splits
-            # (visible as banding in shadow gradients). Firm the K prior up
-            # where that freedom lives and fade it out with chroma, so the
-            # gamut-relevant saturated targets keep their full freedom.
-            chroma_t = np.hypot(target[:, 1], target[:, 2])
-            neutral_w = np.exp(-(chroma_t / 25.0) ** 2)
-            prior_w[:, 3] = np.maximum(prior_w[:, 3], 2.0 * neutral_w)
-        hues = extra_hues or {}
-        for ch in range(4, n):
-            prior[:, ch] = extra_ink_amount(
-                target, channel_letters[ch],
-                hue_override=hues.get(channel_letters[ch]))
-            prior_w[:, ch] = 0.05
+        prior, prior_w = ink_priors(
+            target, n, channel_letters=channel_letters, k_prior=k_prior,
+            k_gen=k_gen, accurate=accurate, extra_hues=extra_hues,
+            black_l=black_l)
         d[:, 3:] = prior[:, 3:]
 
     gn_kw = dict(boundary_fd=accurate, tac_projection=accurate,
