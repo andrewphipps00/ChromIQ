@@ -713,6 +713,11 @@ class MainWindow(QMainWindow):
         # Margin-inspector visibility / thresholds / guide toggle may have changed.
         if hasattr(self._tab_chart, "refresh_margin_inspector_settings"):
             self._tab_chart.refresh_margin_inspector_settings()
+        # Engine-only Manual rows (#123) follow the engine beta + accuracy
+        # mode — the Build Profile tab stays visible while Settings is
+        # open, so its showEvent alone would miss the change.
+        if hasattr(self._tab_profile, "_refresh_engine_rows"):
+            self._tab_profile._refresh_engine_rows()
 
     def _apply_calibration_mode(self) -> None:
         enabled = bool(self._settings.get("calibration_mode", False))

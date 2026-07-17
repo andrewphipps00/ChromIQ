@@ -2417,6 +2417,7 @@ class TabProfile(QWidget):
         self._m_iccver_combo = NoScrollComboBox(grp)
         self._m_iccver_combo.addItem(tr("Version 2 (most compatible)"), "2")
         self._m_iccver_combo.addItem(tr("Version 4"), "4")
+        self._m_iccver_combo.addItem(tr("Both (v2 + v4)"), "both")
         self._m_iccver_combo.setObjectName("compact_input")
         self._m_iccver_combo.style().unpolish(self._m_iccver_combo)
         self._m_iccver_combo.style().polish(self._m_iccver_combo)
@@ -2435,7 +2436,14 @@ class TabProfile(QWidget):
                "Choose it when a modern workflow or a client explicitly "
                "asks for v4 profiles. Verified against macOS ColorSync "
                "and littleCMS; some very old print software may not "
-               "accept v4.\n\nDefault: Version 2."),
+               "accept v4.\n\n"
+               "  • Both — one build, two files: the normal profile is "
+               "written as Version 2, and a twin ending in \"-v4.icc\" "
+               "lands right next to it. Handy when you print through an "
+               "older RIP but also deliver profiles to clients on modern "
+               "pipelines. Installing and the rest of the ChromIQ "
+               "workflow keep using the v2 file.\n\n"
+               "Default: Version 2."),
             grp,
             min_width=520,
         ))
@@ -2826,7 +2834,7 @@ class TabProfile(QWidget):
         g.addLayout(colorimetric_row)
 
         inv_row = QHBoxLayout()
-        self._m_inv_gamut_cb = QCheckBox(tr("Inverse gamut mapping (-nI):"),
+        self._m_inv_gamut_cb = QCheckBox(tr("Inverse gamut mapping (-nI)"),
                                          grp)
         inv_row.addWidget(self._m_inv_gamut_cb)
         inv_row.addStretch()
@@ -2850,7 +2858,6 @@ class TabProfile(QWidget):
             grp,
             min_width=540,
         ))
-        inv_row.addStretch()
         g.addLayout(inv_row)
 
         layout.addWidget(grp)

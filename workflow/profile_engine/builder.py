@@ -555,6 +555,15 @@ def _build_profile_impl(ti3_path: Path | str, out_path: Path | str,
         version=(4, 4) if str(settings.icc_version) == "4" else (2, 2),
     )
     icw.write_profile(out, spec, luts)
+    if str(settings.icc_version) == "both":
+        # One build, two containers: the main path stays v2 (what the
+        # rest of the workflow installs), the v4 twin lands alongside it
+        # with a self-explaining name. Same LUT bytes in both — only the
+        # header and metadata types differ.
+        from dataclasses import replace
+        twin = out.with_name(out.stem + "-v4.icc")
+        icw.write_profile(twin, replace(spec, version=(4, 4)), luts)
+        _emit(settings, f"Also wrote the ICC v4 twin: {twin.name}")
 
     gam_res = residual[in_gamut]
     from workflow.profile_engine.metrics import delta_e_2000

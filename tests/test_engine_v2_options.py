@@ -226,3 +226,72 @@ def test_settings_from_params_maps_new_fields():
                       icc_version="4")
     s = settings_from_params(p)
     assert s.spectral_physics is True and s.icc_version == "4"
+
+
+def test_both_versions_writes_v2_and_v4_twin(_s1_ti3, tmp_path):
+    icc = tmp_path / "twin.icc"
+    lines = []
+    res = build_profile(_s1_ti3, icc, BuildSettings(
+        quality="l", gammap_mode="accurate", icc_version="both",
+        progress=lines.append))
+    twin = tmp_path / "twin-v4.icc"
+    assert res.icc_path == icc and icc.exists() and twin.exists()
+    assert icc.read_bytes()[8] == 2
+    d4 = twin.read_bytes()
+    assert d4[8] == 4 and any(d4[84:100])
+    from benchmarks.iccread import IccProfile
+    assert IccProfile(icc).tags["A2B1"] == IccProfile(twin).tags["A2B1"]
+    assert any("v4 twin" in ln for ln in lines)
+
+
+def test_both_option_in_ui_and_persistence(tmp_path, qtbot):
+    tab = _tab(tmp_path, profile_engine_beta=True, gammap_mode="accurate")
+    qtbot.addWidget(tab)
+    idx = tab._m_iccver_combo.findData("both")
+    assert idx >= 0
+    tab._m_iccver_combo.setCurrentIndex(idx)
+    assert tab._collect_manual_profile().icc_version == "both"
+    data = tab._m_collect_preset_data()
+    assert data["icc_version"] == "both"
+    tab._m_iccver_combo.setCurrentIndex(tab._m_iccver_combo.findData("2"))
+    tab._m_apply_preset_data(data)
+    assert tab._m_iccver_combo.currentData() == "both"
+
+
+def test_inv_gamut_row_tooltip_right_aligned(tmp_path, qtbot):
+    # Regression (Basti report): the ⓘ must sit at the row's right edge —
+    # a stretch BEFORE the button and none after it.
+    tab = _tab(tmp_path)
+    qtbot.addWidget(tab)
+    row = tab._m_inv_gamut_cb.parentWidget().layout()
+    # find the QHBoxLayout holding the checkbox
+    from PyQt6.QtWidgets import QHBoxLayout
+    def find_row(layout):
+        for i in range(layout.count()):
+            item = layout.itemAt(i)
+            lay = item.layout()
+            if lay is not None:
+                if any(lay.itemAt(j).widget() is tab._m_inv_gamut_cb
+                       for j in range(lay.count())):
+                    return lay
+                sub = find_row(lay)
+                if sub is not None:
+                    return sub
+        return None
+    lay = find_row(row)
+    assert lay is not None
+    kinds = ["stretch" if lay.itemAt(i).spacerItem() else
+             type(lay.itemAt(i).widget()).__name__
+             for i in range(lay.count())]
+    assert kinds[0] == "QCheckBox"
+    assert "stretch" in kinds[1:-1]            # spacer between…
+    assert kinds[-1] == "TooltipButton"        # …and the ⓘ last (right edge)
+
+
+def test_settings_close_refreshes_engine_rows():
+    # The Build Profile tab stays visible while the Settings dialog is
+    # open — MainWindow must refresh the engine-only rows on dialog close.
+    import inspect
+    from ui.main_window import MainWindow
+    src = inspect.getsource(MainWindow._open_settings)
+    assert "_refresh_engine_rows" in src
