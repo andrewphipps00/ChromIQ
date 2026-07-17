@@ -97,6 +97,17 @@ _SLOW_CHART_WATCHDOG_MS = 30_000
 _TARGEN_ADDED_RE = re.compile(r"Added (\d+)/(\d+)")
 
 
+def _number_of_sets(path) -> int | None:
+    """``NUMBER_OF_SETS`` from a CGATS .ti1/.ti2, or None if unreadable."""
+    try:
+        for line in Path(path).read_text(errors="ignore").splitlines():
+            if line.startswith("NUMBER_OF_SETS"):
+                return int(line.split()[-1])
+    except (OSError, ValueError):
+        return None
+    return None
+
+
 def _clean_preset_name(name: str) -> str:
     """Normalise a preset name for storage / comparison (#59).
 
@@ -6329,6 +6340,19 @@ class TabChart(QWidget):
             f"Applied chart from the layout editor into {work_dir} "
             f"({len(tiffs)} page(s)). targen and printtarg skipped."
         )
+        # The laid-out .ti2 may hold more patches than the designed .ti1: a
+        # partial last strip is topped up with paper-white patches (printtarg
+        # behaviour, mirrored by the engine). Say so, or the total silently
+        # grows from the designed count (#124 report 6: 896 → 910).
+        designed = _number_of_sets(run.chart_ti1)
+        total = _number_of_sets(run.chart_ti2)
+        if designed and total and total > designed:
+            self._log.appendPlainText(
+                f"Patch count: {designed} designed + {total - designed} "
+                f"paper-white fill-up patch(es) completing the last strip "
+                f"= {total} total. Instruments read whole strips; the "
+                f"fill-up patches are measured like any others."
+            )
         # The chart wasn't built from ChartParams; clear them so the meta stamp
         # falls back to instrument/paper only and preserves the editor layout we
         # copy in next.

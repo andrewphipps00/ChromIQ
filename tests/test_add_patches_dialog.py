@@ -416,13 +416,26 @@ def test_add_dialog_has_info_button_with_generator_help(qapp):
 
 
 def test_gen_sets_help_matches_new_chart_tooltip():
-    # The shared generator help must stay byte-identical to the matching
-    # paragraphs of the New-chart tooltip, so the two ⓘ can't drift (#66).
+    # The New-chart ⓘ is BUILT from the shared constant — tr(intro) +
+    # tr(_GEN_SETS_HELP) + tr(closing) — so the two ⓘ can't drift (#66,
+    # restructured in #124). Assert all three parts are real catalog keys
+    # the extractor sees, and that the help now covers every set row and
+    # the multi-ink availability rules (#124 report 2).
     from scripts.i18n_extract import extract_keys
-    from ui.dialogs.ti2_relayout_dialog import _GEN_SETS_HELP
-    nc = next(k for k in extract_keys()
-              if k.startswith("Let's start a brand-new chart"))
-    assert _GEN_SETS_HELP == "\n\n".join(nc.split("\n\n")[5:20])
+    from ui.dialogs.ti2_relayout_dialog import (_GEN_SETS_HELP,
+                                                _NEW_CHART_TIP_CLOSING,
+                                                _NEW_CHART_TIP_INTRO)
+    keys = set(extract_keys())
+    assert _GEN_SETS_HELP in keys
+    assert _NEW_CHART_TIP_INTRO in keys
+    assert _NEW_CHART_TIP_CLOSING in keys
+    for needle in ("Gamut-corner emphasis", "Sunrises", "Flamingos",
+                   "Colour extremes", "Pure white & black",
+                   "Even coverage (targen)", "Per-ink ramps",
+                   "Ink-pair overprints", "Ink-triple overprints",
+                   "Rich-black ramp", "preconditioning profile",
+                   "paper-white filler"):
+        assert needle in _GEN_SETS_HELP, f"help lost its {needle!r} coverage"
 
 
 def test_white_black_added_over_existing_chart(qapp):

@@ -55,35 +55,13 @@ _TOOLTIP_QSS = _TOOLTIP_QSS_DARK
 # Ink channel tables
 # ---------------------------------------------------------------------------
 
-# ink code → (R_absorption, G_absorption, B_absorption) per unit ink value (0–1)
-# Values calibrated against US Web Coated SWOP v2 ICC profile full-ink response.
-# Used ONLY for extra channels (index 4+) that sit on top of the ICC-converted
-# CMYK base. The c/m/y/k entries are retained as fallback for edge cases.
-_INK_ABSORPTION: dict[str, tuple[float, float, float]] = {
-    # CMYK primaries (calibrated from SWOP full-ink response on white paper)
-    "c":   (1.00, 0.32, 0.06),   # Cyan:    R=0, G=174, B=239 at full ink on white
-    "m":   (0.08, 1.00, 0.45),   # Magenta: R=236, G=0, B=140
-    "y":   (0.00, 0.05, 1.00),   # Yellow:  R=255, G=242, B=0
-    "k":   (0.86, 0.88, 0.87),   # Black:   R=35, G=31, B=32
-    # Light inks ≈ parent at ~50% (extrapolated from SWOP midtone data)
-    "lc":  (0.57, 0.18, 0.04),
-    "lm":  (0.04, 0.57, 0.25),
-    "ly":  (0.00, 0.03, 0.55),
-    "lk":  (0.42, 0.42, 0.42),
-    "llk": (0.22, 0.22, 0.22),
-    # Medium inks ≈ parent at ~75%
-    "mc":  (0.80, 0.25, 0.05),
-    "mm":  (0.06, 0.80, 0.35),
-    "my":  (0.00, 0.04, 0.78),
-    "mk":  (0.65, 0.65, 0.65),
-    # Spot / extended-gamut inks
-    "o":   (0.02, 0.40, 0.95),   # Orange:      absorbs blue + some green
-    "r":   (0.05, 0.90, 0.80),   # Red:         absorbs green + blue
-    "g":   (0.90, 0.05, 0.80),   # Green:       absorbs red + blue
-    "b":   (0.82, 0.68, 0.05),   # Blue/Violet: absorbs red + most green
-    "v":   (0.76, 0.62, 0.04),   # Violet
-    "w":   (0.00, 0.00, 0.00),   # White
-}
+# ink code → (R, G, B) absorption per unit ink value (0–1). The canonical
+# table now lives in workflow.layout_engine.colorants (shared with the chart
+# raster + swatch previews, #124); imported here under the historical names.
+from workflow.layout_engine.colorants import (  # noqa: E402
+    _INK_ABSORPTION,
+    ink_absorption_linear as _ink_absorption_linear,
+)
 
 # targen -d<N> → ordered ink codes (source: data/parameters.yaml device_type labels)
 _D_TYPE_CHANNELS: dict[int, list[str]] = {
@@ -140,60 +118,6 @@ def _linear_to_srgb(a):
     """Linear-light 0..1 array → sRGB encoding."""
     import numpy as np
     return np.where(a <= 0.0031308, a * 12.92, 1.055 * a ** (1 / 2.4) - 0.055)
-
-
-def _ink_absorption_linear(code: str) -> tuple[float, float, float]:
-    """Per-channel LINEAR-light absorption for one extra ink.
-
-    Preferred source: the ink's real Lab anchor from the i1Profiler export
-    reference data (EXTRA_INK; placeholders excluded) — Lab → linear sRGB of
-    the full ink on paper, absorption = 1 − transmittance. Fallback: the
-    hand-calibrated gamma-space table, linearised (its values are full-ink
-    sRGB responses, so decoding the implied colour is exact).
-    Cached per code.
-    """
-    cached = _ABS_LIN_CACHE.get(code)
-    if cached is not None:
-        return cached
-    rgb_lin = None
-    try:
-        from workflow.i1profiler_export import EXTRA_INK, _PLACEHOLDER_LAB
-        key = {"o": "O", "g": "G", "v": "V", "b": "B"}.get(code)
-        if key and key in EXTRA_INK and key not in _PLACEHOLDER_LAB:
-            L, a_, b_ = (float(v) for v in EXTRA_INK[key][1].split("|"))
-            rgb_lin = _lab_to_linear_srgb(L, a_, b_)
-    except Exception:  # noqa: BLE001 — reference data is best-effort here
-        rgb_lin = None
-    if rgb_lin is None:
-        ar, ag, ab = _INK_ABSORPTION.get(code, (0.87, 0.87, 0.87))
-        import numpy as np
-        rgb_lin = tuple(float(v) for v in
-                        _srgb_to_linear(np.array([1 - ar, 1 - ag, 1 - ab])))
-    out = tuple(min(1.0, max(0.0, 1.0 - t)) for t in rgb_lin)
-    _ABS_LIN_CACHE[code] = out  # type: ignore[assignment]
-    return out  # type: ignore[return-value]
-
-
-_ABS_LIN_CACHE: dict[str, tuple[float, float, float]] = {}
-
-
-def _lab_to_linear_srgb(L: float, a: float, b: float) -> tuple[float, float, float]:
-    """CIELab (D50) → linear sRGB (D50-adapted matrix), clipped to 0..1."""
-    import numpy as np
-    fy = (L + 16.0) / 116.0
-    fx = fy + a / 500.0
-    fz = fy - b / 200.0
-
-    def finv(t: float) -> float:
-        return t ** 3 if t > 6.0 / 29.0 else 3 * (6.0 / 29.0) ** 2 * (t - 4.0 / 29.0)
-
-    wp = (0.9642, 1.0, 0.8249)  # D50
-    xyz = np.array([finv(fx) * wp[0], finv(fy) * wp[1], finv(fz) * wp[2]])
-    m = np.linalg.inv(np.array([[0.4360747, 0.3850649, 0.1430804],
-                                [0.2225045, 0.7168786, 0.0606169],
-                                [0.0139322, 0.0971045, 0.7141733]]))
-    rgb = m @ xyz
-    return tuple(float(min(1.0, max(0.0, v))) for v in rgb)
 
 
 # Channel count → most common ink layout (fallback when sidecar is absent)

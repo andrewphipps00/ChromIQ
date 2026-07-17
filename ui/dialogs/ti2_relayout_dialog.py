@@ -75,15 +75,31 @@ def _toggle_locked_prefix(edit: "PrefixLockedLineEdit", on: bool, prefix: str) -
 # literal — so this is a single catalog key reused in both places.
 _GEN_SETS_HELP = (
     "About “Generate colour sets”:\n\n"
-    "Tick any combination of these five sets and ChromIQ lays them down "
+    "Tick any combination of these sets and ChromIQ lays them down "
     "one after another. Each set shows how many patches it adds, and a "
     "running total appears underneath, so you always know how big the "
-    "chart will get before you create it:\n\n"
+    "chart will get before you create it. Which sets can be used depends "
+    "on the device the chart is for — the sets for RGB charts come first, "
+    "then the extra sets for multi-ink (CMYK and CMYK + extra inks) "
+    "charts, then an overview of what is available when:\n\n"
     "• 3D RGB cube — an even grid of colours across the whole range. You "
     "pick how many steps each of red, green and blue is split into, and "
     "the chart then holds every combination (for example 6 steps makes "
     "6×6×6 = 216 patches). A solid, neutral foundation for almost any "
     "profile.\n\n"
+    "• Saturated edges — the most vivid colours the printer can manage. "
+    "'Per edge' traces the twelve edges of the colour cube — the gamut "
+    "wireframe (black up to each pure colour and on to white, plus the "
+    "colourful edges between); 'per face' goes further and also fills the "
+    "six cube faces — the full gamut surface — with that many patches per "
+    "side, or leave it at 0 for edges only. This outer boundary is exactly "
+    "where profiles tend to go wrong, so it pays to sample it well.\n\n"
+    "• Gamut-corner emphasis — a few extra patches right on the gamut "
+    "edge lines next to each of the eight corners of the colour cube, "
+    "where the deepest colours live and profiles err most. 'Edge' is how "
+    "many to add per edge near each corner; they slot into the gaps so "
+    "they never repeat what the 3D cube or Saturated edges already "
+    "placed.\n\n"
     "• Skin tones (Fitzpatrick) — lifelike skin colours running light to "
     "dark through each of the six Fitzpatrick skin types, now reaching "
     "from porcelain-pale highlights down to very deep, faintly cool "
@@ -105,6 +121,16 @@ _GEN_SETS_HELP = (
     "with the blues, 'Per layer' × 'Layers' patches are spread across "
     "angled sheets so the green part of the range is covered with more "
     "depth.\n\n"
+    "• Sunrises (warm) — golden yellows, oranges, reds and pinks: the "
+    "warm 'sunrise' side of the colour range that the blues and greens "
+    "sets leave out, for skies, flowers and skin highlights. As with "
+    "those sets, 'per layer' × 'layers' patches are spread across gently "
+    "angled sheets.\n\n"
+    "• Flamingos (pinks) — pinks, magentas and indigos: the band between "
+    "where Oceans (blues) ends and Sunrises begins, the big gap the other "
+    "colour-band sets leave in the middle. Great for flowers, fabrics, "
+    "sunsets and skin. Again 'per layer' × 'layers' patches on angled "
+    "sheets.\n\n"
     "• Neutral grey ramp — a plain ramp of pure greys from black to white, "
     "with no tints at all (a black-and-white wedge). This is the most "
     "important region for a clean profile. 'Steps' is how many greys span "
@@ -118,13 +144,12 @@ _GEN_SETS_HELP = (
     "rings, 'rings' is how many rings circle each grey (one ring is six "
     "tints, each extra ring a wider, denser one — 12, then 18), and "
     "'offset' is how far the tints stray from neutral.\n\n"
-    "• Saturated edges — the most vivid colours the printer can manage. "
-    "'Per edge' traces the twelve edges of the colour cube — the gamut "
-    "wireframe (black up to each pure colour and on to white, plus the "
-    "colourful edges between); 'per face' goes further and also fills the "
-    "six cube faces — the full gamut surface — with that many patches per "
-    "side, or leave it at 0 for edges only. This outer boundary is exactly "
-    "where profiles tend to go wrong, so it pays to sample it well.\n\n"
+    "• Colour extremes — extra detail just inside the six most saturated "
+    "colour corners of the printer's range: red, green, blue, cyan, "
+    "magenta and yellow at their most vivid, which are the trickiest "
+    "colours to reproduce. It works like Highlights & shadows, but "
+    "spiralling in from each colour corner. 'Per end' is how many patches "
+    "at each corner; 'reach' how far in they spiral.\n\n"
     "• Highlights & shadows — extra detail at the two ends where printers "
     "struggle most: pale tints just below paper white, and deep tones just "
     "above black, spread across every hue. These ends often band or block "
@@ -143,6 +168,18 @@ _GEN_SETS_HELP = (
     "pick a file, and set how many 'Colours' to pull out. Lovely combined "
     "with a cube for all-round coverage plus your image's own palette on "
     "top.\n\n"
+    "• Pure white & black — extra copies of pure paper white and the "
+    "deepest black, the two anchor colours of every profile. 'Each' is "
+    "how many of each the finished chart should hold — and any white or "
+    "black the other ticked sets already contribute counts toward that "
+    "number. A 3D cube, Saturated edges or Gamut-corner emphasis includes "
+    "one of each, and so does a Neutral grey ramp with 2 or more steps. "
+    "So with one of those ticked, 'each: 1' adds 0 extra patches and "
+    "'each: 3' adds 4 (2 more whites and 2 more blacks) — that's "
+    "deliberate: the chart ends up with exactly the number you asked "
+    "for, never more. The copies are kept identical on purpose (they're "
+    "exempt from 'Ensure unique colours'), so several readings of the "
+    "same white and black can be averaged.\n\n"
     "• Fill remaining gaps — a tidy-up that comes last. After the sets you "
     "picked are laid down, it scatters extra patches into the empty parts "
     "of colour space — evenly and without repeating — until the chart "
@@ -157,7 +194,97 @@ _GEN_SETS_HELP = (
     "black and white), ChromIQ keeps one and nudges the duplicates apart "
     "by a tiny amount, so no colour is printed and measured twice. The "
     "patch total stays the same. Leave it on unless you have a reason not "
-    "to."
+    "to.\n\n"
+    "Multi-ink devices (Device set to CMYK or CMYK + extra inks):\n\n"
+    "A multi-ink chart is designed ink by ink, so the panel gains five "
+    "ink-based sets:\n\n"
+    "• Even coverage (targen) — patches spread evenly across every ink "
+    "combination your printer can mix, always inside the ink limit. This "
+    "is the backbone of a multi-ink chart and the replacement for the 3D "
+    "cube family: a cube of every ink combination would explode (a 9-step "
+    "cube in 7 inks is nearly 5 million patches), so Argyll's targen "
+    "picks a smart, even selection instead.\n\n"
+    "• Per-ink ramps — a tone ramp of every ink on its own, from a light "
+    "tint to full coverage, so the profile learns each ink's own "
+    "character: how fast it darkens, where it saturates, its pure colour "
+    "on your paper.\n\n"
+    "• Ink-pair overprints — two inks printed on top of each other, "
+    "stepped up together, for every pair of your inks — how ink pairs "
+    "really combine on paper. Each ink in a pair stays at or below half "
+    "the ink limit, so no patch can exceed it.\n\n"
+    "• Ink-triple overprints — three inks on top of each other for every "
+    "trio: the home of the deep, rich composite colours profiles get "
+    "their dark shadows from. Each ink stays at or below a third of the "
+    "ink limit.\n\n"
+    "• Rich-black ramp — dark neutral greys built from colour ink plus "
+    "increasing amounts of black: real measurements for the profile's "
+    "black generation instead of guesswork. Needs a black ink.\n\n"
+    "Which of the sets above still work on a multi-ink chart: Neutral "
+    "grey ramp, Near-neutral greys, Pure white & black and Fill remaining "
+    "gaps always do — they are built natively for any ink set. The "
+    "cube-shaped sets (3D RGB cube, Saturated edges, Gamut-corner "
+    "emphasis, Colour extremes) never apply: they trace the corners and "
+    "edges of the RGB colour cube, which a multi-ink device simply "
+    "doesn't have — Even coverage is their replacement, so they stay "
+    "greyed out as a reminder rather than disappearing. The look-based "
+    "sets (Skin tones, Oceans, Foliage, Sunrises, Flamingos, Highlights "
+    "& shadows, Pastels, From image) describe how colours look, not "
+    "which inks to use — they unlock as soon as you set a preconditioning "
+    "profile that matches the chart's ink set, because only a profile can "
+    "tell ChromIQ which ink mix produces each look. The same profile "
+    "also re-centres the Near-neutral grey rings on your printer's true "
+    "neutral, and brings the 3D preview back (as a view of the patches' "
+    "real colours) — without a profile there is no honest colour model "
+    "for a multi-ink chart, so the preview stays hidden rather than "
+    "showing a guess.\n\n"
+    "Why the finished chart can hold a few more patches than the total "
+    "shown here: measuring instruments read whole strips, so when the "
+    "page layout is built, a partial last strip is topped up with "
+    "paper-white filler patches (Argyll's printtarg does exactly the "
+    "same). If you design 896 patches and each strip holds 13, the "
+    "printed chart becomes 910 — the 14 extras are plain paper white, "
+    "are measured like everything else, and simply give the profile a "
+    "few more readings of the paper. Nothing is lost or changed."
+)
+
+# Intro + closing for the New-chart dialog's ⓘ, around the shared generator
+# help — the full tooltip is built as tr(intro) + tr(_GEN_SETS_HELP) +
+# tr(closing), so the generator paragraphs exist exactly once (#124: the old
+# duplicated copy had drifted badly out of date).
+_NEW_CHART_TIP_INTRO = (
+    "Let's start a brand-new chart. You only need to make a few quick "
+    "choices here — once you're done, the chart opens in the editor where "
+    "you can arrange and fine-tune everything.\n\n"
+    "What each choice means:\n\n"
+    "• Device — what kind of printer the chart is for. Print RGB is the "
+    "standard choice: any printer you print to through a normal driver, "
+    "which is how ChromIQ profiles are usually made. CMYK and CMYK + "
+    "extra inks are for printers you address ink-by-ink (typically "
+    "through a RIP): the chart is then designed in ink values, you can "
+    "add your printer's extra inks (orange, green, violet, light "
+    "inks, …), set an ink limit, and optionally point to a "
+    "preconditioning profile. The colour-set list below adapts to the "
+    "device — the overview at the end explains which sets are available "
+    "when.\n\n"
+    "• Instrument & Paper — which measuring device you'll use and what "
+    "paper you'll print on. ChromIQ uses these to lay the patches out in a "
+    "way your device can read, at the right page size.\n\n"
+    "• Patches — how to fill the chart to begin with. There are three ways:\n"
+    "    – Seed from targen — enter a number and let ChromIQ spread that "
+    "many colours evenly across the whole colour range. A great all-round "
+    "starting point you can then rearrange.\n"
+    "    – Paste colour values — paste, or load from a file, your own list "
+    "of hex or RGB colours.\n"
+    "    – Generate colour sets — build the chart from one or more "
+    "ready-made colour spreads (described below).\n\n"
+    "• Layout options — the finer print settings (spacer squares, sizing, "
+    "page margin, resolution). The defaults are sensible, so feel free to "
+    "leave these alone until you need them."
+)
+_NEW_CHART_TIP_CLOSING = (
+    "When you confirm, your new chart opens in the editor — there you can "
+    "drag patches around, recolour them, add or remove some, and save when "
+    "it's ready."
 )
 
 # Short intro for the Add-patches dialog's ⓘ, ahead of the shared generator help.
@@ -172,6 +299,23 @@ _ADD_TIP_INTRO = (
     "The new patches are appended after the chart's existing ones — rearrange "
     "them however you like back in the editor."
 )
+
+
+def _padding_note(n: int) -> str:
+    """Friendly one-liner for strip fill-up patches, or "" when none (#124).
+
+    Shown in the Save/Apply summaries so a chart growing from e.g. 896 to 910
+    patches is explained instead of silent. Explicit singular/plural (i18n
+    rule: never "(s)")."""
+    if n <= 0:
+        return ""
+    if n == 1:
+        return tr("The layout added 1 paper-white patch to fill the last "
+                  "strip — instruments read whole strips, and printtarg does "
+                  "the same. It is measured like any other patch.")
+    return tr("The layout added {n} paper-white patches to fill the last "
+              "strip — instruments read whole strips, and printtarg does "
+              "the same. They are measured like any other patch.").format(n=n)
 
 
 class _AutoHideLabel(QLabel):
@@ -766,111 +910,8 @@ class _NewChartDialog(QDialog):
         head.addStretch(1)
         head.addWidget(_magenta_tip(
             tr("New patch set"),
-            tr("Let's start a brand-new chart. You only need to make a few quick "
-            "choices here — once you're done, the chart opens in the editor where "
-            "you can arrange and fine-tune everything.\n\n"
-            "What each choice means:\n\n"
-            "• Instrument & Paper — which measuring device you'll use and what "
-            "paper you'll print on. ChromIQ uses these to lay the patches out in a "
-            "way your device can read, at the right page size.\n\n"
-            "• Patches — how to fill the chart to begin with. There are three ways:\n"
-            "    – Seed from targen — enter a number and let ChromIQ spread that "
-            "many colours evenly across the whole colour range. A great all-round "
-            "starting point you can then rearrange.\n"
-            "    – Paste colour values — paste, or load from a file, your own list "
-            "of hex or RGB colours.\n"
-            "    – Generate colour sets — build the chart from one or more "
-            "ready-made colour spreads (described below).\n\n"
-            "• Layout options — the finer print settings (spacer squares, sizing, "
-            "page margin, resolution). The defaults are sensible, so feel free to "
-            "leave these alone until you need them.\n\n"
-            "About “Generate colour sets”:\n\n"
-            "Tick any combination of these five sets and ChromIQ lays them down "
-            "one after another. Each set shows how many patches it adds, and a "
-            "running total appears underneath, so you always know how big the "
-            "chart will get before you create it:\n\n"
-            "• 3D RGB cube — an even grid of colours across the whole range. You "
-            "pick how many steps each of red, green and blue is split into, and "
-            "the chart then holds every combination (for example 6 steps makes "
-            "6×6×6 = 216 patches). A solid, neutral foundation for almost any "
-            "profile.\n\n"
-            "• Skin tones (Fitzpatrick) — lifelike skin colours running light to "
-            "dark through each of the six Fitzpatrick skin types, now reaching "
-            "from porcelain-pale highlights down to very deep, faintly cool "
-            "shadows. 'Per type' sets how many shades each type gets from light "
-            "to dark; 'Ranges' adds that many parallel ramps, each nudged a "
-            "little in hue, so a single skin type is covered by a small spread of "
-            "tones rather than one straight line — handy because real faces vary. "
-            "Worth adding whenever faces and portraits matter most.\n\n"
-            "• Oceans (blues) — extra colours packed into the green-turquoise "
-            "to deep-blue part of the range, where wide-gamut papers and inks "
-            "reach furthest (it now dips into the greenish turquoise too). "
-            "'Per layer' is how many patches each sheet holds and 'Layers' is how "
-            "many sheets, so the two multiply (24 per layer × 3 layers = 72). The "
-            "sheets are gently angled rather than one flat blanket, so the whole "
-            "turquoise corner is filled in depth. Helpful for skies, water and "
-            "deep blues.\n\n"
-            "• Foliage (greens) — a spread of forest, jungle and leaf greens, for "
-            "landscapes and nature shots where the greens carry the picture. As "
-            "with the blues, 'Per layer' × 'Layers' patches are spread across "
-            "angled sheets so the green part of the range is covered with more "
-            "depth.\n\n"
-            "• Neutral grey ramp — a plain ramp of pure greys from black to white, "
-            "with no tints at all (a black-and-white wedge). This is the most "
-            "important region for a clean profile. 'Steps' is how many greys span "
-            "black to white. It is independent of Near-neutral greys below, so you "
-            "can choose the number of pure neutrals separately from the tinted "
-            "ones — more pure greys than tinted, or either on its own.\n\n"
-            "• Near-neutral greys — rings of gentle tints just off the neutral axis "
-            "at each grey level, which is what helps greys print cleanly without an "
-            "unwanted colour cast. This adds only the tints; the pure grey centres "
-            "come from Neutral grey ramp above. 'Steps' is how many levels get "
-            "rings, 'rings' is how many rings circle each grey (one ring is six "
-            "tints, each extra ring a wider, denser one — 12, then 18), and "
-            "'offset' is how far the tints stray from neutral.\n\n"
-            "• Saturated edges — the most vivid colours the printer can manage. "
-            "'Per edge' traces the twelve edges of the colour cube — the gamut "
-            "wireframe (black up to each pure colour and on to white, plus the "
-            "colourful edges between); 'per face' goes further and also fills the "
-            "six cube faces — the full gamut surface — with that many patches per "
-            "side, or leave it at 0 for edges only. This outer boundary is exactly "
-            "where profiles tend to go wrong, so it pays to sample it well.\n\n"
-            "• Highlights & shadows — extra detail at the two ends where printers "
-            "struggle most: pale tints just below paper white, and deep tones just "
-            "above black, spread across every hue. These ends often band or block "
-            "up, and the cube alone samples them thinly. 'Per end' is how many "
-            "patches go at each end (so the set adds twice that many), and 'depth' "
-            "is how far in from white and black the tones reach.\n\n"
-            "• Pastels — soft, muted colours all around the hue wheel: dusty blues, "
-            "sages, soft pinks, taupes. This is where a great deal of real "
-            "photography actually lives — the gentle region between the clean greys "
-            "and the vivid sets. Each of the 'layers' is a chroma shell — from "
-            "barely-tinted near-greys out to fuller pastels — of 'per layer' "
-            "patches, so the two multiply.\n\n"
-            "• From image — load one of your own photos and ChromIQ finds its most "
-            "representative colours and adds them to the chart, so the profile is "
-            "tuned to the kind of pictures you really print. Click 'Load image…', "
-            "pick a file, and set how many 'Colours' to pull out. Lovely combined "
-            "with a cube for all-round coverage plus your image's own palette on "
-            "top.\n\n"
-            "• Fill remaining gaps — a tidy-up that comes last. After the sets you "
-            "picked are laid down, it scatters extra patches into the empty parts "
-            "of colour space — evenly and without repeating — until the chart "
-            "reaches the size you ask for. 'Fill to' is that target total, so the "
-            "whole chart lands on a round number with nothing left clumped or "
-            "bare.\n\n"
-            "Mix them freely — say a 3D cube for overall coverage plus "
-            "a neutral grey ramp for clean neutrals, or skin tones plus greens for "
-            "portraits out in nature.\n\n"
-            "• Ensure unique colours — when this is ticked and your sets happen to "
-            "share a colour (for example a 3D cube and a grey ramp both include "
-            "black and white), ChromIQ keeps one and nudges the duplicates apart "
-            "by a tiny amount, so no colour is printed and measured twice. The "
-            "patch total stays the same. Leave it on unless you have a reason not "
-            "to.\n\n"
-            "When you confirm, your new chart opens in the editor — there you can "
-            "drag patches around, recolour them, add or remove some, and save when "
-            "it's ready."),
+            tr(_NEW_CHART_TIP_INTRO) + "\n\n" + tr(_GEN_SETS_HELP)
+            + "\n\n" + tr(_NEW_CHART_TIP_CLOSING),
             self, min_width=520))
         # NB: ``head`` is added to the dialog's ``outer`` layout (above the
         # full-width spectrum stripe), not to the scrolled content, so the
@@ -2409,12 +2450,21 @@ class _NewChartDialog(QDialog):
                                         "deepest black the printer can lay — two "
                                         "anchors that matter for a good profile. "
                                         "'Each' is how many of white and of black "
-                                        "to include; they're kept even when "
+                                        "the finished chart should hold — and any "
+                                        "white or black the other ticked sets "
+                                        "already contribute counts toward that "
+                                        "number. A 3D cube, Saturated edges or "
+                                        "Gamut-corner emphasis includes one of "
+                                        "each, and so does a Neutral grey ramp "
+                                        "with 2 or more steps. So with one of "
+                                        "those ticked, 'each: 1' adds 0 extra "
+                                        "patches and 'each: 3' adds 4 (2 more "
+                                        "whites and 2 more blacks) — deliberate, "
+                                        "so the chart ends up with exactly the "
+                                        "number you asked for, never more. The "
+                                        "copies are kept identical even when "
                                         "'Ensure unique colours' is on, which is "
-                                        "handy for averaging repeats. The 3D cube "
-                                        "and the neutral grey ramp already include "
-                                        "one of each, and any they provide counts "
-                                        "toward your number."))
+                                        "handy for averaging repeats."))
         self._gen_whiteblack_n = _spin(1, 50, 1)
         self._gen_whiteblack_count = _count_label()
         gg.addWidget(self._gen_whiteblack, 19, 0)
@@ -2491,7 +2541,7 @@ class _NewChartDialog(QDialog):
             (13, self._gen_neutral, tr("Neutral grey ramp")),
             (14, self._gen_nearneutral, tr("Near-neutral greys")),
             (15, self._gen_spirals, tr("Colour extremes")),
-            (14, self._gen_hs,     tr("Highlights & shadows")),
+            (16, self._gen_hs,     tr("Highlights & shadows")),
             (17, self._gen_pastel, tr("Pastels")),
             (18, self._gen_image,  tr("From image")),
             (19, self._gen_whiteblack, tr("Pure white & black")),
@@ -7443,7 +7493,7 @@ class Ti2RelayoutDialog(QDialog):
         if i1_note:
             msg += f"\n{i1_note}"
         if pad:
-            msg += f"\nprinttarg added {pad} patch(es) to complete the last strip."
+            msg += "\n" + _padding_note(pad)
         if tag_note:
             msg += "\n" + tag_note
         return msg
@@ -7497,6 +7547,12 @@ class Ti2RelayoutDialog(QDialog):
                f"seed {result.seed}")
         if extras:
             msg += "\nAlso wrote: " + ", ".join(sorted(e.name for e in extras))
+        # The engine tops up a partial last strip with paper-white patches,
+        # exactly like printtarg — say so, or the patch count silently grows
+        # from the designed total (#124 report 6: 896 → 910).
+        pad = getattr(result.layout, "padding", 0)
+        if pad:
+            msg += "\n" + _padding_note(pad)
         return msg
 
     def _write_colour_values_file(self, path: Path, as_hex: bool = True) -> None:
