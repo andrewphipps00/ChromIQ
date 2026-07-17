@@ -3035,7 +3035,12 @@ class _NewChartDialog(QDialog):
             (self._gen_fill, (self._gen_fill_to,)),
         ):
             for s in spins:
-                s.setEnabled(cb.isChecked())
+                # Checked AND enabled: a ticked RGB-cube row on a CMYK
+                # device is greyed by the state gating but stays ticked
+                # (so returning to RGB restores it) — its size controls
+                # must grey out with it, not sit there looking active
+                # (Basti's live screenshot).
+                s.setEnabled(cb.isChecked() and cb.isEnabled())
         # Near-neutral greys always has at least one ring, so its offset is always
         # meaningful — grey the offset label alongside the spin (set on/off only).
         self._gen_nearneutral_off_label.setEnabled(self._gen_nearneutral.isChecked())

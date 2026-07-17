@@ -450,3 +450,18 @@ def test_nd_build_order_matches_panel(dlg):
     i_neutral = src.index("neutral_ramp_device")
     i_rings = src.index("near_neutrals_device")
     assert i_perc < i_neutral < i_rings
+
+
+def test_checked_but_gated_rgb_rows_grey_their_spins(dlg):
+    # Basti's screenshot: cube ticked on RGB, then switch to CMYK — the
+    # cube row is state-gated off, and its size spin must grey with it.
+    dlg._mode_generate.setChecked(True)     # activate the generator panel
+    dlg._gen_cube.setChecked(True)
+    dlg._update_gen_counts()
+    assert dlg._gen_cube_n.isEnabled()
+    _pick_device(dlg, "cmyk")
+    assert dlg._gen_cube.isChecked()            # ticked state survives…
+    assert not dlg._gen_cube.isEnabled()        # …but the row is gated
+    assert not dlg._gen_cube_n.isEnabled()      # and the spin greys too
+    _pick_device(dlg, "rgb")
+    assert dlg._gen_cube_n.isEnabled()          # restored with the row
