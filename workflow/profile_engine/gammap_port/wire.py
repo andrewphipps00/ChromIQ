@@ -183,6 +183,11 @@ class ArgyllHelperMapper:
     either side done in Python (identical framing to :class:`PortMapper`).
     """
 
+    # Every map_lab call is a helper subprocess that rebuilds new_gammap —
+    # callers that would query repeatedly (the -nI inversion) should fit a
+    # surrogate to one node evaluation instead.
+    expensive_map = True
+
     def __init__(self, *, src_gam: Path, intent: str, mapres: int,
                  ap_src: Appearance, ap_dst: Appearance,
                  wp_jab, bp_jab, dst_gam: Path | None,
@@ -271,6 +276,7 @@ def fit_gammap_argyll_mappers(model, meas, source_gamut: Path | str,
     bp_jab = ap_dst.lab_to_jab(black_lab[None, :])[0]
 
     from workflow.profile_engine.gamut_map import destination_surface_lab
+    dense = getattr(settings, "gammap_mode", "") == "accurate"
 
     def _dest_cloud():
         """Destination shell sampled from the model — the same thing colprof's
@@ -279,7 +285,8 @@ def fit_gammap_argyll_mappers(model, meas, source_gamut: Path | str,
             progress("Gamut mapping (bit-exact): meshing the printer's "
                      "colour shell…")
         dst_lab = destination_surface_lab(model, mesh=33, ink_limit=ink_limit,
-                                          is_additive=is_additive)
+                                          is_additive=is_additive,
+                                          dense=dense)
         return ap_dst.lab_to_jab(dst_lab)
 
     dst_gam: Path | None = None
@@ -352,8 +359,8 @@ def fit_gammap_port_mappers(model, meas, source_gamut: Path | str,
     # Bit-exact mode: run Argyll's real gamut mapper via the native helper
     # (handles RGB/CMYK and CMY+N). If the binary isn't bundled, fall through
     # to the fast Python mapper below — a build never fails for a missing
-    # helper.
-    if getattr(settings, "gammap_mode", "fast") == "argyll":
+    # helper. Maximum-accuracy mode uses the same bit-exact mapping.
+    if getattr(settings, "gammap_mode", "fast") in ("argyll", "accurate"):
         try:
             return fit_gammap_argyll_mappers(
                 model, meas, source_gamut, settings, bin_dir, progress,
@@ -394,9 +401,9 @@ def fit_gammap_port_mappers(model, meas, source_gamut: Path | str,
         from workflow.profile_engine.gamut_map import (
             destination_surface_lab)
         from workflow.profile_engine.gammap_port.gamio import GamFile
-        dst_lab = destination_surface_lab(model, mesh=33,
-                                          ink_limit=ink_limit,
-                                          is_additive=is_additive)
+        dst_lab = destination_surface_lab(
+            model, mesh=33, ink_limit=ink_limit, is_additive=is_additive,
+            dense=getattr(settings, "gammap_mode", "") == "accurate")
         dst_jab = ap_dst.lab_to_jab(dst_lab)
         dverts, dtris = mesh_from_cloud(dst_jab, nh=48, nb=24)
         d_cusps = cusps_from_cloud(dst_jab)

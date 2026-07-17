@@ -188,6 +188,44 @@ def test_settings_dialog_mode_combo_roundtrip():
         dlg.deleteLater()
 
 
+def test_settings_dialog_offers_maximum_accuracy_mode():
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PyQt6.QtWidgets import QApplication
+    from core.settings import DEFAULTS
+    from ui.dialogs.settings_dialog import SettingsDialog
+
+    _ = QApplication.instance() or QApplication([])
+
+    class _FakeSettings:
+        def __init__(self, **ov):
+            self._s = {**DEFAULTS, **ov}
+
+        def get(self, k, d=None):
+            return self._s.get(k, d)
+
+        def set(self, k, v):
+            self._s[k] = v
+
+    fake = _FakeSettings(profile_engine_beta=True)
+    dlg = SettingsDialog(fake)
+    try:
+        datas = [dlg._gammap_mode_combo.itemData(i)
+                 for i in range(dlg._gammap_mode_combo.count())]
+        assert datas == ["fast", "argyll", "accurate"]
+        idx = dlg._gammap_mode_combo.findData("accurate")
+        dlg._gammap_mode_combo.setCurrentIndex(idx)
+        dlg._save_and_close()
+        assert fake.get("gammap_mode") == "accurate"
+        # And it loads back.
+        dlg2 = SettingsDialog(fake)
+        try:
+            assert dlg2._gammap_mode_combo.currentData() == "accurate"
+        finally:
+            dlg2.deleteLater()
+    finally:
+        dlg.deleteLater()
+
+
 @pytest.mark.skipif(
     _built_binary() is None or shutil.which(
         "iccgamut", path="/Applications/Argyll/bin") is None,

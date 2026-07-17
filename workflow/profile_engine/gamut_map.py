@@ -184,10 +184,18 @@ def source_surface_lab(kind: str, mesh: int = 33) -> np.ndarray:
 
 def destination_surface_lab(model: ForwardModel, mesh: int = 33,
                             ink_limit: float | None = None,
-                            is_additive: bool = True) -> np.ndarray:
+                            is_additive: bool = True,
+                            dense: bool = False) -> np.ndarray:
     """Destination boundary cloud: the mapped device-cube boundary (the
     verified surface construction; for n > 3 the boundary image is a superset
-    seed — segmented maxima below pick the true outer shell)."""
+    seed — segmented maxima below pick the true outer shell).
+
+    ``dense`` (maximum-accuracy mode): a 20k sample of an n ≥ 5 cube
+    boundary is thin — under-sampled shell bins underestimate the radius
+    and the mapping then over-compresses, throwing away chroma the printer
+    can deliver. ``model.predict`` is vectorised, so a 10× denser cloud
+    costs almost nothing.
+    """
     n = model.n_channels
     rng = np.random.default_rng(11)
     if n <= 3:
@@ -204,7 +212,7 @@ def destination_surface_lab(model: ForwardModel, mesh: int = 33,
         dev = np.vstack(faces)
     else:
         # High-dimensional cube boundary: dense random face samples.
-        m = 20000
+        m = 200_000 if dense else 20000
         dev = rng.uniform(0.0, 1.0, (m, n))
         dev[np.arange(m), rng.integers(0, n, m)] = \
             rng.integers(0, 2, m).astype(float)
@@ -444,6 +452,38 @@ class OracleUnavailable(RuntimeError):
     """colprof can't provide the mapping oracle for this build."""
 
 
+# In-process cache for the colprof oracle: a full colprof build per engine
+# build is the dominant cost of the ≤4-channel saturation table, and the
+# iterate-on-settings workflow rebuilds the same measurement repeatedly.
+# Keyed on the measurement file identity + every setting that reaches the
+# oracle run; holds the fitted mappers (plain numpy state, no temp files).
+_ORACLE_CACHE: dict[tuple, dict] = {}
+_ORACLE_CACHE_MAX = 4
+
+
+def _oracle_cache_key(meas: Ti3Measurement, source_gamut, settings,
+                      node_lab: np.ndarray | None) -> tuple | None:
+    try:
+        st = Path(meas.path).stat()
+    except OSError:
+        return None
+    node_key = None if node_lab is None else (
+        node_lab.shape[0], round(float(node_lab.sum()), 3))
+    return (str(meas.path), st.st_mtime_ns, st.st_size, str(source_gamut),
+            getattr(settings, "quality", ""),
+            getattr(settings, "perc_intent", ""),
+            getattr(settings, "sat_intent", ""),
+            getattr(settings, "src_viewing", ""),
+            getattr(settings, "dst_viewing", ""),
+            getattr(settings, "perc_src_colorimetric", False),
+            getattr(settings, "sat_src_colorimetric", False),
+            getattr(settings, "illuminant", ""),
+            getattr(settings, "observer", ""),
+            getattr(settings, "fwa", False),
+            getattr(settings, "fwa_illum", ""),
+            node_key)
+
+
 def fit_colprof_mappers(meas: Ti3Measurement, source_gamut: Path | str,
                         settings, argyll_bin: Path | str | None,
                         progress=None,
@@ -475,6 +515,13 @@ def fit_colprof_mappers(meas: Ti3Measurement, source_gamut: Path | str,
     if meas.device_rep not in ("RGB", "CMY", "CMYK"):
         raise OracleUnavailable(
             f"colprof can't build {meas.device_rep} measurements")
+
+    cache_key = _oracle_cache_key(meas, source_gamut, settings, node_lab)
+    if cache_key is not None and cache_key in _ORACLE_CACHE:
+        if progress:
+            progress("Saturation table: reusing the colprof rendering "
+                     "matched earlier in this session.")
+        return _ORACLE_CACHE[cache_key]
 
     if progress:
         progress("Saturation table: matching colprof's rendering "
@@ -554,6 +601,10 @@ def fit_colprof_mappers(meas: Ti3Measurement, source_gamut: Path | str,
                 out[tag] = _ExactNodeMapper(node_lab, _realized_at(
                     xicclu, icc, node_lab, intent, meas.n_channels),
                     out[tag])
+        if cache_key is not None:
+            while len(_ORACLE_CACHE) >= _ORACLE_CACHE_MAX:
+                _ORACLE_CACHE.pop(next(iter(_ORACLE_CACHE)))
+            _ORACLE_CACHE[cache_key] = out
         return out
 
 
@@ -745,17 +796,24 @@ def build_mapped_b2a(model: ForwardModel, meas: Ti3Measurement, grid: int,
     """
     from workflow.profile_engine.pcs import LabPcs
     codec = codec or LabPcs
+    accurate = getattr(settings, "gammap_mode", "") == "accurate"
+    extra_hues = None
+    black_l = None
+    if accurate and meas is not None and hasattr(meas, "extra_ink_hues"):
+        extra_hues = meas.extra_ink_hues() or None
+        black_l = float(meas.lab_relative[meas.black_index, 0])
     # colprof default computes the source surface through the source
     # profile's perceptual/saturation intent per table; -nP/-nS switch that
     # table's source to the colorimetric intent (xicc: noptop/nostos).
     perc_int = 1 if getattr(settings, "perc_src_colorimetric", False) else 0
     sat_int = 1 if getattr(settings, "sat_src_colorimetric", False) else 2
     dst = destination_surface_lab(model, ink_limit=ink_limit,
-                                  is_additive=is_additive)
+                                  is_additive=is_additive, dense=accurate)
     node_lab = codec.node_lab(grid)
     inv_curves = b2a_mod.inverse_curves(model.curves)
     out: dict[str, bytes | str] = {}
     mappers: dict[str, object] = {}
+    mapped_by_tag: dict[str, np.ndarray] = {}
 
     # First choice: the ported gammap — colprof's own gamut-mapping
     # algorithm running natively in the engine (Jab appearance space,
@@ -770,9 +828,10 @@ def build_mapped_b2a(model: ForwardModel, meas: Ti3Measurement, grid: int,
     # colprof's own B2A tables, whereas the native helper re-inverts with the
     # engine's model and so only approximates them. The helper is reserved for
     # CMY+N, where colprof refuses. Fast mode always uses the Python mapper.
+    # Maximum-accuracy mode renders through the same bit-exact route.
     _n = getattr(model, "n_channels", 0) if model is not None else 0
-    _bitexact_le4 = (getattr(settings, "gammap_mode", "fast") == "argyll"
-                     and 0 < _n <= 4)
+    _bitexact_le4 = (getattr(settings, "gammap_mode", "fast")
+                     in ("argyll", "accurate") and 0 < _n <= 4)
     if settings is not None and model is not None and not _bitexact_le4:
         try:
             from workflow.profile_engine.gammap_port.wire import (
@@ -820,12 +879,14 @@ def build_mapped_b2a(model: ForwardModel, meas: Ti3Measurement, grid: int,
             continue
         mappers[tag] = mapper
         mapped = mapper.map_lab(node_lab)
+        mapped_by_tag[tag] = mapped
         # Mapped targets land inside (or at) the gamut surface, so per-node
         # inversion converges everywhere — the boundary-cell kink that makes
         # the colorimetric table need a global refit doesn't arise here.
         dev, _residual = b2a_mod.invert_to_device(
             model, mapped, channel_letters=channel_letters,
-            is_additive=is_additive, ink_limit=ink_limit)
+            is_additive=is_additive, ink_limit=ink_limit,
+            accurate=accurate, extra_hues=extra_hues, black_l=black_l)
         shaped = model.shape_device(dev)
         out[tag] = icw.make_mft2(
             3, model.n_channels, grid, icw.device_to_u16(shaped),
@@ -841,6 +902,14 @@ def build_mapped_b2a(model: ForwardModel, meas: Ti3Measurement, grid: int,
             mapper = mappers.get(b2a_tag)
             if mapper is None:
                 continue
+            if getattr(mapper, "expensive_map", False) \
+                    and b2a_tag in mapped_by_tag:
+                # The bit-exact helper rebuilds Argyll's new_gammap on every
+                # call; the fixed-point inversion below would run it ~20
+                # times per intent. A displacement warp fitted to the node
+                # mapping already computed answers the inverse queries at
+                # the same fidelity the inversion itself has.
+                mapper = WarpMapper(node_lab, mapped_by_tag[b2a_tag])
             inv_lab = invert_mapping(mapper, model.clut_lab())
             out[a2b_tag] = icw.make_mft2(
                 n, 3, a2b_grid, codec.encode(inv_lab),

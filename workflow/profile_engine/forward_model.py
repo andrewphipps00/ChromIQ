@@ -84,8 +84,8 @@ def _interp_weights(p01: np.ndarray, grid: int, n: int
 
 
 def _grid_solve(w: np.ndarray, cols: np.ndarray, y: np.ndarray, grid: int,
-                n: int, lam: float, iters: int, x0: np.ndarray | None = None
-                ) -> np.ndarray:
+                n: int, lam: float, iters: int, x0: np.ndarray | None = None,
+                rtol: float = 0.0) -> np.ndarray:
     """CG on (WᵀW + λ LᵀL + εI) x = Wᵀy — the maths-A normal equations."""
     ng = grid ** n
     shape = (grid,) * n + (-1,)
@@ -132,13 +132,16 @@ def _grid_solve(w: np.ndarray, cols: np.ndarray, y: np.ndarray, grid: int,
     r = b - amul(x)
     p = r.copy()
     rs = (r * r).sum()
+    # rtol: optional relative termination (squared-residual scale) — the
+    # absolute 1e-9 over/under-iterates depending on problem magnitude.
+    stop = max(1e-9, rtol * rs)
     for _ in range(iters):
         ap = amul(p)
         alpha = rs / max((p * ap).sum(), 1e-12)
         x += alpha * p
         r -= alpha * ap
         rs2 = (r * r).sum()
-        if rs2 < 1e-9:
+        if rs2 < stop:
             break
         p = r + (rs2 / rs) * p
         rs = rs2
@@ -148,41 +151,62 @@ def _grid_solve(w: np.ndarray, cols: np.ndarray, y: np.ndarray, grid: int,
 def fit_forward_model(device: np.ndarray, lab: np.ndarray, *, grid: int,
                       lam: float = 0.01, cg_iters: int = 800,
                       curve_knots: int = 21, curve_rounds: int = 2,
+                      weights: np.ndarray | None = None,
+                      cg_rtol: float = 0.0,
                       ) -> ForwardModel:
     """Alternating curves ⇄ grid fit of device → Lab.
 
     ``curve_rounds = 0`` gives the bare grid fit (P1 baseline); each round
     refits every channel's monotone shaper by coordinate descent against the
     current grid, then re-solves the grid with the shaped inputs.
+    ``weights``: optional per-patch weights (robust IRLS in maximum-accuracy
+    mode) — they scale the least-squares rows, not the smoothing.
     """
     npts, n = device.shape
     curves = np.tile(np.linspace(0.0, 1.0, curve_knots), (n, 1))
     model = ForwardModel(grid=grid, n_channels=n,
                          nodes=np.zeros((grid ** n, 3)), curves=curves)
+    sw = None if weights is None else np.sqrt(np.asarray(weights, float))
 
     def solve(x0: np.ndarray | None = None) -> None:
         shaped = model.shape_device(device)
         w, cols = _interp_weights(shaped, grid, n)
-        model.nodes = _grid_solve(w, cols, lab, grid, n, lam, cg_iters, x0)
+        if sw is None:
+            model.nodes = _grid_solve(w, cols, lab, grid, n, lam, cg_iters,
+                                      x0, rtol=cg_rtol)
+        else:
+            model.nodes = _grid_solve(w * sw[:, None], cols,
+                                      lab * sw[:, None], grid, n, lam,
+                                      cg_iters, x0, rtol=cg_rtol)
 
     solve()
     xp = np.linspace(0.0, 1.0, curve_knots)
     for _ in range(curve_rounds):
         for c in range(n):
-            _refit_curve(model, device, lab, c, xp)
+            _refit_curve(model, device, lab, c, xp, weights=weights)
         solve(model.nodes)
     return model
 
 
 def _refit_curve(model: ForwardModel, device: np.ndarray, lab: np.ndarray,
-                 channel: int, xp: np.ndarray) -> None:
+                 channel: int, xp: np.ndarray,
+                 weights: np.ndarray | None = None) -> None:
     """Coordinate descent on one channel's shaper knots (monotone-projected)."""
     knots = model.curves[channel].copy()
     k = len(knots)
+    n = model.n_channels
+    # The other channels' shaped coordinates don't change during this
+    # channel's refit — precompute them once and only re-interpolate the
+    # channel under test per trial (identical numbers, ~n× fewer interps).
+    shaped = model.shape_device(device)
+    wts = None if weights is None else np.asarray(weights, float)
 
     def err(kn: np.ndarray) -> float:
         model.curves[channel] = kn
-        return float(((model.predict(device) - lab) ** 2).sum())
+        shaped[:, channel] = np.interp(device[:, channel], xp, kn)
+        w, cols = _interp_weights(shaped, model.grid, n)
+        r2 = (((w[:, :, None] * model.nodes[cols]).sum(1) - lab) ** 2).sum(1)
+        return float(r2.sum() if wts is None else (wts * r2).sum())
 
     base = err(knots)
     step = 1.0 / (k - 1) / 2.0

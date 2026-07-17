@@ -95,6 +95,69 @@ class Ti3Measurement:
     def black_index(self) -> int:
         return int(np.argmin(self.xyz[:, 1]))
 
+    # ------------------------------------------------------------------
+    # Maximum-accuracy mode helpers (gammap_mode "accurate")
+    # ------------------------------------------------------------------
+    def average_endpoints(self) -> None:
+        """Replace the single-patch white/black with duplicate averages.
+
+        ``white_index`` picks the *brightest* of the duplicate device-white
+        patches, which biases the media white high by ~σ·√(2·ln k) for k
+        noisy repeats (max-selection bias); the black analogously low. The
+        white is the Bradford adaptation basis for every patch, so the bias
+        tilts the whole relative colorimetry. Averaging the duplicates is
+        unbiased and reduces the noise by √k. Called by the builder in
+        maximum-accuracy mode; a chart with a single white patch is
+        unchanged.
+        """
+        target = 1.0 if self.is_additive else 0.0
+        dist = np.abs(self.device - target).sum(1)
+        near = np.flatnonzero(dist <= dist.min() + 1e-9)
+        white = self.xyz[near].mean(0)
+        bi = int(np.argmin(self.xyz[:, 1]))
+        same = np.flatnonzero(
+            np.abs(self.device - self.device[bi]).sum(1) <= 1e-9)
+        black = self.xyz[same].mean(0)
+        for attr in ("xyz_relative", "lab_relative",
+                     "media_white_xyz", "black_xyz"):
+            self.__dict__.pop(attr, None)
+        self.__dict__["media_white_xyz"] = white
+        self.__dict__["black_xyz"] = black
+
+    @cached_property
+    def black_xyz(self) -> np.ndarray:
+        """XYZ of the darkest patch (the ``bkpt`` tag content)."""
+        return self.xyz[self.black_index].copy()
+
+    def extra_ink_hues(self) -> dict[str, float]:
+        """Measured Lab hue angle per extra ink (channels beyond CMYK).
+
+        The hue is read from the chart's own solid-ink patches (channel
+        ≥ 85%, everything else ≤ 5%) instead of assumed constants — a
+        printer whose orange leans red still gets its hue gate centred on
+        the ink it actually has. Channels without a usable solid patch are
+        absent from the result (callers fall back to the anchor table).
+        """
+        hues: dict[str, float] = {}
+        if self.n_channels <= 4:
+            return hues
+        lab = self.lab_relative
+        for ch in range(4, self.n_channels):
+            others = np.delete(self.device, ch, axis=1)
+            solid = (self.device[:, ch] >= 0.85) & (others.max(1) <= 0.05)
+            if not solid.any():
+                continue
+            rows = lab[solid]
+            chroma = np.hypot(rows[:, 1], rows[:, 2])
+            good = chroma > 10.0
+            if not good.any():
+                continue
+            a = float(rows[good, 1].mean())
+            b = float(rows[good, 2].mean())
+            hues[self.channel_letters[ch]] = float(
+                np.degrees(np.arctan2(b, a)) % 360.0)
+        return hues
+
     @cached_property
     def xyz_relative(self) -> np.ndarray:
         """Measured XYZ Bradford-adapted media-white → D50 (Y=100 scale)."""

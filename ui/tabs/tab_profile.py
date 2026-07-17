@@ -522,6 +522,10 @@ class TabProfile(QWidget):
             # inverse tables, so it can only approximate colprof, never match it
             # byte-for-byte. The engine (+ the bundled gamut helper) is reserved
             # for CMY+N above, where colprof refuses.
+            # "accurate" must NOT take this shortcut: its improved pipeline
+            # (averaged endpoints, CV smoothing, robust fit, …) lives in the
+            # engine — the engine then matches colprof's *rendering* through
+            # the oracle while keeping the improved colorimetric tables.
             if str(self._settings.get("gammap_mode", "fast")) == "argyll":
                 self._log.appendPlainText(tr(
                     "[INFO] Bit-exact gamut mapping on a standard (≤4-ink) "

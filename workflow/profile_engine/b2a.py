@@ -41,46 +41,141 @@ def lab_grid(grid: int) -> np.ndarray:
 
 
 def _model_jacobian(model: ForwardModel, d: np.ndarray, free: np.ndarray,
-                    f0: np.ndarray, h: float = 1e-3) -> np.ndarray:
-    """(N, 3, n_free) finite-difference Jacobian over the free channels."""
+                    f0: np.ndarray, h: float = 1e-3,
+                    boundary_fd: bool = False) -> np.ndarray:
+    """(N, 3, n_free) finite-difference Jacobian over the free channels.
+
+    ``boundary_fd``: with the plain forward difference, a channel pinned at
+    1.0 clips to itself — its Jacobian column is exactly zero and GN can
+    never move it off the face (the root cause of the near-saturation
+    stalls the retry pass patches over). Switching to a backward difference
+    within ``h`` of the top face keeps the column alive everywhere.
+    """
     jac = np.empty((len(d), 3, len(free)))
     for j, ch in enumerate(free):
         dp = d.copy()
-        dp[:, ch] = np.clip(dp[:, ch] + h, 0.0, 1.0)
-        jac[:, :, j] = (model.predict(dp) - f0) / h
+        if boundary_fd:
+            sign = np.where(d[:, ch] + h <= 1.0, 1.0, -1.0)
+            dp[:, ch] = np.clip(d[:, ch] + sign * h, 0.0, 1.0)
+            jac[:, :, j] = (model.predict(dp) - f0) / (sign * h)[:, None]
+        else:
+            dp[:, ch] = np.clip(dp[:, ch] + h, 0.0, 1.0)
+            jac[:, :, j] = (model.predict(dp) - f0) / h
     return jac
+
+
+def project_tac(d: np.ndarray, limit: float) -> np.ndarray:
+    """Euclidean projection of device rows onto ``{x ≥ 0, Σx ≤ limit}``.
+
+    The parity path enforces the total ink limit by scaling the whole
+    vector, which lightens K along with everything else — exactly in the
+    deep shadows where the limit binds. The Euclidean projection subtracts
+    a common amount instead (clipped at zero), which preserves the dense
+    channels and lands strictly closer to the unconstrained solution.
+    Rows already under the limit are returned unchanged.
+    """
+    d = d.copy()
+    over = d.sum(1) > limit
+    if not over.any():
+        return d
+    sub = np.clip(d[over], 0.0, None)
+    u = np.sort(sub, axis=1)[:, ::-1]
+    css = np.cumsum(u, axis=1) - limit
+    ks = np.arange(1, sub.shape[1] + 1)[None, :]
+    rho = (u - css / ks > 0).sum(1)
+    theta = css[np.arange(len(sub)), rho - 1] / rho
+    d[over] = np.maximum(sub - theta[:, None], 0.0)
+    return d
+
+
+# Hue-preserving clip weights: error components in the (ΔL*, ΔC*, Δh)
+# frame of the target colour. Hue errors are punished hardest — a clipped
+# saturated colour should lose chroma, not change colour family.
+_CLIP_W_L, _CLIP_W_C, _CLIP_W_H = 1.0, 0.7, 3.0
+
+
+def _hue_weight_matrices(target: np.ndarray) -> np.ndarray:
+    """(N,3,3) weighting matrices W so ``W·ΔLab`` measures the error in a
+    hue-preserving norm at each target (identity for near-neutrals, where
+    there is no hue to preserve)."""
+    n = len(target)
+    chroma = np.hypot(target[:, 1], target[:, 2])
+    h = np.arctan2(target[:, 2], target[:, 1])
+    ch, sh = np.cos(h), np.sin(h)
+    w = np.zeros((n, 3, 3))
+    w[:, 0, 0] = _CLIP_W_L
+    w[:, 1, 1] = _CLIP_W_C * ch * ch + _CLIP_W_H * sh * sh
+    w[:, 1, 2] = (_CLIP_W_C - _CLIP_W_H) * ch * sh
+    w[:, 2, 1] = w[:, 1, 2]
+    w[:, 2, 2] = _CLIP_W_C * sh * sh + _CLIP_W_H * ch * ch
+    neutral = chroma < 5.0
+    w[neutral] = np.eye(3)
+    return w
 
 
 def _gauss_newton(model: ForwardModel, target: np.ndarray, seed: np.ndarray,
                   free: np.ndarray, *, iters: int, damping: float,
                   ink_limit: float | None,
                   prior: np.ndarray | None = None,
-                  prior_w: np.ndarray | None = None) -> np.ndarray:
+                  prior_w: np.ndarray | None = None,
+                  boundary_fd: bool = False,
+                  tac_projection: bool = False,
+                  err_weights: np.ndarray | None = None) -> np.ndarray:
     """Batched damped Gauss–Newton on the free channels.
 
     ``prior``/``prior_w``: optional per-channel soft targets over the free
     channels (the ink policy). They enter as extra least-squares rows, so
     colour accuracy always dominates — the priors only resolve the surplus
     degrees of freedom that n > 3 devices have.
+    ``err_weights``: optional (N,3,3) matrices reshaping the Lab error norm
+    per point (the hue-preserving clip); ``boundary_fd``/``tac_projection``
+    are the maximum-accuracy levers (see :func:`_model_jacobian` /
+    :func:`project_tac`).
     """
     d = seed.copy()
     eye = np.eye(len(free))
     for _ in range(iters):
         f0 = model.predict(d)
         r = target - f0
-        jac = _model_jacobian(model, d, free, f0)
+        jac = _model_jacobian(model, d, free, f0, boundary_fd=boundary_fd)
+        if err_weights is not None:
+            r = np.einsum("nij,nj->ni", err_weights, r)
+            jac = np.einsum("nij,njk->nik", err_weights, jac)
         jtj = np.einsum("nik,nil->nkl", jac, jac) + damping * eye[None]
         jtr = np.einsum("nik,ni->nk", jac, r)
         if prior is not None:
             jtj += np.einsum("nk,kl->nkl", prior_w, eye)
             jtr += prior_w * (prior - d[:, free])
         step = np.linalg.solve(jtj, jtr[..., None])[..., 0]
+        if boundary_fd:
+            # Active-set guard: with the boundary-aware Jacobian a pinned
+            # channel keeps a live column, so an *unreachable* target keeps
+            # pulling it outward — the clipped joint step then distorts the
+            # other channels. Drop the outward-pointing pinned columns and
+            # re-solve; channels wanting to move inward stay free (that is
+            # the stall fix).
+            eps = 1e-9
+            bad = (((d[:, free] >= 1.0 - eps) & (step > 0))
+                   | ((d[:, free] <= eps) & (step < 0)))
+            if bad.any():
+                jac_m = jac * (~bad)[:, None, :]
+                jtj = (np.einsum("nik,nil->nkl", jac_m, jac_m)
+                       + damping * eye[None])
+                jtr = np.einsum("nik,ni->nk", jac_m, r)
+                if prior is not None:
+                    jtj += np.einsum("nk,kl->nkl", prior_w, eye)
+                    jtr += prior_w * (prior - d[:, free])
+                step = np.linalg.solve(jtj, jtr[..., None])[..., 0]
+                step[bad] = 0.0
         d[:, free] = np.clip(d[:, free] + step, 0.0, 1.0)
         if ink_limit is not None:
-            total = d.sum(1)
-            over = total > ink_limit
-            if over.any():
-                d[over] *= (ink_limit / total[over])[:, None]
+            if tac_projection:
+                d = project_tac(d, ink_limit)
+            else:
+                total = d.sum(1)
+                over = total > ink_limit
+                if over.any():
+                    d[over] *= (ink_limit / total[over])[:, None]
     return d
 
 
@@ -109,9 +204,15 @@ def k_locus(lightness: np.ndarray, *, k_max: float = 1.0,
 
 
 def extra_ink_amount(target: np.ndarray, letter: str, *,
-                     power: float = 3.0) -> np.ndarray:
-    """Hue-gated participation 0..1 for an extra ink at each Lab target."""
-    hue = _EXTRA_INK_HUE.get(letter)
+                     power: float = 3.0,
+                     hue_override: float | None = None) -> np.ndarray:
+    """Hue-gated participation 0..1 for an extra ink at each Lab target.
+
+    ``hue_override``: the ink's *measured* hue from the chart's own solid
+    patch (maximum-accuracy mode) — the anchor table is only a fallback.
+    """
+    hue = hue_override if hue_override is not None \
+        else _EXTRA_INK_HUE.get(letter)
     if hue is None:
         return np.zeros(len(target))
     chroma = np.hypot(target[:, 1], target[:, 2])
@@ -129,12 +230,23 @@ def invert_to_device(model: ForwardModel, target: np.ndarray, *,
                      seed_res: int = 7,
                      seed: np.ndarray | None = None,
                      k_prior: dict | None = None,
+                     accurate: bool = False,
+                     extra_hues: dict[str, float] | None = None,
+                     black_l: float | None = None,
                      ) -> tuple[np.ndarray, np.ndarray]:
     """Invert the forward model at ``target`` Lab points.
 
     Returns ``(device, residual_de)`` — residual is the remaining ΔE76 after
     convergence, i.e. ~0 in gamut and the clamp distance outside (this array
     *is* the ``gamt`` table content).
+
+    ``accurate`` (maximum-accuracy mode) switches on the boundary-aware
+    Jacobian, Euclidean TAC projection and a hue-preserving re-clip of the
+    out-of-gamut nodes; ``extra_hues`` carries the measured extra-ink hues.
+    ``black_l`` anchors the GCR locus's full-black point on the printer's
+    *measured* black L* — the in-gamut K separation then converges to the
+    max-density clamp at the gamut boundary instead of jumping between
+    metameric alternatives on adjacent nodes (shadow banding).
     """
     n = model.n_channels
     limit = None if ink_limit is None or is_additive else ink_limit / 100.0
@@ -159,22 +271,40 @@ def invert_to_device(model: ForwardModel, target: np.ndarray, *,
             prior[:, 3] = np.interp(target[:, 0], k_prior["l_axis"],
                                     k_prior["k_curve"])
             prior_w[:, 3] = 0.15
+        elif accurate and black_l is not None:
+            prior[:, 3] = k_locus(target[:, 0],
+                                  l_full=max(float(black_l), 2.0))
+            prior_w[:, 3] = 0.05
         else:
             prior[:, 3] = k_locus(target[:, 0])
             prior_w[:, 3] = 0.05
+        if accurate:
+            # Dark neutrals have the widest metameric freedom — a weak K
+            # prior lets adjacent B2A nodes settle on different K/CMY splits
+            # (visible as banding in shadow gradients). Firm the K prior up
+            # where that freedom lives and fade it out with chroma, so the
+            # gamut-relevant saturated targets keep their full freedom.
+            chroma_t = np.hypot(target[:, 1], target[:, 2])
+            neutral_w = np.exp(-(chroma_t / 25.0) ** 2)
+            prior_w[:, 3] = np.maximum(prior_w[:, 3], 2.0 * neutral_w)
+        hues = extra_hues or {}
         for ch in range(4, n):
-            prior[:, ch] = extra_ink_amount(target, channel_letters[ch])
+            prior[:, ch] = extra_ink_amount(
+                target, channel_letters[ch],
+                hue_override=hues.get(channel_letters[ch]))
             prior_w[:, ch] = 0.05
         d[:, 3:] = prior[:, 3:]
 
+    gn_kw = dict(boundary_fd=accurate, tac_projection=accurate)
     d = _gauss_newton(model, target, d, free, iters=iters, damping=damping,
-                      ink_limit=limit, prior=prior, prior_w=prior_w)
+                      ink_limit=limit, prior=prior, prior_w=prior_w, **gn_kw)
     residual = np.linalg.norm(model.predict(d) - target, axis=1)
 
     # Projected GN can stall with a channel pinned against the wrong cube
     # face (measured: ~20% of near-saturation targets, while a good seed
-    # never fails). Retry the failures from a dense-cloud nearest seed and
-    # keep whichever lands closer.
+    # never fails; the boundary-aware Jacobian removes the root cause but
+    # the retry stays as a safety net). Retry the failures from a
+    # dense-cloud nearest seed and keep whichever lands closer.
     retry = residual > 0.5
     if retry.any():
         rng = np.random.default_rng(1234)
@@ -195,12 +325,27 @@ def invert_to_device(model: ForwardModel, target: np.ndarray, *,
             model, sub, seeds2, free, iters=iters, damping=damping,
             ink_limit=limit,
             prior=None if prior is None else prior[retry],
-            prior_w=None if prior_w is None else prior_w[retry])
+            prior_w=None if prior_w is None else prior_w[retry], **gn_kw)
         res_retry = np.linalg.norm(model.predict(d_retry) - sub, axis=1)
         better = res_retry < residual[retry]
         idx = np.flatnonzero(retry)[better]
         d[idx] = d_retry[better]
         residual[idx] = res_retry[better]
+
+    if accurate:
+        # Hue-preserving clip: nodes that stay out of gamut are re-clipped
+        # under a norm that punishes hue errors hardest — a clipped
+        # saturated colour loses chroma instead of changing colour family.
+        # The *residual* keeps the nearest-clip distance from above: the
+        # ``gamt`` tag encodes distance-from-gamut and must stay metric.
+        oog = residual > 1.0
+        if oog.any():
+            wm = _hue_weight_matrices(target[oog])
+            d[oog] = _gauss_newton(
+                model, target[oog], d[oog], free, iters=8, damping=damping,
+                ink_limit=limit, err_weights=wm,
+                prior=None if prior is None else prior[oog],
+                prior_w=None if prior_w is None else prior_w[oog], **gn_kw)
     return d, residual
 
 
@@ -209,6 +354,9 @@ def build_b2a_clut(model: ForwardModel, grid: int, *,
                    ink_limit: float | None = None,
                    node_lab: np.ndarray | None = None,
                    k_prior: dict | None = None,
+                   accurate: bool = False,
+                   extra_hues: dict[str, float] | None = None,
+                   black_l: float | None = None,
                    ) -> tuple[np.ndarray, np.ndarray]:
     """Full B2A CLUT: (grid³, n) device fractions + (grid³,) OOG distance.
 
@@ -218,7 +366,8 @@ def build_b2a_clut(model: ForwardModel, grid: int, *,
     target = lab_grid(grid) if node_lab is None else node_lab
     return invert_to_device(model, target, channel_letters=channel_letters,
                             is_additive=is_additive, ink_limit=ink_limit,
-                            k_prior=k_prior)
+                            k_prior=k_prior, accurate=accurate,
+                            extra_hues=extra_hues, black_l=black_l)
 
 
 def refine_b2a_clut(model: ForwardModel, dev_clut: np.ndarray,
@@ -230,7 +379,10 @@ def refine_b2a_clut(model: ForwardModel, dev_clut: np.ndarray,
                     deep_oog: float = 5.0,
                     node_lab: np.ndarray | None = None,
                     lab_to01=None,
-                    k_prior: dict | None = None) -> np.ndarray:
+                    k_prior: dict | None = None,
+                    accurate: bool = False,
+                    extra_hues: dict[str, float] | None = None,
+                    black_l: float | None = None) -> np.ndarray:
     """Refit the B2A CLUT as one smooth field over exact inverse samples.
 
     Every random device point is an *exact* sample of the inverse function
@@ -278,7 +430,8 @@ def refine_b2a_clut(model: ForwardModel, dev_clut: np.ndarray,
         lab_targets = model.predict(probe_dev)
         dev_s, res_s = invert_to_device(
             model, lab_targets, channel_letters=channel_letters or [],
-            is_additive=is_additive, ink_limit=ink_limit, k_prior=k_prior)
+            is_additive=is_additive, ink_limit=ink_limit, k_prior=k_prior,
+            accurate=accurate, extra_hues=extra_hues, black_l=black_l)
         keep = res_s < 1.0
         dev_s, lab_s = dev_s[keep], lab_targets[keep]
 
@@ -335,7 +488,10 @@ def refine_b2a_clut(model: ForwardModel, dev_clut: np.ndarray,
         raw = model.unshape_device(refined)
         total = raw.sum(1)
         over = total > limit
-        raw[over] *= (limit / total[over])[:, None]
+        if accurate:
+            raw = project_tac(raw, limit)
+        else:
+            raw[over] *= (limit / total[over])[:, None]
         refined[over] = model.shape_device(raw[over])
     return refined
 

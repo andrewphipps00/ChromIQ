@@ -116,11 +116,17 @@ class BuildSettings:
     timestamp: datetime | None = None        # fixed → byte-reproducible
     progress: Callable[[str], None] | None = None
     # Gamut-mapping engine for the perceptual/saturation B2A tables:
-    #   "fast"   — ChromIQ's built-in Python mapper (colprof's algorithm,
-    #              validated against Argyll; a few seconds).
-    #   "argyll" — the bundled chromiq-gammap helper running Argyll's REAL
-    #              gamut mapper (bit-exact; a little slower). Falls back to
-    #              "fast" if the helper binary isn't present.
+    #   "fast"     — ChromIQ's built-in Python mapper (colprof's algorithm,
+    #                validated against Argyll; a few seconds).
+    #   "argyll"   — the bundled chromiq-gammap helper running Argyll's REAL
+    #                gamut mapper (bit-exact; a little slower). Falls back to
+    #                "fast" if the helper binary isn't present.
+    #   "accurate" — bit-exact mapping PLUS the maximum-accuracy pipeline:
+    #                duplicate-patch white/black averaging, cross-validated
+    #                smoothing, outlier-robust fitting, boundary-aware
+    #                inversion, measured extra-ink hues, Euclidean ink-limit
+    #                projection, hue-preserving clipping and a denser
+    #                multi-ink gamut shell. Slower; same option surface.
     gammap_mode: str = "fast"
     # Internal lever for the Python mapper: exact triangle geometry vs the
     # fast sampled-table surfaces. Retained for reference/fallback; not
@@ -142,6 +148,9 @@ class BuildResult:
     perceptual_distinct: bool
     model: ForwardModel
     measurement: Ti3Measurement
+    # ΔE2000 companions to the ΔE76 fit statistics (perceptually weighted).
+    fit_median_de00: float = 0.0
+    fit_p95_de00: float = 0.0
 
 
 def _emit(settings: BuildSettings, msg: str) -> None:
@@ -253,6 +262,17 @@ def _build_profile_impl(ti3_path: Path | str, out_path: Path | str,
         meas.xyz[meas.white_index] *= float(settings.wp_scale)
         _invalidate_bases(meas)
 
+    accurate = settings.gammap_mode == "accurate"
+    if accurate:
+        # Maximum-accuracy mode: unbiased media white/black from duplicate
+        # patches (after the -R/-u mutations above), measured extra-ink hues.
+        meas.average_endpoints()
+    extra_hues = meas.extra_ink_hues() if accurate else None
+    # Measured black L* anchors the GCR locus in accurate mode (shadow-
+    # banding fix); None keeps the parity locus.
+    black_l = float(meas.lab_relative[meas.black_index, 0]) \
+        if accurate else None
+
     a2b_grid = (_A2B_GRID_34 if n >= 4 else _A2B_GRID_23)[q]
     b2a_grid = _B2A_GRID[qb]
     # Keep very high-dimensional grids inside sane memory: grid**n nodes.
@@ -266,8 +286,23 @@ def _build_profile_impl(ti3_path: Path | str, out_path: Path | str,
     # wants proportionally-squared more smoothing).
     lam = _fit_lambda(a2b_grid) * (max(settings.smoothing, 0.01) / 0.5) ** 2
     curve_rounds = 0 if settings.no_input_shaper else settings.curve_rounds
-    model = fit_forward_model(meas.device, meas.lab_relative, grid=a2b_grid,
-                              lam=lam, curve_rounds=curve_rounds)
+    if accurate:
+        from workflow.profile_engine.accuracy import fit_forward_model_accurate
+        model, outliers, _lam_used = fit_forward_model_accurate(
+            meas.device, meas.lab_relative, grid=a2b_grid, base_lam=lam,
+            curve_rounds=curve_rounds,
+            progress=lambda m: _emit(settings, m))
+        if len(outliers):
+            ids = ", ".join(str(i + 1) for i in outliers[:8])
+            more = "" if len(outliers) <= 8 else f" (+{len(outliers) - 8})"
+            _emit(settings,
+                  f"{len(outliers)} patch(es) disagree strongly with the "
+                  f"model and were down-weighted — rows {ids}{more}. "
+                  f"Consider remeasuring them.")
+    else:
+        model = fit_forward_model(meas.device, meas.lab_relative,
+                                  grid=a2b_grid, lam=lam,
+                                  curve_rounds=curve_rounds)
     fit_res = np.linalg.norm(model.predict(meas.device) - meas.lab_relative,
                              axis=1)
 
@@ -290,14 +325,16 @@ def _build_profile_impl(ti3_path: Path | str, out_path: Path | str,
     dev_clut, residual = b2a_mod.build_b2a_clut(
         model, b2a_grid, channel_letters=meas.channel_letters,
         is_additive=meas.is_additive, ink_limit=ink_limit,
-        node_lab=node_lab, k_prior=anchor)
+        node_lab=node_lab, k_prior=anchor, accurate=accurate,
+        extra_hues=extra_hues, black_l=black_l)
     # refine_b2a_clut returns *curve-space* values — written straight into
     # the CLUT, with the inverse shaper curves as B2A output tables.
     dev_clut_shaped = b2a_mod.refine_b2a_clut(
         model, dev_clut, residual, b2a_grid,
         ink_limit=ink_limit, is_additive=meas.is_additive,
         channel_letters=meas.channel_letters,
-        node_lab=node_lab, lab_to01=codec.lab_to01, k_prior=anchor)
+        node_lab=node_lab, lab_to01=codec.lab_to01, k_prior=anchor,
+        accurate=accurate, extra_hues=extra_hues, black_l=black_l)
     in_gamut = residual <= 1.0
 
     _emit(settings, "Writing the profile…")
@@ -359,7 +396,7 @@ def _build_profile_impl(ti3_path: Path | str, out_path: Path | str,
         manufacturer=settings.manufacturer,
         model=settings.model,
         wtpt=tuple(meas.media_white_xyz / 100.0),
-        bkpt=tuple(meas.xyz[meas.black_index] / 100.0),
+        bkpt=tuple(meas.black_xyz / 100.0),
         targ=meas.text if settings.embed_ti3 else None,
         pcs=codec.signature,
         rendering_intent=_Z_INTENT.get(settings.z_default_intent, 1),
@@ -369,6 +406,12 @@ def _build_profile_impl(ti3_path: Path | str, out_path: Path | str,
     icw.write_profile(out, spec, luts)
 
     gam_res = residual[in_gamut]
+    from workflow.profile_engine.metrics import delta_e_2000
+    fit_res00 = delta_e_2000(model.predict(meas.device), meas.lab_relative)
+    if accurate:
+        _emit(settings, f"Model fit (perceptual ΔE2000): median "
+                        f"{float(np.median(fit_res00)):.2f}, 95% "
+                        f"{float(np.percentile(fit_res00, 95)):.2f}.")
     return BuildResult(
         icc_path=out, n_channels=n, color_rep=meas.color_rep,
         a2b_grid=a2b_grid, b2a_grid=b2a_grid,
@@ -377,11 +420,14 @@ def _build_profile_impl(ti3_path: Path | str, out_path: Path | str,
         b2a_ingamut_median_de=float(np.median(gam_res)) if len(gam_res) else 0.0,
         oog_fraction=float(1.0 - in_gamut.mean()),
         perceptual_distinct=perceptual_distinct,
-        model=model, measurement=meas)
+        model=model, measurement=meas,
+        fit_median_de00=float(np.median(fit_res00)),
+        fit_p95_de00=float(np.percentile(fit_res00, 95)))
 
 
 def _invalidate_bases(meas: Ti3Measurement) -> None:
     """Drop the cached colour bases after mutating ``meas.xyz``."""
     for attr in ("xyz_relative", "lab_relative", "lab_absolute",
-                 "media_white_xyz", "white_index", "black_index"):
+                 "media_white_xyz", "white_index", "black_index",
+                 "black_xyz"):
         meas.__dict__.pop(attr, None)

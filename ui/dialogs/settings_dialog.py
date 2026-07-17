@@ -555,26 +555,23 @@ class SettingsDialog(QDialog):
         self._gammap_mode_combo = NoScrollComboBox(self)
         self._gammap_mode_combo.addItem(tr("Fast"), "fast")
         self._gammap_mode_combo.addItem(tr("Bit-exact"), "argyll")
+        self._gammap_mode_combo.addItem(tr("Maximum accuracy"), "accurate")
         self._gammap_mode_combo.setSizeAdjustPolicy(
             NoScrollComboBox.SizeAdjustPolicy.AdjustToContents)
         gammap_mode_tip = TooltipButton(
-            tr("Gamut mapping"),
-            tr("This chooses how the profile engine builds the perceptual "
-            "and saturation renderings of your profile — the parts that "
-            "gently squeeze the full range of an image into the smaller "
-            "range your printer and paper can actually reproduce. (It has "
-            "no effect on a plain colour-accurate profile; it only shapes "
-            "those two renderings.)\n\n"
-            "Both choices give you a correct, ready-to-use profile for any "
-            "printer ChromIQ supports, including 6-ink and beyond. The "
-            "difference is which software does the colour-squeezing:\n\n"
+            tr("Accuracy"),
+            tr("This chooses how much work the profile engine puts into "
+            "colour accuracy when it builds your profile. All three "
+            "choices read the same measurement, understand the same "
+            "options and give you a correct, ready-to-use profile for any "
+            "printer ChromIQ supports, including 6-ink and beyond.\n\n"
             "  • Fast (built-in) — ChromIQ's own, careful re-creation of "
             "Argyll's gamut-mapping maths, running right inside the app. It "
             "finishes in a few seconds and, in our testing, is visually "
             "indistinguishable from the exact result. This is the best "
             "choice for everyday use.\n\n"
             "  • Bit-exact (Argyll's engine) — gives you ArgyllCMS's real "
-            "result, not a re-creation of it:\n"
+            "colour rendering, not a re-creation of it:\n"
             "       – For a normal RGB or CMYK printer, ChromIQ builds the "
             "profile with ArgyllCMS colprof itself, so it is identical to "
             "what Argyll would produce on its own.\n"
@@ -585,15 +582,29 @@ class SettingsDialog(QDialog):
             "there too.\n"
             "     It takes a little longer — expect up to a minute or two, "
             "and somewhat more for multi-ink printers.\n\n"
-            "Which should you pick? Fast is perfect for everyday work and "
-            "quicker. Choose Bit-exact when you want the most faithful "
-            "possible result — for example when you are comparing engines "
-            "closely, or simply prefer maximum faithfulness and don't mind "
-            "the short wait. Either way the colours are correct; this is "
-            "about exactness versus build speed, not about one being right "
-            "and the other wrong.\n\n"
+            "  • Maximum accuracy — the bit-exact rendering plus everything "
+            "ChromIQ can do to squeeze the most out of your measurement:\n"
+            "       – the paper's white and black are averaged over "
+            "duplicate patches instead of trusting a single reading,\n"
+            "       – the model's smoothing is tuned by testing it against "
+            "held-back patches from your own chart,\n"
+            "       – patches that look like misreads are detected, "
+            "down-weighted and reported so you can remeasure them,\n"
+            "       – extra inks (orange, green, violet …) are anchored on "
+            "their measured colour instead of an assumed one,\n"
+            "       – colours the printer cannot reach lose saturation "
+            "instead of drifting to a different colour family, and dark "
+            "shadows keep their depth when the total ink limit steps in.\n"
+            "     Expect the build to take several minutes longer, "
+            "especially at the higher quality settings.\n\n"
+            "Which should you pick? Fast for everyday work. Bit-exact when "
+            "you want Argyll's exact rendering. Maximum accuracy when the "
+            "last bit of measured accuracy matters more than build time — "
+            "for example fine-art printing on an expensive paper. Whatever "
+            "you choose, verify the profile with a test print before you "
+            "rely on it.\n\n"
             "Building a profile is a one-time step per paper and printer, "
-            "so even the slower choice only costs you those extra minutes "
+            "so even the slowest choice only costs you those extra minutes "
             "once."),
             self,
             min_width=680,
@@ -601,7 +612,7 @@ class SettingsDialog(QDialog):
         self._gammap_mode_cell = gammap_mode_cell = QWidget(self)
         _gm_row = QHBoxLayout(gammap_mode_cell)
         _gm_row.setContentsMargins(0, 0, 0, 0)
-        _gm_row.addWidget(QLabel(tr("Gamut mapping"), self))
+        _gm_row.addWidget(QLabel(tr("Accuracy"), self))
         _gm_row.addWidget(self._gammap_mode_combo)
         _gm_row.addStretch()
         _gm_row.addWidget(gammap_mode_tip)
