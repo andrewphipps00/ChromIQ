@@ -272,3 +272,44 @@ def fit_forward_model_accurate(
         # writer, inversion seeds and statistics stay unchanged.
         model.nodes = space.ucs_to_lab(model.nodes)
     return model, outliers, lam
+
+
+def fit_forward_model_accurate_challenged(
+        device: np.ndarray, lab: np.ndarray, *, grid: int, base_lam: float,
+        curve_rounds: int = 2, ucs: bool = False,
+        progress: Callable[[str], None] | None = None,
+        ) -> tuple[ForwardModel, np.ndarray, float, str]:
+    """Noise-aware fitting behind a noise DETECTOR (issue #123).
+
+    The gp pipeline wins on noisy measurements and is neutral-to-slightly
+    negative on clean ones, so it must not run unconditionally. A held-out
+    exam cannot referee this one: the noisier the chart — exactly where gp
+    helps — the noisier the held-out answers, and the exam goes blind
+    (measured: at 3× instrument noise the exam called a tie while ground
+    truth showed a clear gp win). Instead the chart itself is diagnosed:
+    the duplicate white/black patches yield the measurement's actual
+    scatter, compared against the published healthy-instrument amplitudes
+    (:mod:`gp`'s reference constants). Only when the chart scatters at
+    ≥ 2× the healthy level does the noise-aware fit engage — on a clean
+    measurement it stands aside and the result is bit-identical to the
+    standard fit. Deterministic, explainable, and free (no extra fits).
+
+    Returns ``(model, outliers, lam, winner)`` with winner ``"noise"`` or
+    ``"standard"``.
+    """
+    from workflow.profile_engine.gp import (_DEFAULT_DARK, _DEFAULT_FLOOR,
+                                            estimate_xyz_noise)
+    floor, dark = estimate_xyz_noise(device, lab)
+    ratio = (floor + dark) / (_DEFAULT_FLOOR + _DEFAULT_DARK)
+    win = ratio >= 2.0
+    if progress is not None:
+        if win:
+            progress(f"Repeated patches scatter {ratio:.1f}× the healthy-"
+                     f"instrument level — noise handling engaged.")
+        else:
+            progress("Measurement noise is low on this chart — keeping "
+                     "the standard fit (noise handling stands aside).")
+    model, outliers, lam = fit_forward_model_accurate(
+        device, lab, grid=grid, base_lam=base_lam,
+        curve_rounds=curve_rounds, ucs=ucs, gp=win, progress=progress)
+    return model, outliers, lam, ("noise" if win else "standard")

@@ -164,6 +164,8 @@ class ProfileParams:
     # active, so the colprof path never sees them set.
     spectral_physics: bool = False
     icc_version: str = "2"
+    noise_model: bool = False
+    render_style: str = "argyll"
 
 
 class ProfileBuilder:

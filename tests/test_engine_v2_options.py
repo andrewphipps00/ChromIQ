@@ -295,3 +295,96 @@ def test_settings_close_refreshes_engine_rows():
     from ui.main_window import MainWindow
     src = inspect.getsource(MainWindow._open_settings)
     assert "_refresh_engine_rows" in src
+
+
+# ---------------------------------------------------------------------------
+# Noise handling behind the held-out exam (only-win-or-do-nothing)
+# ---------------------------------------------------------------------------
+
+def _noisy_chart(tmp_path, noise_scale):
+    from benchmarks.synthetic import SyntheticPrinter
+    p = SyntheticPrinter("SX", "CMYK", tac=280.0, noise_scale=noise_scale)
+    chart = make_chart(p, 600)
+    xyz, refl, _ = measure(p, chart, seed=41)
+    return write_ti3(tmp_path / f"n{noise_scale:g}.ti3", p, chart, xyz, refl), p
+
+
+def test_noise_option_stands_aside_on_clean_chart(tmp_path):
+    ti3, p = _noisy_chart(tmp_path, 1.0)
+    lines = []
+    from datetime import datetime, timezone
+    ts = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    a, b = tmp_path / "a.icc", tmp_path / "b.icc"
+    build_profile(ti3, a, BuildSettings(quality="l", gammap_mode="accurate",
+                                        ink_limit=280.0, timestamp=ts,
+                                        description="x"))
+    build_profile(ti3, b, BuildSettings(quality="l", gammap_mode="accurate",
+                                        ink_limit=280.0, timestamp=ts,
+                                        description="x", noise_model=True,
+                                        progress=lines.append))
+    assert any("stands aside" in ln for ln in lines)
+    # Only-win-or-do-nothing: on a clean chart the profile is IDENTICAL.
+    assert a.read_bytes() == b.read_bytes()
+    # …but the confidence map still arrives (reporting-only extra).
+    assert any("Confidence map" in ln for ln in lines)
+
+
+def test_noise_option_wins_on_noisy_chart(tmp_path):
+    ti3, p = _noisy_chart(tmp_path, 4.0)
+    lines = []
+    build_profile(ti3, tmp_path / "n.icc",
+                  BuildSettings(quality="l", gammap_mode="accurate",
+                                ink_limit=280.0, noise_model=True,
+                                progress=lines.append))
+    assert any("noise handling engaged" in ln for ln in lines)
+
+
+def test_render_style_option_uses_bijective_mapper(tmp_path):
+    p = PRINTERS["S1"]
+    chart = make_chart(p, 450)
+    xyz, refl, _ = measure(p, chart)
+    ti3 = write_ti3(tmp_path / "c.ti3", p, chart, xyz, refl)
+    lines = []
+    res = build_profile(ti3, tmp_path / "c.icc", BuildSettings(
+        quality="l", gammap_mode="accurate", render_style="bijective",
+        source_gamut="assets/profiles/ClayRGB1998.icm",
+        progress=lines.append))
+    assert res.perceptual_distinct
+    assert any("bijective CAM16-UCS" in ln for ln in lines)
+
+
+def test_new_rows_persistence_roundtrip(tmp_path, qtbot):
+    tab = _tab(tmp_path, profile_engine_beta=True, gammap_mode="accurate")
+    qtbot.addWidget(tab)
+    tab._m_noise_cb.setChecked(True)
+    tab._m_render_combo.setCurrentIndex(
+        tab._m_render_combo.findData("bijective"))
+    params = tab._collect_manual_profile()
+    assert params.noise_model is True
+    assert params.render_style == "bijective"
+    data = tab._m_collect_preset_data()
+    assert data["noise_model"] is True
+    assert data["render_style"] == "bijective"
+    tab._m_noise_cb.setChecked(False)
+    tab._m_render_combo.setCurrentIndex(tab._m_render_combo.findData("argyll"))
+    tab._m_apply_preset_data(data)
+    assert tab._m_noise_cb.isChecked()
+    assert tab._m_render_combo.currentData() == "bijective"
+    tab._stack.setCurrentIndex(1)
+    tab._on_save_defaults()
+    assert bool(tab._settings.get("manual2_colprof_noise")) is True
+    assert tab._settings.get("manual2_colprof_render") == "bijective"
+    # Muted outside accurate mode.
+    tab._settings.set("gammap_mode", "fast")
+    params = tab._collect_manual_profile()
+    assert params.noise_model is False and params.render_style == "argyll"
+
+
+def test_settings_from_params_maps_noise_and_render():
+    from workflow.engine_builder import settings_from_params
+    from workflow.profile_builder import ProfileParams
+    from pathlib import Path
+    p = ProfileParams(ti3_path=Path("x.ti3"), noise_model=True,
+                      render_style="bijective")
+    s = settings_from_params(p)
+    assert s.noise_model is True and s.render_style == "bijective"

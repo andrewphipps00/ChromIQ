@@ -868,8 +868,10 @@ def build_mapped_b2a(model: ForwardModel, meas: Ti3Measurement, grid: int,
     # perceptual/saturation intents — explicit -t/-T selections keep the
     # Argyll behaviour. No oracle/port fitting needed at all then.
     render2 = (accurate
-               and "render2" in getattr(settings, "engine_candidates",
-                                        frozenset())
+               and ("render2" in getattr(settings, "engine_candidates",
+                                         frozenset())
+                    or getattr(settings, "render_style", "argyll")
+                    == "bijective")
                and not getattr(settings, "perc_intent", "")
                and not getattr(settings, "sat_intent", ""))
     if render2 and progress:

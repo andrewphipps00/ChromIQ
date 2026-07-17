@@ -210,6 +210,8 @@ def settings_from_params(params: "ProfileParams") -> BuildSettings:
                         if params.k_rule == "p" else None),
         spectral_physics=params.spectral_physics,
         icc_version=params.icc_version or "2",
+        noise_model=params.noise_model,
+        render_style=params.render_style or "argyll",
         z_attributes="".join(filter(None, [
             params.z_surface, params.z_media_type, params.z_polarity,
             params.z_color_mode])),

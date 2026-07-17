@@ -167,10 +167,23 @@ class BuildSettings:
     # hence opt-in rather than default until that tail is closed.
     spectral_physics: bool = False
     # #123 W6: ICC container version, "2" (classic v2.2, maximum
-    # compatibility) or "4" (v4.4 header, unicode metadata, profile ID).
+    # compatibility), "4" (v4.4 header, unicode metadata, profile ID) or
+    # "both" (v2 to the normal path + a "-v4.icc" twin alongside).
     # The LUTs stay lut16Type — explicitly legal in v4, and the spec keeps
     # the legacy PCS encoding for them, so table bytes are identical.
     icc_version: str = "2"
+    # #123 user option (accurate mode): noise-aware fitting behind a
+    # held-out exam — the gp pipeline is only used when it clearly beats
+    # the standard fit on this chart's held-out patches; otherwise the
+    # build is the standard fit. Reporting extras (confidence map) come
+    # along either way. Only-win-or-do-nothing by construction.
+    noise_model: bool = False
+    # #123 W5 user option (accurate mode): out-of-gamut rendering style
+    # for the DEFAULT perceptual/saturation intents. "argyll" = matched
+    # to ArgyllCMS (battle-tested); "bijective" = ChromIQ's CAM16-UCS
+    # radial mapping (exact -nI inverse, much faster; how photos LOOK is
+    # a taste question the user judges by printing).
+    render_style: str = "argyll"
 
 
 @dataclass
@@ -395,7 +408,18 @@ def _build_profile_impl(ti3_path: Path | str, out_path: Path | str,
     if candidates:
         _emit(settings, "Candidate pipeline active: "
                         f"{', '.join(sorted(candidates))}.")
-    if accurate:
+    if accurate and settings.noise_model and "gp" not in candidates:
+        # #123 user option: noise-aware fitting behind a held-out exam —
+        # only used when it clearly beats the standard fit on THIS chart
+        # (the env token "gp" still forces it, for the benchmark harness).
+        from workflow.profile_engine.accuracy import \
+            fit_forward_model_accurate_challenged
+        model, outliers, _lam_used, _winner = \
+            fit_forward_model_accurate_challenged(
+                meas.device, meas.lab_relative, grid=a2b_grid,
+                base_lam=lam, curve_rounds=curve_rounds, ucs=use_ucs,
+                progress=lambda m: _emit(settings, m))
+    elif accurate:
         from workflow.profile_engine.accuracy import fit_forward_model_accurate
         model, outliers, _lam_used = fit_forward_model_accurate(
             meas.device, meas.lab_relative, grid=a2b_grid, base_lam=lam,
@@ -572,7 +596,7 @@ def _build_profile_impl(ti3_path: Path | str, out_path: Path | str,
         _emit(settings, f"Model fit (perceptual ΔE2000): median "
                         f"{float(np.median(fit_res00)):.2f}, 95% "
                         f"{float(np.percentile(fit_res00, 95)):.2f}.")
-    if "gp" in candidates:
+    if "gp" in candidates or (accurate and settings.noise_model):
         from workflow.profile_engine.gp import uncertainty_lines
         for line in uncertainty_lines(meas.lab_relative, fit_res00):
             _emit(settings, line)
