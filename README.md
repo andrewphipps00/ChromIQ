@@ -218,6 +218,11 @@ lets you resume later with one click).
 Review the `colprof` settings and click **Build Profile**. Then **Install
 Profile** copies it to the right place for your OS so every app can use it. To
 iterate, click **← Use as Pre-conditioning** to seed an improved second pass.
+In Manual mode you can also control **black generation** (`-k`/`-K`) — how much
+black ink the profile uses for dark colours — with every rule explained in
+plain language. An optional, **experimental** ChromIQ-built profile engine
+(off by default) can build here too — see
+[the experimental engine](#experimental-the-chromiq-profile-engine-beta) below.
 
 ### Step 5 — Check & Refine
 Click **Analyse Profile Quality** to get per-patch ΔE accuracy scores. The 3D
@@ -330,6 +335,48 @@ a System/Auto mode that follows your OS live). Click any step to expand it.
   an existing profile to iteratively improve it, with automatic archiving.
 - **CIECAM02 viewing-condition presets** for correct perceptual/saturation tables.
 - **ICC media attributes** (`colprof -Z`) embedded in the profile header.
+- **Black generation control** (`colprof -k`/`-K`) in Build Profile → Manual —
+  choose how much black ink your profiles use for dark colours, from pure CMY
+  to maximum black, with plain-language explanations of every rule.
+
+### Experimental: the ChromIQ profile engine (beta)
+
+> [!WARNING]
+> Everything in this section is **experimental** and **off by default**. The
+> engine is validated against a synthetic test bench, ~2 000 automated tests,
+> and ArgyllCMS's own tools — but **not yet on real multi-ink printing
+> hardware**. Argyll `colprof` remains the default and the reference. If you
+> try the engine, always print a test image before trusting a profile for
+> real work.
+
+ChromIQ now contains its **own profile builder** next to Argyll `colprof`.
+Enable it under **Settings → Beta → ChromIQ profile engine** and the Build
+Profile tab lets you build with either — same measurements, same options, so
+you can build both and compare. Why it exists: `colprof` cannot build profiles
+for printers with more than four inks; the engine can — CMYK plus orange,
+green, violet, light inks — closing the whole multi-ink loop inside ChromIQ
+(design the chart, print, measure, build, refine).
+
+- **Three accuracy modes** (Settings → Beta): **Fast** (ChromIQ's own
+  implementation of colprof's method, validated against Argyll), **Bit-exact**
+  (real colprof for standard printers; a bundled helper runs Argyll's genuine
+  gamut-mapping code for multi-ink ones), and **Maximum accuracy** (averages
+  your repeated white/black patches, picks smoothing for your specific chart
+  by cross-validation, survives a smudged patch and names it so you can
+  remeasure, and honours the total-ink limit in the least-damaging way).
+- **ICC v4 output** — build **v2** (classic, most compatible), **v4** (modern,
+  with a built-in integrity checksum), or **Both**. Engine-only for now.
+- **Spectral physics model** — a physical model of ink-on-paper for multi-ink
+  printers with spectral measurements. It must beat the standard model on your
+  own chart before it is used, so it can only win or change nothing.
+- **Measurement noise handling** — diagnoses how noisy your measurement really
+  was and only engages when the chart is measurably noisy; on a clean chart
+  your profile is bit-for-bit unchanged.
+- **Out-of-gamut rendering** — keep the Argyll-matched rendering (default) or
+  try ChromIQ's mathematically-exact alternative and judge the look on your
+  own prints.
+- **Check & Refine for multi-ink profiles** — the accuracy check works on
+  6-ink and larger profiles, which stock `profcheck` won't read.
 
 ### Quality check & 3D gamut viewer
 - **`profcheck` integration** with per-patch ΔE statistics and quality grading.
@@ -381,6 +428,19 @@ double up:
 - **White & black anchors** and **Fill remaining gaps** — guarantee pure
   paper-white/black, then scatter extra patches into the sparsest parts of the
   set up to a target count.
+
+**Ink devices, not just RGB.** The *New chart* and *Add patches* windows can
+design charts in **CMYK or CMYK + extra inks** (added as removable chips), with
+a first-class ink limit and an optional preconditioning profile. Ink-native
+colour sets — per-ink ramps, ink-pair and ink-triple overprints, a rich-black
+ramp, grey-balance rings re-centred on your printer's measured neutral — join
+the look-based sets above, which translate into real ink values through the
+preconditioning profile. Charts save as **true separated TIFFs** (each ink a
+named channel, opens correctly in Photoshop and RIPs) with an optional
+press-ready **vector-PDF** export, and the preview gains a **per-ink
+inspector**. The chart tools themselves are fully supported; note that
+*building a profile* from charts with more than four inks requires the
+[experimental profile engine](#experimental-the-chromiq-profile-engine-beta).
 
 ### Tools menu — standalone utilities
 The masthead **Tools** button opens a menu of conversions and checks you can run
