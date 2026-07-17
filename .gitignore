@@ -62,3 +62,4 @@ assets/app_icon.ico
 # Argyll sources under native/argyll/; never checked in.
 /native/chromiq-gammap
 /native/chromiq-gammap.exe
+.bench/
