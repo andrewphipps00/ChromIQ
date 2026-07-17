@@ -71,6 +71,19 @@ _CLUT_ONLY_MSG = ("Output profile can only be a cLUT algorithm — "
                   "devices (Argyll colprof refuses them for printer "
                   "measurements too).")
 
+# Issue #123 candidate tokens (dark-launched maximum-accuracy successors).
+# Unknown tokens in CHROMIQ_ENGINE_NEXT are ignored with a log line.
+ENGINE_CANDIDATE_TOKENS = frozenset(
+    {"ucs", "joint-sep", "gp", "spectral", "render2"})
+
+
+def candidates_from_env(env_value: str | None) -> frozenset:
+    """Parse ``CHROMIQ_ENGINE_NEXT`` (comma-separated candidate tokens)."""
+    if not env_value:
+        return frozenset()
+    return frozenset(t.strip() for t in env_value.split(",")
+                     if t.strip() in ENGINE_CANDIDATE_TOKENS)
+
 
 def _fit_lambda(grid: int) -> float:
     if grid in _FIT_LAMBDA_BY_GRID:
@@ -140,6 +153,12 @@ class BuildSettings:
     # fast sampled-table surfaces. Retained for reference/fallback; not
     # exposed in the UI now that "argyll" is the accurate option.
     gammap_exact_geometry: bool = False
+    # Issue #123: candidate improvements to the maximum-accuracy pipeline,
+    # dark-launched behind tokens (see ENGINE_CANDIDATE_TOKENS). Hidden —
+    # resolved from the CHROMIQ_ENGINE_NEXT environment variable, never
+    # from the UI; the empty set is bit-for-bit the shipped accurate mode.
+    # Only honoured when gammap_mode == "accurate".
+    engine_candidates: frozenset = frozenset()
 
 
 @dataclass
@@ -159,6 +178,8 @@ class BuildResult:
     # ΔE2000 companions to the ΔE76 fit statistics (perceptually weighted).
     fit_median_de00: float = 0.0
     fit_p95_de00: float = 0.0
+    # Patch rows flagged as likely misreads (accurate mode; 0-based).
+    outlier_rows: tuple = ()
 
 
 def _emit(settings: BuildSettings, msg: str) -> None:
@@ -298,6 +319,9 @@ def _build_profile_impl(ti3_path: Path | str, out_path: Path | str,
         _invalidate_bases(meas)
 
     accurate = settings.gammap_mode == "accurate"
+    # #123 candidates only ever modify the maximum-accuracy pipeline.
+    candidates = frozenset(settings.engine_candidates) if accurate \
+        else frozenset()
     if accurate:
         # Maximum-accuracy mode: unbiased media white/black from duplicate
         # patches (after the -R/-u mutations above), measured extra-ink hues.
@@ -328,6 +352,7 @@ def _build_profile_impl(ti3_path: Path | str, out_path: Path | str,
     # wants proportionally-squared more smoothing).
     lam = _fit_lambda(a2b_grid) * (max(settings.smoothing, 0.01) / 0.5) ** 2
     curve_rounds = 0 if settings.no_input_shaper else settings.curve_rounds
+    outliers = np.array([], dtype=int)
     if accurate:
         from workflow.profile_engine.accuracy import fit_forward_model_accurate
         model, outliers, _lam_used = fit_forward_model_accurate(
@@ -471,7 +496,8 @@ def _build_profile_impl(ti3_path: Path | str, out_path: Path | str,
         perceptual_distinct=perceptual_distinct,
         model=model, measurement=meas,
         fit_median_de00=float(np.median(fit_res00)),
-        fit_p95_de00=float(np.percentile(fit_res00, 95)))
+        fit_p95_de00=float(np.percentile(fit_res00, 95)),
+        outlier_rows=tuple(int(i) for i in outliers))
 
 
 def _invalidate_bases(meas: Ti3Measurement) -> None:

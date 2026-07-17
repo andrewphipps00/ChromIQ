@@ -320,6 +320,16 @@ class EngineProfileBuilder:
                     "argyll_bin_path", "/Applications/Argyll/bin")
                 settings.gammap_mode = str(
                     self._app_settings.get("gammap_mode", "fast"))
+            if settings.gammap_mode == "accurate":
+                # #123: dark-launched candidate pipeline, env-only.
+                import os
+                from workflow.profile_engine.builder import \
+                    candidates_from_env
+                settings.engine_candidates = candidates_from_env(
+                    os.environ.get("CHROMIQ_ENGINE_NEXT"))
+                if settings.engine_candidates:
+                    on_line(tr("Engine candidates active: {names}").format(
+                        names=", ".join(sorted(settings.engine_candidates))))
         except (ExtraArgsError, ValueError) as exc:
             self._last_error = str(exc)
             on_line(tr("[ERROR] {msg}").format(msg=exc))
