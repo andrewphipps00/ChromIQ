@@ -10,6 +10,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest
 
+from tests.argyll_env import argyll_tool
 from ui.tabs.tab_measure import engine_strip_rects_from_sidecar
 
 
@@ -99,8 +100,8 @@ def test_missing_file(tmp_path: Path):
 @pytest.mark.parametrize("draw_indicators", [True, False])
 def test_real_engine_chart_roundtrip(tmp_path: Path, draw_indicators: bool):
     """Build a real engine chart and confirm the highlighter geometry matches."""
-    targen = Path("/Applications/Argyll/bin/targen")
-    if not targen.exists():
+    targen = argyll_tool("targen")
+    if targen is None:
         pytest.skip("ArgyllCMS targen not available")
     import subprocess
     from workflow.layout_engine import chart, geometry, instruments, papers

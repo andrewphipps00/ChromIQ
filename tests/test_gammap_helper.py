@@ -19,6 +19,7 @@ import pytest
 
 from PyQt6.QtCore import QSettings
 
+from tests.argyll_env import argyll_tool
 from workflow.profile_engine import gammap_helper as gh
 
 
@@ -138,8 +139,9 @@ def test_argyll_cmyk_falls_back_to_cloud(monkeypatch, tmp_path):
 
     meas = type("M", (), {"color_rep": "CMYK_XYZ", "n_channels": 4})()
     settings = type("S", (), {"quality": "l"})()
+    # bin_dir is never dereferenced here — _iccgamut_to is stubbed above.
     out = wire.fit_gammap_argyll_mappers(
-        model, meas, clay, settings, Path("/Applications/Argyll/bin"),
+        model, meas, clay, settings, Path("unused-bin-dir"),
         is_additive=False, ink_limit=None)
 
     assert set(out) == {"B2A0", "B2A2"}
@@ -227,19 +229,17 @@ def test_settings_dialog_offers_maximum_accuracy_mode():
 
 
 @pytest.mark.skipif(
-    _built_binary() is None or shutil.which(
-        "iccgamut", path="/Applications/Argyll/bin") is None,
+    _built_binary() is None or argyll_tool("iccgamut") is None,
     reason="needs a compiled chromiq-gammap and iccgamut",
 )
 def test_helper_roundtrip_dst_gam(tmp_path):
     """Grey stays neutral through Argyll's real mapper (sanity, not exactness)."""
-    bin_dir = Path("/Applications/Argyll/bin")
     profiles = Path(__file__).resolve().parent.parent / "assets/profiles"
 
     def _gam(name: str, stem: str) -> Path:
         work = tmp_path / (stem + Path(name).suffix)
         shutil.copy(profiles / name, work)
-        subprocess.run([str(bin_dir / "iccgamut"), "-ff", "-ir", "-pj", "-d10",
+        subprocess.run([argyll_tool("iccgamut"), "-ff", "-ir", "-pj", "-d10",
                         work.name], cwd=tmp_path, check=True, capture_output=True)
         gam = work.with_suffix(".gam")
         assert gam.exists()

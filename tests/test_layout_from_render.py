@@ -15,11 +15,12 @@ import pytest
 pytest.importorskip("PyQt6")
 from PyQt6.QtWidgets import QApplication  # noqa: E402
 
+from tests.argyll_env import argyll_tool  # noqa: E402
 from workflow.layout_from_render import (RenderGeometryError,  # noqa: E402
                                          derive_layout_from_render)
 
 ASSETS = Path(__file__).resolve().parent.parent / "assets/charts/pharmacist"
-ARGYLL_TARGEN = Path("/Applications/Argyll/bin/targen")
+ARGYLL_TARGEN = argyll_tool("targen")
 
 
 @pytest.fixture(scope="module")
@@ -31,7 +32,7 @@ def qapp():
 def engine_chart(qapp, tmp_path_factory):
     """A small real engine chart (in-process build, no Argyll binaries needed
     beyond targen for the patch set) with its exact geometry sidecar."""
-    if not ARGYLL_TARGEN.exists():
+    if ARGYLL_TARGEN is None:
         pytest.skip("Argyll targen not installed")
     d = tmp_path_factory.mktemp("render")
     subprocess.run([str(ARGYLL_TARGEN), "-d2", "-f60", str(d / "t")],

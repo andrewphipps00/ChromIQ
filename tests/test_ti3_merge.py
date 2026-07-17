@@ -18,6 +18,7 @@ from pathlib import Path
 import pytest
 
 from core.resource_path import argyll_binary
+from tests.argyll_env import argyll_tool
 from workflow.ti3_merge import Ti3MergeError, merge_preconditioning
 
 
@@ -66,11 +67,7 @@ def _read_data(path):
 
 def _find_average() -> str | None:
     """Locate the ArgyllCMS 'average' binary, or None if it isn't installed."""
-    name = argyll_binary("average")
-    default = Path("/Applications/Argyll/bin") / name
-    if default.exists():
-        return str(default)
-    return shutil.which(name)
+    return argyll_tool("average") or shutil.which(argyll_binary("average"))
 
 
 _AVERAGE = _find_average()
@@ -86,7 +83,8 @@ def test_merge_concatenates_both_sets(tmp_path):
     pre = _write(tmp_path, "preconditioning.ti3", "iRGB_XYZ", _data_rows(1, 2, "B"))
     out = tmp_path / "merged.ti3"
 
-    total = merge_preconditioning(fresh, pre, out, bin_dir="/Applications/Argyll/bin")
+    total = merge_preconditioning(fresh, pre, out,
+                                  bin_dir=str(Path(_AVERAGE).parent))
     assert total == 5
     assert out.exists()
     assert len(_read_data(out)) == 5

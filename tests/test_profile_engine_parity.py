@@ -18,21 +18,21 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+from tests.argyll_env import argyll_tool
 from workflow.profile_engine import BuildSettings, build_profile
 
-ARGYLL = Path("/Applications/Argyll/bin")
 FIXTURE = Path(
     "/Users/Basti/Dropbox/Apps/Farbe/argyll-printer-profiler-v.1.3.8/"
     "Created_Profiles/ET8550_EpsPremSG_i1Studio_AdobeRGB_Mar26/"
     "ET8550_EpsPremSG_i1Studio_AdobeRGB_Mar26.ti3")
 
 pytestmark = pytest.mark.skipif(
-    not (ARGYLL / "xicclu").exists() or not FIXTURE.exists(),
+    argyll_tool("xicclu") is None or not FIXTURE.exists(),
     reason="parity fixture / Argyll not available")
 
 
 def _xicclu(args: list[str], icc: Path, text: str) -> np.ndarray:
-    r = subprocess.run([str(ARGYLL / "xicclu"), *args, "-pl", str(icc)],
+    r = subprocess.run([argyll_tool("xicclu"), *args, "-pl", str(icc)],
                        input=text, capture_output=True, text=True)
     assert r.returncode == 0, r.stderr[:300]
     return np.array([[float(v) for v in ln.rsplit("->", 1)[1].split()[:3]]
@@ -47,7 +47,7 @@ def engine_icc(tmp_path_factory) -> Path:
 
 
 def test_profcheck_within_colprof_band(engine_icc):
-    r = subprocess.run([str(ARGYLL / "profcheck"), "-k", str(FIXTURE),
+    r = subprocess.run([argyll_tool("profcheck"), "-k", str(FIXTURE),
                         str(engine_icc)], capture_output=True, text=True)
     assert r.returncode == 0
     avg = float(r.stdout.split("avg. = ")[1].split(",")[0])

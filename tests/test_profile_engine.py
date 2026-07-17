@@ -21,13 +21,15 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+from core.resource_path import argyll_binary
+from tests.argyll_env import argyll_bin_dir, argyll_tool
 from workflow.profile_engine import BuildSettings, build_profile
 from workflow.profile_engine import icc_writer as icw
 from workflow.profile_engine.ti3_data import (Ti3Error, read_ti3,
                                               split_rep_letters, xyz_to_lab)
 
-ARGYLL = Path("/Applications/Argyll/bin")
-needs_argyll = pytest.mark.skipif(not (ARGYLL / "xicclu").exists(),
+ARGYLL = argyll_bin_dir()
+needs_argyll = pytest.mark.skipif(argyll_tool("xicclu") is None,
                                   reason="ArgyllCMS binaries not installed")
 
 
@@ -266,7 +268,7 @@ def argyll_profiles(tmp_path_factory):
 @needs_argyll
 def test_iccdump_parses_both(argyll_profiles):
     for icc in argyll_profiles.values():
-        r = subprocess.run([str(ARGYLL / "iccdump"), str(icc)],
+        r = subprocess.run([str(ARGYLL / argyll_binary("iccdump")), str(icc)],
                            capture_output=True, text=True)
         assert r.returncode == 0
         assert "Lut16" in r.stdout
@@ -278,7 +280,7 @@ def test_xicclu_matches_model_rgb(argyll_profiles):
     rng = np.random.default_rng(5)
     dev = rng.uniform(0, 1, (40, 3))
     inp = "\n".join(" ".join(f"{v:.6f}" for v in row) for row in dev)
-    r = subprocess.run([str(ARGYLL / "xicclu"), "-ff", "-ir", "-pl",
+    r = subprocess.run([str(ARGYLL / argyll_binary("xicclu")), "-ff", "-ir", "-pl",
                         str(argyll_profiles["iRGB"])],
                        input=inp, capture_output=True, text=True)
     assert r.returncode == 0
@@ -299,7 +301,7 @@ def test_xicclu_matches_model_rgb(argyll_profiles):
 @needs_argyll
 def test_icclu_6clr_forward(argyll_profiles):
     """>4 channels: icclu (pure table walk) must accept the profile."""
-    r = subprocess.run([str(ARGYLL / "icclu"), "-ff", "-ir",
+    r = subprocess.run([str(ARGYLL / argyll_binary("icclu")), "-ff", "-ir",
                         str(argyll_profiles["CMYKOG"])],
                        input="0.2 0.1 0.4 0.0 0.3 0.0",
                        capture_output=True, text=True)
@@ -309,7 +311,7 @@ def test_icclu_6clr_forward(argyll_profiles):
 @needs_argyll
 def test_gamut_tag_lookup(argyll_profiles):
     """xicclu -fg works even on the 6CLR profile (gamt is 3-input)."""
-    r = subprocess.run([str(ARGYLL / "xicclu"), "-fg", "-pl",
+    r = subprocess.run([str(ARGYLL / argyll_binary("xicclu")), "-fg", "-pl",
                         str(argyll_profiles["CMYKOG"])],
                        input="50 0 0", capture_output=True, text=True)
     assert r.returncode == 0 and "->" in r.stdout

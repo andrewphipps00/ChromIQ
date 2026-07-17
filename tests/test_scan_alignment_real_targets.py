@@ -32,12 +32,13 @@ import pytest
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from core.settings import DEFAULTS                              # noqa: E402
+from tests.argyll_env import argyll_tool                        # noqa: E402
 from workflow.cht_parser import parse_cht                       # noqa: E402
 from workflow.placement_probe import dense_placement_agreement   # noqa: E402
 
 LIMIT = float(DEFAULTS["scanner_flank_limit"])
 MIN_BOXES = int(DEFAULTS["scanner_flank_min_boxes"])
-ARGYLL = Path("/Applications/Argyll/bin/scanin")
+ARGYLL = argyll_tool("scanin")
 
 _CANDIDATES = [
     Path(os.environ["CHROMIQ_IT8_SCANS"]) if os.environ.get("CHROMIQ_IT8_SCANS")
@@ -75,7 +76,7 @@ class _Box:
 
 def _scanin_placement(tif: Path, cht: Path, ref: Path):
     """(boxes, aligned corners, fiducial quad, expected XYZ) from scanin."""
-    if not ARGYLL.is_file():
+    if ARGYLL is None:
         pytest.skip("ArgyllCMS scanin not installed")
     r = subprocess.run([str(ARGYLL), "-v", "-dipn", tif.name, str(cht), str(ref)],
                        capture_output=True, text=True, cwd=tif.parent)

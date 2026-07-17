@@ -15,6 +15,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+from tests.argyll_env import argyll_ref_dir
 from tests.test_profile_engine import write_synth_ti3
 from workflow.profile_engine import BuildSettings, build_profile
 from workflow.profile_engine.forward_model import fit_forward_model
@@ -119,8 +120,9 @@ def test_build_with_unreadable_gamut_source_fails_honestly(tmp_path):
 
 def test_live_sampled_source_matches_analytic_srgb():
     """The littleCMS live path agrees with the analytic surface (same gamut)."""
-    srgb_icm = Path("/Applications/Argyll/ref/sRGB.icm")
-    if not srgb_icm.exists():
+    ref = argyll_ref_dir()
+    srgb_icm = ref / "sRGB.icm" if ref else None
+    if srgb_icm is None or not srgb_icm.exists():
         pytest.skip("Argyll ref profiles not installed")
     from workflow.profile_engine.gamut_map import source_surface_from_profile
     analytic = source_surface_lab("srgb")

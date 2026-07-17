@@ -10,10 +10,11 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+from tests.argyll_env import argyll_bin_dir, argyll_tool
 from workflow import ti2_relayout as R
 
-ARGYLL_BIN = Path("/Applications/Argyll/bin")
-_HAS_ARGYLL = (ARGYLL_BIN / "printtarg").exists()
+ARGYLL_BIN = argyll_bin_dir()
+_HAS_ARGYLL = argyll_tool("printtarg") is not None
 argyll = pytest.mark.skipif(not _HAS_ARGYLL, reason="ArgyllCMS not installed")
 
 

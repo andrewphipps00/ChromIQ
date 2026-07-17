@@ -18,12 +18,14 @@ from pathlib import Path
 
 import pytest
 
+from tests.argyll_env import argyll_bin_dir, argyll_tool
+
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 # Argyll is needed only by the applied-editor-chart tests that stage a real
 # chart; they skip cleanly when it isn't installed.
-_BIN_DIR = Path("/Applications/Argyll/bin")
-_HAS_ARGYLL = (_BIN_DIR / "printtarg").exists()
+_BIN_DIR = argyll_bin_dir()
+_HAS_ARGYLL = argyll_tool("printtarg") is not None
 
 # A minimal but valid .ti2 the layout editor can lay out (mirrors the fixture
 # in test_ti2_relayout.py).

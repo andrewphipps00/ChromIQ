@@ -18,6 +18,8 @@ from pathlib import Path
 
 import pytest
 
+from core.resource_path import argyll_binary
+from tests.argyll_env import argyll_tool
 from workflow.colverify_runner import (
     ColverifyParams,
     ColverifyRunner,
@@ -247,10 +249,7 @@ def test_interpret_explains_gamut_skip():
 # --- end-to-end (binary required) -----------------------------------------
 
 def _argyll_bin(name: str) -> str | None:
-    cand = Path("/Applications/Argyll/bin") / name
-    if cand.exists():
-        return str(cand)
-    return shutil.which(name)
+    return argyll_tool(name) or shutil.which(argyll_binary(name))
 
 
 def test_colverify_zero_error_self_compare(tmp_path: Path):

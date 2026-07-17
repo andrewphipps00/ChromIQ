@@ -26,6 +26,7 @@ from data.patch_db import (
     i1_defaults_from_preset,
     query_patches,
 )
+from tests.argyll_env import argyll_bin_dir, argyll_tool
 from workflow.chart_creator import (
     ChartCreator,
     ChartParams,
@@ -95,6 +96,12 @@ class _MockFileManager:
 
 class _MockSettings:
     def get(self, key, default=None):
+        # Mirror a configured app: the real Argyll wherever it lives on this
+        # machine, not the product's macOS-shaped fallback default.
+        if key == "argyll_bin_path":
+            found = argyll_bin_dir()
+            if found is not None:
+                return str(found)
         return default
 
 
@@ -683,15 +690,12 @@ def test_stamp_uses_targen_line_for_fresh_chart(tmp_path: Path, monkeypatch) -> 
 # --- scanner .cht geometry capture at creation (#8) ----------------------------
 import subprocess as _subprocess
 
-from core.resource_path import argyll_binary as _argyll_binary
-
-_ARGYLL_BIN = Path("/Applications/Argyll/bin")
-_PRINTTARG = _ARGYLL_BIN / _argyll_binary("printtarg")
-_TARGEN = _ARGYLL_BIN / _argyll_binary("targen")
+_PRINTTARG = argyll_tool("printtarg")
+_TARGEN = argyll_tool("targen")
 
 
-@pytest.mark.skipif(not (_PRINTTARG.exists() and _TARGEN.exists()),
-                    reason="ArgyllCMS not installed at /Applications/Argyll/bin")
+@pytest.mark.skipif(_PRINTTARG is None or _TARGEN is None,
+                    reason="ArgyllCMS not installed")
 def test_capture_scanner_cht_stores_verified_printtarg_geometry(tmp_path: Path) -> None:
     """_capture_scanner_cht re-runs printtarg -s and, after checking the captured
     patch locs against the chart's own .ti2, stores the .cht page(s) in

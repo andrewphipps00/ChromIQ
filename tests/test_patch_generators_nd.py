@@ -12,13 +12,14 @@ from pathlib import Path
 
 import pytest
 
+from tests.argyll_env import argyll_bin_dir, argyll_tool
 from workflow import patch_generators as G
 from workflow import patch_generators_nd as ND
 
-ARGYLL_BIN = Path("/Applications/Argyll/bin")
+ARGYLL_BIN = argyll_bin_dir()
 GENERIC_CMYK = Path("/System/Library/ColorSync/Profiles/Generic CMYK Profile.icc")
 live = pytest.mark.skipif(
-    not (ARGYLL_BIN / "xicclu").exists() or not GENERIC_CMYK.exists(),
+    argyll_tool("xicclu") is None or not GENERIC_CMYK.exists(),
     reason="ArgyllCMS or Generic CMYK profile not installed")
 
 

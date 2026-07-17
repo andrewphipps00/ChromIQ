@@ -17,13 +17,14 @@ from PyQt6.QtWidgets import QApplication  # noqa: E402
 
 from core.argyll_runner import ArgyllRunner  # noqa: E402
 from core.file_manager import FileManager  # noqa: E402
+from core.resource_path import argyll_binary  # noqa: E402
 from core.settings import AppSettings  # noqa: E402
+from tests.argyll_env import argyll_tool  # noqa: E402
 from ui.tabs.tab_chart import TabChart  # noqa: E402
 
 
 def _printtarg():
-    p = shutil.which("printtarg") or "/Applications/Argyll/bin/printtarg"
-    return p if Path(p).is_file() else None
+    return shutil.which(argyll_binary("printtarg")) or argyll_tool("printtarg")
 
 
 _PT = _printtarg()
