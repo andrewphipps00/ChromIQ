@@ -362,6 +362,7 @@ def _build_profile_impl(ti3_path: Path | str, out_path: Path | str,
         model, outliers, _lam_used = fit_forward_model_accurate(
             meas.device, meas.lab_relative, grid=a2b_grid, base_lam=lam,
             curve_rounds=curve_rounds, ucs=use_ucs,
+            gp="gp" in candidates,
             progress=lambda m: _emit(settings, m))
         if len(outliers):
             ids = ", ".join(str(i + 1) for i in outliers[:8])
@@ -490,6 +491,10 @@ def _build_profile_impl(ti3_path: Path | str, out_path: Path | str,
         _emit(settings, f"Model fit (perceptual ΔE2000): median "
                         f"{float(np.median(fit_res00)):.2f}, 95% "
                         f"{float(np.percentile(fit_res00, 95)):.2f}.")
+    if "gp" in candidates:
+        from workflow.profile_engine.gp import uncertainty_lines
+        for line in uncertainty_lines(meas.lab_relative, fit_res00):
+            _emit(settings, line)
     return BuildResult(
         icc_path=out, n_channels=n, color_rep=meas.color_rep,
         a2b_grid=a2b_grid, b2a_grid=b2a_grid,

@@ -46,6 +46,7 @@ def fit_forward_model_accurate(
         curve_rounds: int = 2,
         progress: Callable[[str], None] | None = None,
         ucs: bool = False,
+        gp: bool = False,
         ) -> tuple[ForwardModel, np.ndarray, float]:
     """Cross-validated, outlier-robust forward fit.
 
@@ -58,9 +59,17 @@ def fit_forward_model_accurate(
     perceptually uniform *by construction* (Euclidean UCS ≈ ΔE2000), and
     the ΔE00 formula drops out of the loops. The returned model's nodes
     are converted back to Lab, so everything downstream is unchanged.
+
+    ``gp`` (candidate ``"gp"``, issue #123): heteroscedastic noise model —
+    per-patch measurement σ propagated from the chart's own duplicate
+    scatter — whitens every residual (GLS), the CV criterion and robust
+    thresholds become true z-scores, and the λ search hill-climbs beyond
+    the fixed ladder. Cures the dark-noise chasing a perceptual target
+    space otherwise suffers (dark patches are the noisiest AND steepest).
     """
     npts = len(device)
     lam = base_lam
+    lab_orig = lab
     space = None
     if ucs:
         from workflow.profile_engine.ucs import print_ucs
@@ -72,73 +81,192 @@ def fit_forward_model_accurate(
             return np.linalg.norm(pred - ref, axis=1)
         return delta_e_2000(pred, ref)
 
+    sigma = None
+    if gp:
+        from workflow.profile_engine.gp import patch_noise_sigma
+        sigma, (n_floor, n_dark) = patch_noise_sigma(device, lab_orig,
+                                                     space=space)
+        if progress is not None:
+            progress(f"Measurement-noise model from duplicate patches: "
+                     f"σ = {n_floor:.3f} + {n_dark:.3f}·exp(−Y/10).")
+
+    # Outlier scan on a deliberately STIFF fit: a smudge cannot hide from
+    # the residuals of a stiff surface, whereas a low cross-validated λ can
+    # absorb it locally and mask it. (The ladder tops out at ×4, so running
+    # the scan before the CV search changes nothing for the parity path.)
+    if progress is not None:
+        progress("Fitting the printer model: scanning for misread "
+                 "patches…")
+    scan = fit_forward_model(device, lab, grid=grid,
+                             lam=4.0 * base_lam,
+                             curve_rounds=min(curve_rounds, 1),
+                             cg_iters=350, cg_rtol=_CG_RTOL)
+    res_scan = dist(scan.predict(device), lab)
+
+    if sigma is not None:
+        # Whitening by measurement noise alone is wrong statistics where
+        # MODEL error dominates (light patches: σ_noise ≈ 0.03 ΔE but the
+        # grid can only fit to ~0.1–0.3): the total error budget is
+        # σ² = σ_noise² + σ_model². The model floor is estimated from the
+        # scan fit's residual spread above the typical noise, per
+        # lightness band — grid-resolution error is itself worst in the
+        # shadows, and a single scalar floor lets the dark corner be
+        # down-weighted into a visible tail and then cries misread on it
+        # (measured on the battery; so was the reverse failure of a
+        # purely multiplicative calibration on noisy charts).
+        floors = np.zeros_like(sigma)
+        l_star = lab_orig[:, 0]
+        for lo, hi in ((-1.0, 30.0), (30.0, 65.0), (65.0, 200.0)):
+            band = (l_star >= lo) & (l_star < hi)
+            if band.sum() < 12:
+                continue
+            r_b = res_scan[band]
+            mad_b = 1.4826 * float(np.median(np.abs(r_b - np.median(r_b))))
+            floors[band] = np.sqrt(max(
+                mad_b ** 2 - float(np.median(sigma[band])) ** 2, 0.0))
+        sigma = np.sqrt(sigma ** 2 + floors ** 2)
+        if progress is not None:
+            progress(f"Model-error floor folded into the noise budget "
+                     f"(shadows ±{floors[l_star < 30.0].max(initial=0):.2f} "
+                     f"ΔE, highlights "
+                     f"±{floors[l_star >= 65.0].max(initial=0):.2f} ΔE).")
+
     if npts >= _HOLDOUT_MIN_PATCHES:
         rng = np.random.default_rng(4242)
         idx = rng.permutation(npts)
         nho = max(30, npts // 10)
         ho, trn = idx[:nho], idx[nho:]
+
+        def cv_err(lam_try: float) -> float:
+            m = fit_forward_model(device[trn], lab[trn], grid=grid,
+                                  lam=lam_try, cg_iters=350,
+                                  curve_rounds=min(curve_rounds, 1),
+                                  cg_rtol=_CG_RTOL)
+            r = dist(m.predict(device[ho]), lab[ho])
+            if sigma is not None:
+                r = r / sigma[ho]      # whitened: a true z-score criterion
+            return float(np.median(r))
+
         best_err, best_lam = np.inf, base_lam
         for ci, f in enumerate(_LAMBDA_FACTORS):
             if progress is not None:
                 progress(f"Fitting the printer model: smoothing search "
                          f"{ci + 1}/{len(_LAMBDA_FACTORS)}…")
-            m = fit_forward_model(device[trn], lab[trn], grid=grid,
-                                  lam=base_lam * f, cg_iters=350,
-                                  curve_rounds=min(curve_rounds, 1),
-                                  cg_rtol=_CG_RTOL)
-            err = float(np.median(dist(m.predict(device[ho]),
-                                       lab[ho])))
+            err = cv_err(base_lam * f)
             if err < best_err:
                 best_err, best_lam = err, base_lam * f
+        if gp:
+            # Hill-climb refinement in half-octave steps (pragmatic v1 of
+            # the GP marginal-likelihood optimisation): the optimum is no
+            # longer pinned to the five ladder factors — nor to its ends.
+            seen = {round(float(np.log2(best_lam / base_lam)), 3)}
+            for ri in range(4):
+                trials = [best_lam * np.sqrt(2.0), best_lam / np.sqrt(2.0)]
+                moved = False
+                for lam_try in trials:
+                    key = round(float(np.log2(lam_try / base_lam)), 3)
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    if progress is not None:
+                        progress(f"Fitting the printer model: smoothing "
+                                 f"refine {ri + 1}/4…")
+                    err = cv_err(lam_try)
+                    if err < best_err - 1e-9:
+                        best_err, best_lam = err, lam_try
+                        moved = True
+                        break
+                if not moved:
+                    break
         lam = best_lam
         if progress is not None:
+            unit = "× the instrument noise" if sigma is not None \
+                else "ΔE2000"
             progress(f"Smoothing chosen by cross-validation: "
                      f"×{lam / base_lam:g} of the standard value "
-                     f"(held-out median {best_err:.2f} ΔE2000).")
+                     f"(held-out median {best_err:.2f} {unit}).")
 
-    # Outlier scan on a deliberately STIFF fit: a smudge cannot hide from
-    # the residuals of a stiff surface, whereas a low cross-validated λ can
-    # absorb it locally and mask it. Weights: Huber (1 inside the scale,
+    # Robust weights from the stiff scan. Huber (1 inside the scale,
     # scale/r beyond), scale = Huber's k = 1.345 × the MAD estimate of σ,
     # floored at instrument repeatability (≈0.35 ΔE2000); gross outliers
     # (beyond 8× scale) are rejected outright, and rejections are sticky —
     # once out, a patch cannot pull itself back in through the refit.
-    if progress is not None:
-        progress("Fitting the printer model: scanning for misread "
-                 "patches…")
-    scan = fit_forward_model(device, lab, grid=grid,
-                             lam=max(4.0 * base_lam, lam),
-                             curve_rounds=min(curve_rounds, 1),
-                             cg_iters=350, cg_rtol=_CG_RTOL)
-    res = dist(scan.predict(device), lab)
-    sigma = 1.4826 * float(np.median(np.abs(res - np.median(res))))
-    scale = max(1.345 * sigma, 0.35)
-    w = np.minimum(1.0, scale / np.maximum(res, 1e-9))
-    w[res > 8.0 * scale] = 0.0
+    # Whitened residuals (gp): each patch's error in units of its own
+    # total budget (noise + model floor) — thresholds become z-scores.
+    res = res_scan
+    res_w = res / sigma if sigma is not None else res
+    mad = 1.4826 * float(np.median(np.abs(res_w - np.median(res_w))))
+    if sigma is None:
+        scale = max(1.345 * mad, 0.35)
+    else:
+        # An on-model chart gives mad ≈ 1 in whitened units; never let the
+        # scale drop below the instrument's own 1σ.
+        scale = 1.345 * max(mad, 1.0)
+    w_rob = np.minimum(1.0, scale / np.maximum(res_w, 1e-9))
+    w_rob[res_w > 8.0 * scale] = 0.0
+    w_noise = None
+    if sigma is not None:
+        # GLS row weights, clipped so no patch dominates or vanishes —
+        # GLS optimality assumes an unbiased model, which a resolution-
+        # limited grid is not, so the variance ratios get a trust bound.
+        w_noise = np.clip((float(np.median(sigma)) / sigma) ** 2,
+                          0.2, 5.0)
+
+    def _total(wr: np.ndarray) -> np.ndarray:
+        return wr if w_noise is None else wr * w_noise
 
     if progress is not None:
         progress("Fitting the printer model: robust fit 1/2…")
+    w = _total(w_rob)
     model = fit_forward_model(device, lab, grid=grid, lam=lam,
                               curve_rounds=curve_rounds,
-                              weights=w if (w < 0.999).any() else None,
+                              weights=w if ((w < 0.999).any()
+                                            or w_noise is not None) else None,
                               cg_rtol=_CG_RTOL)
     res = dist(model.predict(device), lab)
+    res_w = res / sigma if sigma is not None else res
     # One tightening pass against the final fit (never loosening).
-    w2 = np.minimum(w, np.minimum(1.0, scale / np.maximum(res, 1e-9)))
-    w2[res > 8.0 * scale] = 0.0
-    if (w2 < w - 1e-9).any():
+    w2_rob = np.minimum(w_rob, np.minimum(1.0, scale
+                                          / np.maximum(res_w, 1e-9)))
+    w2_rob[res_w > 8.0 * scale] = 0.0
+    if (w2_rob < w_rob - 1e-9).any():
         if progress is not None:
             progress("Fitting the printer model: robust fit 2/2…")
         model = fit_forward_model(device, lab, grid=grid, lam=lam,
-                                  curve_rounds=curve_rounds, weights=w2,
+                                  curve_rounds=curve_rounds,
+                                  weights=_total(w2_rob),
                                   cg_rtol=_CG_RTOL)
         res = dist(model.predict(device), lab)
-        w = w2
+        res_w = res / sigma if sigma is not None else res
+        w_rob = w2_rob
 
     # Report likely misreads: everything rejected outright, plus whatever
-    # still sits clearly visible (3 ΔE2000) above the bulk after the refit.
-    named = res > max(6.0 * float(np.median(res)), 3.0)
-    outliers = np.flatnonzero(named | (w == 0.0))
+    # still sits clearly above the bulk after the refit. With the noise
+    # model a patch must be *visibly wrong AND statistically anomalous*
+    # (a misread is both; a light patch's model-error tail is only the
+    # latter, a noisy dark patch only the former — neither is a misread).
+    named = res_w > max(6.0 * float(np.median(res_w)),
+                        3.0 if sigma is None else 3.0 * scale)
+    if sigma is not None:
+        named &= res > 3.0
+        # A misread is an ISOLATED anomaly — its device-space neighbours
+        # read fine. A patch merely sitting in a hard-to-fit region has
+        # equally-poor neighbours and is the model's problem, not the
+        # user's: don't send them remeasuring the whole shadow end.
+        for i in np.flatnonzero(named):
+            d2 = ((device - device[i]) ** 2).sum(1)
+            nn = np.argsort(d2)[1:9]
+            if res[i] < 3.0 * float(np.median(res[nn])) + 1.0:
+                named[i] = False
+    if sigma is None:
+        outliers = np.flatnonzero(named | (w_rob == 0.0))
+    else:
+        # Down-weighting/rejecting is a conservative *fitting* decision;
+        # telling the user to remeasure is a *reporting* one. A patch
+        # hard-rejected as collateral of a nearby smudge (the stiff scan
+        # smears a big misread over its neighbours) fits fine in the end
+        # — only report rejections the final fit still can't explain.
+        outliers = np.flatnonzero(named | ((w_rob == 0.0) & (res > 3.0)))
     if space is not None:
         # The fit lived in UCS; hand back a Lab-speaking model so the
         # writer, inversion seeds and statistics stay unchanged.

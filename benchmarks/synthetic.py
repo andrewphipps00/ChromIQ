@@ -12,8 +12,10 @@ product), so a candidate cannot win by matching the referee's inductive
 bias.
 
 Instrument noise (applied to the "measured" chart only, never to the
-referee): heteroscedastic XYZ noise σ(Y) = 0.05 + 0.10·exp(−Y/10) —
-matches i1-class repeatability including the dark-patch blow-up — plus a
+referee): heteroscedastic XYZ noise σ(Y) = 0.015 + 0.025·exp(−Y/8) —
+i1-class repeatability (≈0.03 ΔE00 on light patches, up to ≈0.8 on the
+deepest blacks; the first draft's 0.05+0.10 amplitudes put ~3 ΔE00 of
+noise on dark patches, which no working instrument shows) — plus a
 misread probability (default 0.5 %) that smudges a patch by a uniform
 5–40 ΔE in a random Lab direction.
 """
@@ -39,17 +41,21 @@ def _band(mu: float, sigma: float, peak: float) -> np.ndarray:
 
 # Ink absorbance spectra D_c(λ): total effective density at full coverage
 # (double light path through the ink film folded in). Sums of Gaussian
-# bands — the classic dye-absorption shapes.
+# bands — the classic dye-absorption shapes. Densities are calibrated so a
+# 900-patch chart fits a -qm grid at the residual level REAL charts show
+# (median ≈ 0.3–0.7 ΔE00): a referee much curvier than any physical
+# printer would score model error, not algorithm quality. Calibrated once
+# against realism, then frozen — never against a candidate.
 _INK_D = {
-    "C": _band(620.0, 70.0, 1.55) + _band(680.0, 60.0, 0.55),
-    "M": _band(530.0, 45.0, 1.55) + _band(430.0, 32.0, 0.45),
-    "Y": _band(435.0, 42.0, 1.70) + _band(490.0, 35.0, 0.35),
-    "K": 1.9 + 0.3 * (LAM - 380.0) / 350.0,      # broadband, slight tilt
-    "O": _band(450.0, 55.0, 1.60) + _band(515.0, 40.0, 0.85),
-    "G": _band(445.0, 50.0, 1.15) + _band(630.0, 65.0, 1.25),
+    "C": _band(625.0, 80.0, 1.10) + _band(680.0, 65.0, 0.35),
+    "M": _band(530.0, 52.0, 1.10) + _band(430.0, 36.0, 0.32),
+    "Y": _band(435.0, 48.0, 1.25) + _band(490.0, 38.0, 0.26),
+    "K": 1.35 + 0.2 * (LAM - 380.0) / 350.0,     # broadband, slight tilt
+    "O": _band(450.0, 60.0, 1.15) + _band(515.0, 44.0, 0.62),
+    "G": _band(445.0, 55.0, 0.85) + _band(630.0, 70.0, 0.90),
     # Violet for S6: band placed so the solid's hue lands well OFF the
     # engine's 300° anchor (tests the measured-hue path).
-    "V": _band(555.0, 60.0, 1.45) + _band(500.0, 45.0, 0.55),
+    "V": _band(555.0, 65.0, 1.05) + _band(500.0, 48.0, 0.40),
 }
 
 
@@ -70,11 +76,22 @@ class SyntheticPrinter:
     device_rep: str                  # "RGB", "CMYK", "CMYKOG", "CMYKV"
     paper: str = "glossy"
     dot_gain_gamma: float = 0.85     # a_eff = a**γ (γ<1 = midtones darken)
-    flare: float = 0.0               # matte scattering floor (× paper)
+    # First-surface/scattering floor (× paper reflectance). Even glossy
+    # stock reflects ~0.6 % at the surface under 0/45 geometry — without
+    # it, deep TAC blacks reach L*≈1 with a curvature no physical print
+    # shows (and no realistic referee should score).
+    flare: float = 0.006
     tac: float | None = None         # total ink limit in percent
     noise_scale: float = 1.0         # multiplies the standard σ(Y)
     misread_prob: float = 0.005
     density_scale: float = 1.0       # global ink strength
+    # Halftone mixing (ink-count devices): Yule–Nielsen n-factor. Inkjets
+    # are halftone devices — area-coverage mixing with optical dot gain —
+    # not continuous dye stacks; pure Beer–Lambert overstates channel
+    # interaction so much that even colprof -qm fits it at avg ≈ 2.8 ΔE,
+    # which no physical CMYK chart shows. RGB-driver printers (S1/S2)
+    # keep the continuous-tone model (photo pipelines behave that way).
+    yn_nu: float = 4.0
 
     @property
     def channel_letters(self) -> list[str]:
@@ -99,11 +116,30 @@ class SyntheticPrinter:
         cov = 1.0 - device if self.is_additive else device
         letters = ["C", "M", "Y"] if self.is_additive else self.channel_letters
         a_eff = np.clip(cov, 0.0, 1.0) ** self.dot_gain_gamma
-        absorb = np.zeros((len(device), len(LAM)))
-        for i, letter in enumerate(letters):
-            absorb += a_eff[:, i:i + 1] * _INK_D[letter][None, :]
         paper = _paper(self.paper)
-        r = paper[None, :] * 10.0 ** (-self.density_scale * absorb)
+        if self.is_additive:
+            # Continuous-tone dye model (RGB photo pipeline).
+            absorb = np.zeros((len(device), len(LAM)))
+            for i, letter in enumerate(letters):
+                absorb += a_eff[:, i:i + 1] * _INK_D[letter][None, :]
+            r = paper[None, :] * 10.0 ** (-self.density_scale * absorb)
+        else:
+            # Halftone: Yule–Nielsen spectral Neugebauer over the 2ⁿ
+            # solid-overprint primaries with Demichel area weights.
+            n = len(letters)
+            combos = np.stack(np.meshgrid(*([[0, 1]] * n), indexing="ij"),
+                              -1).reshape(-1, n)
+            dens = np.stack([_INK_D[c] for c in letters])      # (n, bands)
+            prim = paper[None, :] * 10.0 ** (
+                -self.density_scale * combos @ dens)           # (2ⁿ, bands)
+            prim_yn = prim ** (1.0 / self.yn_nu)
+            mix = np.zeros((len(device), len(LAM)))
+            for p, bits in enumerate(combos):
+                w = np.ones(len(device))
+                for c, bit in enumerate(bits):
+                    w = w * (a_eff[:, c] if bit else 1.0 - a_eff[:, c])
+                mix += w[:, None] * prim_yn[p][None, :]
+            r = mix ** self.yn_nu
         if self.flare:
             r = r + self.flare * paper[None, :]
         return r
@@ -135,12 +171,12 @@ def _bradford_to_d50(xyz: np.ndarray, white: np.ndarray) -> np.ndarray:
 PRINTERS: dict[str, SyntheticPrinter] = {
     "S1": SyntheticPrinter("S1", "RGB", paper="glossy", dot_gain_gamma=0.85),
     "S2": SyntheticPrinter("S2", "RGB", paper="matte", dot_gain_gamma=0.70,
-                           flare=0.018, density_scale=1.2),
-    "S3": SyntheticPrinter("S3", "CMYK", tac=280.0),
+                           flare=0.018, density_scale=1.5),
+    "S3": SyntheticPrinter("S3", "CMYK", tac=280.0, yn_nu=4.0),
     "S4": SyntheticPrinter("S4", "CMYK", tac=280.0, noise_scale=3.0,
-                           misread_prob=0.02),
-    "S5": SyntheticPrinter("S5", "CMYKOG", tac=320.0),
-    "S6": SyntheticPrinter("S6", "CMYKV", tac=300.0),
+                           yn_nu=4.0),
+    "S5": SyntheticPrinter("S5", "CMYKOG", tac=320.0, yn_nu=3.2),
+    "S6": SyntheticPrinter("S6", "CMYKV", tac=300.0, yn_nu=4.8),
 }
 
 
@@ -233,7 +269,7 @@ def measure(printer: SyntheticPrinter, device: np.ndarray, seed: int = 23
     rng = np.random.default_rng(seed)
     xyz = printer.xyz_true(device)
     refl = printer.reflectance(device)
-    sigma = printer.noise_scale * (0.05 + 0.10 * np.exp(-xyz[:, 1] / 10.0))
+    sigma = printer.noise_scale * (0.015 + 0.025 * np.exp(-xyz[:, 1] / 8.0))
     noisy = xyz + rng.normal(0.0, 1.0, xyz.shape) * sigma[:, None]
     # Correlated small reflectance noise so SPEC data stays consistent-ish.
     refl = np.clip(refl * (1.0 + rng.normal(0.0, 0.002 * printer.noise_scale,

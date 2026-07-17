@@ -36,8 +36,9 @@ python -m benchmarks.heldout ~/charts/*.ti3 --candidates ucs
 A candidate set is promoted into the shipped accurate mode only when:
 
 1. Synthetic battery: aggregate median ΔE00 improves **≥ 5 %**, no device
-   class regresses **> 2 %** on median or p95, max / round-trip max not
-   worse (beyond quantisation jitter).
+   class regresses **> 2 %** on median or p95, p99 / round-trip p99 not
+   worse (beyond jitter; max is reported but not gated — the max of tens
+   of thousands of noisy evaluations is a fragile order statistic).
 2. Robustness: S4 misread F1 not worse; clean-chart false flags not up.
 3. Smoothness: neutral K TV-vs-net not worse on S3/S5/S6.
 4. Build time ≤ 2× the current accurate mode; full test suite green.

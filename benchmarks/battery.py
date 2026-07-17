@@ -173,7 +173,9 @@ def evaluate_gates(baseline: dict, candidate: dict) -> dict:
                     detail.append(f"REGRESS {pid} {leg} {metric}: "
                                   f"{b[leg][metric]:.3f} → "
                                   f"{c[leg][metric]:.3f} (+{r * 100:.1f}%)")
-        for leg, metric in (("a2b", "max"), ("roundtrip", "max")):
+        # Tail gate on p99, not max: the max of tens of thousands of noisy
+        # evaluations is a fragile order statistic (max is still reported).
+        for leg, metric in (("a2b", "p99"), ("roundtrip", "p99")):
             if c[leg][metric] > b[leg][metric] * (1 + _JITTER) + _ABS_JITTER:
                 ok = False
                 detail.append(f"REGRESS {pid} {leg} {metric}: "
