@@ -1,5 +1,78 @@
 # Changelog
 
+## v3.13.12-beta.2
+
+The second beta of the chart-reading engine (issue #126): the same opt-in
+engine as beta.1, refined from Sebastian's and Knut's feedback, plus a
+round of Chart Layout / Settings polish that applies whether or not the
+engine is on. Still **not tested against real measuring hardware** — keep
+first sessions supervised. With the engine off, nothing changes.
+
+### Measure preview (engine on)
+
+- **The hover outline now hugs only a strip's patches.** Moving the mouse
+  over a strip highlights exactly its column of patches — no longer the
+  letter label above them or the white paper beside them. It's taken from
+  the chart's own geometry, so it's pixel-exact on every layout, including
+  ColorMunki "offset every second strip" charts (where the outline reaches
+  the odd strip's last patch, which hangs lower than its neighbours) and on
+  every page of a multi-page chart.
+- **The split-patch overlay lands exactly on each patch**, on the same hard
+  cases — ColorMunki double-density stagger and multi-page charts.
+- **Only the actual off-patch is outlined.** A patch that reads far from
+  expected gets a red outline on that patch alone, instead of reddening the
+  whole strip.
+- **Show: expected / measured / both.** A compact selector switches the
+  preview between the chart's expected colours, what the instrument
+  measured, and the diagonal split of the two — instantly, at any time.
+- **Clearer notes.** The autosave reminder now sits as a caption under the
+  preview (matching the Create-Chart "colours are approximate" note), and
+  the small expected/measured legend sits in the bottom paper margin, out of
+  the way of patches, with wording that matches the current Show mode.
+- **The "Go to strip" dropdown is gone** — clicking a strip in the preview
+  is the only jump control, and guided refinement uses it under the hood.
+
+### Measurement report (new, opt-in)
+
+Turn on **Settings → Beta features → Save a measurement report** and each
+finished measurement also writes a dated report: accuracy statistics
+(mean / max / 95th-percentile ΔE, standard deviation), the worst patches,
+and a comparison against earlier reports of the same chart so you can watch
+your inks drift over time. View it from the **Measurement report** button in
+the Measure tab's manual panel, or the Tools menu. Off by default; when off,
+no reports are written.
+
+### Chart Layout & Settings polish (always active)
+
+- **Font sizes are now shown in points** everywhere they're set (strip
+  labels, chart text, clip-border text), the familiar unit from any text
+  editor, instead of millimetres.
+- **Strip-label underlines** can be inserted as their own text runs, and the
+  Chart Layout tab's help icons were refreshed — including a full
+  explanation of the strip-indicator style group and of the patch-pattern
+  syntax (the `@` token and zero-padding).
+- **Instrument Limits** shows each instrument's real maximum strip length.
+- **Reveal-folder buttons** on the Measure, Print and Build tabs share one
+  icon-only style, tinted in each tab's accent colour, with a distinct
+  open-tray glyph; the manual-panel preset dropdowns pick up the same accent.
+- **A new "Where are my files?" folder guide** in the Welcome/Help window,
+  laid out as a table, now also covers the scanner/camera files and notes
+  which are safe to delete.
+- **A CMYK+N help card** explains multi-ink charts.
+- **ArgyllCMS auto-detect** follows per-binary symlinks to find the `ref/`
+  folder, so Homebrew-style installs are recognised.
+- The clip-border margin/width fields are no longer greyed out when
+  instrument margins are in play.
+
+### The chart-reading engine, unchanged from beta.1
+
+- The **Chart reading** option under **Settings → Beta features** is now a
+  simple on/off checkbox (it matches the profile-engine checkbox above it).
+- Per-strip autosave, click-to-jump, live split-patch feedback and the
+  fixed-order safety net all work as in beta.1. If the engine binary isn't
+  present, or a mode it doesn't cover is used, ChromIQ falls back to stock
+  chartread and says so. The `.ti3` format is identical either way.
+
 ## v3.13.12-beta.1
 
 A beta introducing an optional **ChromIQ chart-reading engine** for the
