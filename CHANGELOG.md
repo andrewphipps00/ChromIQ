@@ -1,5 +1,16 @@
 # Changelog
 
+## v3.13.12-beta.5
+
+A small fix on the Create Chart layout panel.
+
+- **The inch value next to each page margin now always matches the millimetre
+  value in the box.** When **Use instrument margins** filled the four margins
+  from your instrument limits, the little inch readout beside each box kept
+  showing its previous value (for example the Left margin jumped to 26 mm but
+  the readout still said 0.236″ instead of 1.024″). It now updates in step,
+  whether the option is on or off.
+
 ## v3.13.12-beta.4
 
 Tidier project folders (#127). A run folder used to collect up to 30+ files
