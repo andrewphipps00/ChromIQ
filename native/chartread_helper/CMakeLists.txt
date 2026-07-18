@@ -41,8 +41,11 @@ target_include_directories(instlib PUBLIC ${INSTLIB} ${CMAKE_CURRENT_SOURCE_DIR}
 target_compile_definitions(instlib PUBLIC
   SALONEINSTLIB ALLINSTS ENABLE_SERIAL ENABLE_FAST_SERIAL ENABLE_USB)
 if(WIN32)
-  target_compile_definitions(instlib PUBLIC NT)
-  # Force-include the UTF compat shim so usbio_w0/dk/hidio see icmUTF16.
+  # EN_LIBUSB0: select Argyll's libusb0 USB backend (usbio_w0.c) — the driver
+  # ChromIQ already installs via core/usb_driver_installer.py, and Argyll's own
+  # default (Jamtop USE_LIBUSB0 = true). Without it usbio.c #errors out.
+  target_compile_definitions(instlib PUBLIC NT EN_LIBUSB0)
+  # Force-include the UTF compat shim so usbio_w0/hidio see icmUTF16.
   target_compile_options(instlib PRIVATE
     -include "${CMAKE_CURRENT_SOURCE_DIR}/chromiq_utf_compat.h")
 elseif(APPLE)
