@@ -948,19 +948,31 @@ class LayoutOptionsPanel(QWidget):
                 tip=TooltipButton(
                     tr("Patch pattern"),
                     tr("How patches within a strip are labelled — the second part "
-                       "of a location, e.g. the “12” in A12. Same rule as the "
-                       "Strip pattern above: LETTERS if the pattern contains "
-                       "“A-Z”, otherwise plain NUMBERS.\n\n"
-                       "Valid examples:\n"
-                       "• 0-9,@-9,@-9;1-999 — the default (ArgyllCMS's own "
-                       "notation): numbers 1, 2, 3 …\n"
+                       "of a location, e.g. the “12” in A12. The patch label is "
+                       "joined to the strip label to form each patch's full "
+                       "location (strip then patch, e.g. A12).\n\n"
+                       "The one rule that always applies: if the pattern contains "
+                       "“A-Z” you get LETTERS, otherwise you get NUMBERS.\n\n"
+                       "Common patterns:\n"
+                       "• 0-9,@-9,@-9;1-999 — the default: numbers 1, 2, 3 …\n"
                        "• 1-999 — numbers 1, 2, 3 … (simpler, same result).\n"
-                       "• A-Z, A-Z — letters A, B, C … Z, AA, AB … instead of "
-                       "numbers.\n"
+                       "• A-Z, A-Z — letters A, B, C … Z, AA, AB ….\n"
                        "• A-Z — plain letters A, B, C ….\n\n"
-                       "The patch label is joined to the strip label to form each "
-                       "patch's full location (strip then patch, e.g. A12). Leave "
-                       "the default unless you're matching a specific scheme."),
+                       "About the “@” and zeros (ArgyllCMS notation, used by the "
+                       "classic printtarg engine):\n"
+                       "• “@” means “this digit may be left blank”. It is what "
+                       "stops the default from writing leading zeros — you get "
+                       "1, 2, … 9, 10 rather than 001, 002 …\n"
+                       "• To start counting at 0 instead of 1, include 0 in the "
+                       "range, e.g. 0-999 → 0, 1, 2 ….\n"
+                       "• To keep every number the same width WITH leading zeros "
+                       "(01, 02, … 09, 10), use a fixed-width digit range such as "
+                       "00-99 (two digits) or 000-999 (three).\n\n"
+                       "Note: ChromIQ's own layout engine keeps patch numbers "
+                       "simple (1, 2, 3 …) whatever the digit details; the “@” "
+                       "and leading-zero options above take effect when a chart "
+                       "is built with the classic printtarg engine. Leave the "
+                       "default unless you're matching a specific scheme."),
                     self))
         self._patch_align_row = add_row(gg, 8, tr("Patch area alignment:"),
                 self.patch_align,

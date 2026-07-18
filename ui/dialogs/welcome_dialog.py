@@ -721,6 +721,94 @@ FILE_GUIDE_CARD: dict = {
 WORKFLOWS.append(FILE_GUIDE_CARD)
 
 
+# Profiling a printer with extra inks (CMYK+N / 6-ink, 7-ink …) — its own
+# card, because the workflow has a few extra decisions a normal RGB inkjet
+# doesn't (Knut). Rendered as one flowing text page.
+def _cmyk_n_body() -> str:
+    return tr(
+        "Most desktop inkjets are driven as RGB devices — you send red, green "
+        "and blue, and the printer's own software decides how to mix its inks. "
+        "Some printers, though, can be driven by their actual inks: CMYK "
+        "(cyan, magenta, yellow, black) or CMYK plus extra inks such as "
+        "orange, green, violet, light cyan or light magenta — written CMYK+N, "
+        "where N is the number of extra inks (so a 7-ink printer is CMYK+3). "
+        "Profiling one of these is very much like the normal five-step "
+        "workflow, with a handful of extra choices. Here is the whole picture.\n"
+        "\n"
+        "1) Does your printer actually accept ink values?\n"
+        "This is the big question. Many photo inkjets have six or more ink "
+        "tanks but are still driven as RGB — the driver mixes the inks for "
+        "you, and you cannot address them directly. You can only profile a "
+        "printer as CMYK+N if there is a way to send it raw ink amounts "
+        "(a RIP, a dedicated driver mode, or a device-link path) with the "
+        "printer's own colour management switched OFF. If in doubt, profile it "
+        "as a normal RGB printer — that is the right choice for most desktop "
+        "machines.\n"
+        "\n"
+        "2) Create the chart (tab 1) — choose the ink set.\n"
+        "In Create Chart, set the device to your ink layout (e.g. CMYK, "
+        "CMYK+OGV, …) instead of RGB. ChromIQ then builds a chart whose "
+        "patches are ink combinations, not screen colours. Extra inks mean "
+        "many more patches are needed to map the larger colour space well, so "
+        "these charts are bigger — often several pages. The preview shows the "
+        "patches with approximate colours; the ink amounts in the file are "
+        "exact.\n"
+        "\n"
+        "3) Print the chart (tab 2) — colour management OFF.\n"
+        "This matters even more than for RGB: the printer must lay down "
+        "exactly the ink amounts in the chart, with no driver colour "
+        "correction in between. Use the print path that bypasses colour "
+        "management (a RIP set to “no colour management”, or ChromIQ's raw "
+        "print where supported). If the driver re-mixes the inks, the profile "
+        "will be wrong.\n"
+        "\n"
+        "4) Measure (tab 3).\n"
+        "Measuring is identical to RGB — sweep each strip with your "
+        "instrument. Because the chart is larger, budget more time. Everything "
+        "in the Measure tab (auto-save, re-measuring a strip, the split-patch "
+        "preview) works the same.\n"
+        "\n"
+        "5) Build the profile (tab 4) — the extra-ink settings.\n"
+        "Building a CMYK+N profile needs a couple of choices a normal RGB "
+        "profile doesn't:\n"
+        "  • Total ink limit — the most ink the paper can hold before it "
+        "floods or dries badly, as a percentage. Too high and darks bleed; "
+        "too low and you lose depth. Your paper/printer notes, or a quick "
+        "ink-limit test, give a starting value.\n"
+        "  • Black generation (GCR/UCR) — how much grey is built from black "
+        "ink versus a C+M+Y mix. This affects neutrals, shadow detail and ink "
+        "use.\n"
+        "  • Extra-ink handling — how orange/green/violet etc. are used at the "
+        "edges of the gamut.\n"
+        "ChromIQ fills in sensible defaults; the tooltips on each field "
+        "explain what to change and when. For six inks and beyond, ChromIQ "
+        "uses its own profile engine (Argyll's own profiler stops at four "
+        "inks), so make sure the profile engine is available.\n"
+        "\n"
+        "6) Check and refine (tab 5).\n"
+        "Same as always: build a quick test, measure a few patches, and "
+        "refine the worst strips. With more inks there is more to get right, "
+        "so a refinement pass is especially worthwhile.\n"
+        "\n"
+        "In short: it's the same five steps, but you drive the printer by its "
+        "inks, you keep colour management strictly off, your charts are "
+        "bigger, and the profile build asks a few ink-specific questions. When "
+        "unsure, a normal RGB profile is perfectly good for most printers.")
+
+
+CMYK_N_CARD: dict = {
+    "key": "cmyk_n",
+    "title": tr("Profiling a CMYK+N printer (extra inks)"),
+    "subtitle": tr("What's different when your printer is driven by its inks "
+                   "(CMYK, or CMYK plus orange / green / violet …), start to "
+                   "finish."),
+    "steps": [],
+    "kind": "richtext",
+    "body": _cmyk_n_body(),
+}
+WORKFLOWS.append(CMYK_N_CARD)
+
+
 # ---------------------------------------------------------------------------
 # Painted card icon — geometric placeholder per workflow
 # ---------------------------------------------------------------------------
@@ -1083,6 +1171,23 @@ class WorkflowIcon(QWidget):
                 y = margin + 30 + k * 12
                 x1 = s - inner - (14 if k == 1 else 0)
                 p.drawLine(inner, y, x1, y)
+
+        elif self._key == "cmyk_n":
+            # Extra-ink profiling: overlapping ink drops (C, M, Y, K + one
+            # accent) — the many-ink idea at a glance.
+            p.setPen(Qt.PenStyle.NoPen)
+            r = int(s * 0.20)
+            cx, cy = s // 2, s // 2
+            drops = [
+                (QColor(0, 174, 239, 200), -r // 2, -r // 2),   # cyan
+                (QColor(236, 0, 140, 200), r // 2, -r // 2),    # magenta
+                (QColor(255, 222, 23, 200), -r // 2, r // 2),   # yellow
+                (QColor(35, 31, 32, 200), r // 2, r // 2),      # black
+                (accent, 0, 0),                                 # accent extra ink
+            ]
+            for col, dx, dy in drops:
+                p.setBrush(col)
+                p.drawEllipse(cx + dx - r, cy + dy - r, 2 * r, 2 * r)
 
         p.end()
 
@@ -1538,10 +1643,12 @@ class WelcomeDialog(QDialog):
                                            key=lambda e: e[0].lower()):
                 self._steps_layout.addWidget(self._make_glossary_row(
                     term, definition))
-        elif wf.get("kind") == "files":
-            # Folder guide (#125): one flowing, word-wrapped text page — the
-            # body keeps its own section structure (blank lines + bullets).
-            body = QLabel(file_guide_body(), self._steps_host)
+        elif wf.get("kind") in ("files", "richtext"):
+            # One flowing, word-wrapped text page — the body keeps its own
+            # section structure (blank lines + bullets). Used by the folder
+            # guide (#125) and the CMYK+N card (#126).
+            text = file_guide_body() if wf.get("kind") == "files" else wf["body"]
+            body = QLabel(text, self._steps_host)
             bf = QFont()
             bf.setPixelSize(13)
             body.setFont(bf)
