@@ -402,6 +402,16 @@ class TiffPreview(QWidget):
         self._caption_lbl.setText(text)
         self._caption_lbl.setVisible(bool(text))
 
+    def set_notice(self, text: str | None) -> None:
+        """Show an advisory notice at the bottom of the preview (same style as
+        the render badge), or hide it (text=None/empty)."""
+        if text:
+            self._notice_lbl.setText(text)
+            self._notice_lbl.setVisible(True)
+        else:
+            self._notice_lbl.clear()
+            self._notice_lbl.setVisible(False)
+
     def set_frame_color(self, color: "QColor | None") -> None:
         """Tint the margin drawn around the image (e.g. to the simulated paper
         white). ``None`` restores plain white. Repaints if an image is shown."""
@@ -747,6 +757,20 @@ class TiffPreview(QWidget):
         _ink_l.addWidget(self._ink_badge)
         self._ink_row.setVisible(False)
         layout.addWidget(self._ink_row)
+
+        # Advisory notice at the BOTTOM of the preview, same look as the
+        # "Approximate colours" render badge (#126 autosave note). Hidden by
+        # default so it takes no vertical space.
+        self._notice_lbl = QLabel("", self)
+        self._notice_lbl.setWordWrap(True)
+        self._notice_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._notice_lbl.setStyleSheet(
+            "QLabel { background: rgba(30, 30, 30, 185); color: #f4f2ef;"
+            " border-radius: 4px; padding: 4px 10px; margin: 4px 8px;"
+            " font-size: 11px; }")
+        self._notice_lbl.setVisible(False)
+        layout.addWidget(self._notice_lbl)
+
         # Cursor readout needs move events without a button held.
         self.setMouseTracking(True)
         self._img_label.setMouseTracking(True)

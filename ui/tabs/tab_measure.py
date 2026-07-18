@@ -143,6 +143,12 @@ log = get_logger(__name__)
 
 
 
+# Per-patch ΔE at/above which the split-patch overlay draws a warning outline
+# (a likely misread worth re-measuring). Matches Argyll chartread's own
+# "unexpected response" territory; ordinary print drift stays well below it.
+_PATCH_WARN_DE = 20.0
+
+
 def _xyz_d50_to_srgb8(xyz: "list[float]") -> tuple[int, int, int]:
     """D50 XYZ (0..100) → display sRGB 0..255 (Bradford to D65). Preview
     colouring only — never feeds back into measurement data (#126)."""
@@ -322,6 +328,56 @@ def _detect_stripe_rects(tiff_path: Path) -> list[QRect]:
     except Exception as exc:
         log.warning("Strip detection failed: %s", exc)
         return []
+
+
+def patch_boxes_from_sidecar(ti2_path: Path, n_pages: int
+                             ) -> "list[dict[str, QRect]]":
+    """Exact per-patch pixel boxes for the split-patch overlay (#126).
+
+    Returns a per-page list of ``{loc: QRect}`` in TIFF-pixel space (the same
+    space the strip rects use), or a list of empty dicts when the chart
+    exposes no per-patch geometry. The overlay is drawn only where a real box
+    exists — so a split can never land anywhere but on its own patch, whatever
+    the layout (spacers, ColorMunki double density, multi-page). Sources, in
+    order: the layout engine's ``<stem>.strips.json``, then a
+    ``channels.json`` ``layout.patches`` block.
+    """
+    import json
+    out: list[dict[str, QRect]] = [dict() for _ in range(max(0, n_pages))]
+    if n_pages < 1 or ti2_path is None:
+        return out
+
+    def _ingest(patches) -> bool:
+        got = False
+        for p in patches:
+            try:
+                pg = int(p["page"])
+                if 0 <= pg < n_pages:
+                    out[pg][str(p["loc"])] = QRect(
+                        int(p["x"]), int(p["y"]), int(p["w"]), int(p["h"]))
+                    got = True
+            except (KeyError, TypeError, ValueError):
+                continue
+        return got
+
+    strips_json = ti2_path.with_suffix(".strips.json")
+    if strips_json.is_file():
+        try:
+            data = json.loads(strips_json.read_text())
+            if _ingest(data.get("patches") or []):
+                return out
+        except Exception:
+            pass
+
+    channels = ti2_path.with_suffix(".channels.json")
+    if channels.is_file():
+        try:
+            layout = json.loads(channels.read_text()).get("layout") or {}
+            if isinstance(layout, dict):
+                _ingest(layout.get("patches") or [])
+        except Exception:
+            pass
+    return out
 
 
 def engine_strip_rects_from_sidecar(sidecar: Path, n_pages: int):
@@ -686,6 +742,10 @@ class TabMeasure(QWidget):
         # #126 chart-reading engine session state
         self._engine_strips: list[dict] = []      # session_start strip map
         self._engine_read: dict[str, bool] = {}   # letter → measured?
+        # Per-page {loc: QRect} for the split-patch overlay; empty when the
+        # chart exposes no per-patch geometry (then the overlay is suppressed).
+        self._patch_boxes: list[dict[str, QRect]] = []
+        self._patch_geom_warned = False
         self._device_busy: bool = False
         self._no_instrument: bool = False
         self._usb_claimed_by_vm: bool = False
@@ -1414,48 +1474,41 @@ class TabMeasure(QWidget):
         m_resume_row.addWidget(self._m_resume_tip)
         mcg.addLayout(m_resume_row)
 
-        # --- ChromIQ chart-reading engine extras (#126) ------------------
-        # Visible only while the engine is selected in Settings → Beta.
+        # --- ChromIQ chart-reading engine info (#126) --------------------
+        # Shown only while the engine is active. There is no "go to strip"
+        # control by design (Knut): you jump by clicking a strip directly in
+        # the chart preview, and guided refinement does the same under the
+        # hood. This row is just the reassuring autosave note + how-to.
         self._m_engine_row = QWidget(left)
         _eng_rl = QHBoxLayout(self._m_engine_row)
         _eng_rl.setContentsMargins(0, 0, 0, 0)
         _eng_rl.setSpacing(6)
-        _eng_rl.addWidget(QLabel(tr("Go to strip"), self._m_engine_row))
-        self._m_goto_combo = NoScrollComboBox(self._m_engine_row)
-        self._m_goto_combo.setMinimumWidth(90)
-        _eng_rl.addWidget(self._m_goto_combo)
-        self._m_goto_btn = QPushButton(tr("Go"), self._m_engine_row)
-        self._m_goto_btn.setFixedHeight(26)
-        self._m_goto_btn.clicked.connect(self._on_goto_combo)
-        _eng_rl.addWidget(self._m_goto_btn)
-        _eng_rl.addStretch()
+        self._m_engine_hint = QLabel(
+            tr("Tip: click any strip in the chart preview to jump straight "
+               "to it — for example to measure a strip again."),
+            self._m_engine_row)
+        self._m_engine_hint.setWordWrap(True)
+        _eng_rl.addWidget(self._m_engine_hint, stretch=1)
         _eng_rl.addWidget(TooltipButton(
-            tr("Go to Strip"),
-            tr("Jump straight to any strip of the chart instead of stepping "
-            "through them one by one with 'f' and 'b'.\n\n"
-            "Pick a strip here and press Go, or simply click the strip "
-            "directly in the chart preview on the right — while a "
-            "measurement is running, every strip under your mouse shows a "
-            "hand cursor and can be clicked.\n\n"
-            "Strips you have already read are marked with a check mark. "
-            "Jumping to one of those lets you measure it again — useful "
-            "after a smudge, a misread, or when Check && Refine has "
-            "flagged strips that are worth a second pass.\n\n"
-            "This control appears because the ChromIQ chart-reading "
-            "engine is enabled in Settings → Beta features."),
+            tr("Jumping between strips"),
+            tr("With the ChromIQ chart-reading engine on, you don't have to "
+            "step through the strips one by one.\n\n"
+            "Simply click a strip directly in the chart preview on the "
+            "right — while a measurement is running, every strip under your "
+            "mouse shows a hand cursor. Clicking takes you straight there.\n\n"
+            "Strips you have already read are marked with a check mark; "
+            "clicking one lets you measure it again — handy after a smudge, "
+            "a misread, or when Check && Refine has flagged strips worth a "
+            "second pass. Guided refinement uses the very same jump "
+            "automatically.\n\n"
+            "This tip appears because the ChromIQ chart-reading engine is "
+            "enabled in Settings → Beta features."),
             self._m_engine_row,
         ))
         mcg.addWidget(self._m_engine_row)
-
-        self._m_autosave_note = QLabel(
-            tr("Every strip is saved to disk the moment it is accepted — "
-               "if anything goes wrong, you can always continue where you "
-               "left off."), left)
-        self._m_autosave_note.setWordWrap(True)
-        self._m_autosave_note.setObjectName("engineAutosaveNote")
-        mcg.addWidget(self._m_autosave_note)
         self._m_engine_row.setVisible(False)
-        self._m_autosave_note.setVisible(False)
+        # The autosave reassurance lives on the preview itself (as a banner
+        # under the caption), not here — see _set_autosave_banner().
         # ------------------------------------------------------------------
 
         self._m_refine_row = QWidget(left)
@@ -2520,6 +2573,11 @@ class TabMeasure(QWidget):
         # ChromIQ layout engine (issue #93): if the chart carries exact strip
         # geometry in its channels.json, use it directly — guess-free, no image
         # detection. This is the solid path for engine-generated charts.
+        # Per-patch boxes for the split-patch overlay (#126) — independent of
+        # how strip rects are found below.
+        self._patch_boxes = patch_boxes_from_sidecar(
+            self._ti1_path, len(self._tiff_pages))
+
         engine = self._engine_stripe_rects()
         if engine is not None:
             per_page, counts, arrow_mode = engine
@@ -3998,6 +4056,7 @@ class TabMeasure(QWidget):
         # #126: click-to-jump only lives while an engine session runs; the
         # split-patch overlay stays so the finished chart can be inspected.
         self._preview.set_stripe_click_enabled(False)
+        self._preview.set_notice(None)
         self._m_engine_row.setVisible(False)
         self._key_watchdog.stop()
         self.measurement_active.emit(False)
@@ -4712,11 +4771,13 @@ class TabMeasure(QWidget):
         self._engine_strips = list(strips)
         self._engine_read = {s.get("strip", ""): bool(s.get("read"))
                              for s in strips}
-        self._refresh_goto_combo()
         self._preview.clear_patch_overlay()
+        self._patch_geom_warned = False
         is_manual = self._current_mode() == "manual"
         self._m_engine_row.setVisible(is_manual)
-        self._m_autosave_note.setVisible(is_manual)
+        # Autosave reassurance shows on the preview for both modes (autosave
+        # protects guided reads too).
+        self._set_autosave_banner()
         if is_manual:
             read_map = {}
             for s in strips:
@@ -4728,20 +4789,6 @@ class TabMeasure(QWidget):
                 tr("[Engine] Note: some rows of this chart are too similar "
                    "for automatic row identification — for those, take the "
                    "usual care to swipe the row shown in the preview."))
-
-    def _refresh_goto_combo(self) -> None:
-        self._m_goto_combo.clear()
-        for s in self._engine_strips:
-            letter = s.get("strip", "?")
-            mark = " ✓" if self._engine_read.get(letter) else ""
-            self._m_goto_combo.addItem(f"{letter}{mark}", letter)
-
-    def _on_goto_combo(self) -> None:
-        letter = self._m_goto_combo.currentData()
-        if letter and self._manager.engine_active:
-            self._manager.goto_strip(str(letter))
-            self._log.appendPlainText(
-                tr("[Engine] Jumping to strip {strip}…").format(strip=letter))
 
     def _on_preview_strip_clicked(self, page: int, local_idx: int) -> None:
         if not self._manager.engine_active:
@@ -4755,44 +4802,75 @@ class TabMeasure(QWidget):
     def _on_strip_measured(self, ev: dict) -> None:
         letter = str(ev.get("strip", ""))
         self._engine_read[letter] = True
-        self._refresh_goto_combo()
         page, local_idx, rect = self._locate_strip(letter)
-        if rect is None:
-            return
         patches = ev.get("patches", [])
         if not patches:
             return
-        warn = float(ev.get("worst_de", 0)) >= 15.0
-        n = len(patches)
-        items = []
+
+        # Split-patch overlay: place each split on the patch's OWN box, looked
+        # up by its location id (e.g. "A12"). This keeps every split exactly on
+        # the printed patch — spacers, ColorMunki double density and multi-page
+        # layouts all just work. If the chart exposes no per-patch geometry we
+        # draw nothing (never a misaligned block over the chart).
+        boxes = self._patch_boxes[page] if 0 <= page < len(self._patch_boxes) else {}
+        if not boxes:
+            if not self._patch_geom_warned:
+                self._patch_geom_warned = True
+                self._log.appendPlainText(
+                    tr("[Engine] Live patch preview needs a chart made with the "
+                       "ChromIQ layout engine, so it is off for this chart. Your "
+                       "measurement is unaffected — every strip is still saved and "
+                       "checked."))
+            # Keep the read-map / strip highlight current even without overlay.
+            self._update_engine_read_map()
+            return
+
         from PyQt6.QtGui import QColor as _QC
-        # Patches run along the strip's LONG axis: printtarg charts read as
-        # vertical columns subdivide top-to-bottom, engine row charts
-        # left-to-right.
-        vertical = rect.height() >= rect.width()
-        step = (rect.height() if vertical else rect.width()) / n
-        for i, p in enumerate(patches):
-            if vertical:
-                sub = QRect(rect.x(), int(rect.y() + i * step),
-                            rect.width(), max(1, int(step)))
-            else:
-                sub = QRect(int(rect.x() + i * step), rect.y(),
-                            max(1, int(step)), rect.height())
-            items.append((sub,
+        items = []
+        for p in patches:
+            box = boxes.get(str(p.get("loc", "")))
+            if box is None:
+                continue
+            # Outline only the individual patch that looks off (a likely
+            # misread), not the whole strip — points straight at what to
+            # re-measure. _PATCH_WARN_DE ≈ Argyll's own "unexpected response"
+            # band; normal print drift (a few ΔE) never trips it.
+            warn = float(p.get("de", 0)) >= _PATCH_WARN_DE
+            items.append((box,
                           _QC(*_xyz_d50_to_srgb8(p.get("exyz", [0, 0, 0]))),
                           _QC(*_xyz_d50_to_srgb8(p.get("xyz", [0, 0, 0]))),
                           warn))
-        self._preview.set_patch_overlay(page, items)
+        if items:
+            self._preview.set_patch_overlay(page, items)
+        self._update_engine_read_map()
+
+    def _update_engine_read_map(self) -> None:
         read_map = {}
         for s in self._engine_strips:
             _pg, li, _r = self._locate_strip(s.get("strip", "A"))
             read_map[li] = self._engine_read.get(s.get("strip", ""), False)
         self._preview.set_stripe_read_map(read_map)
 
+    def _set_autosave_banner(self, saved: int | None = None) -> None:
+        """Show the autosave reassurance as a preview banner (the same amber
+        note style as the Create Chart 'approximate colours' note), or hide it
+        when the engine isn't active."""
+        if not self._manager.engine_active:
+            self._preview.set_notice(None)
+            return
+        if saved and saved > 0:
+            self._preview.set_notice(tr(
+                "Auto-save on — {count} patches already safe on disk. Every "
+                "strip is written the moment it is accepted, so you can always "
+                "continue where you left off.").format(count=saved))
+        else:
+            self._preview.set_notice(tr(
+                "Auto-save on — every strip is written to disk the moment it "
+                "is accepted, so if anything goes wrong you can always "
+                "continue where you left off."))
+
     def _on_readings_saved(self, path: str, n: int) -> None:
-        self._m_autosave_note.setText(
-            tr("Saved: {count} patches are safe on disk — every strip is "
-               "written the moment it is accepted.").format(count=n))
+        self._set_autosave_banner(n)
 
     def _apply_engine_params(self, p: MeasureParams) -> MeasureParams:
         """Attach the chart-reading engine when selected and usable."""

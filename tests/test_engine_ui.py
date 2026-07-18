@@ -99,7 +99,7 @@ def _make_tab(engine="chromiq"):
     return TabMeasure(ArgyllRunner(s), s)
 
 
-def test_session_map_populates_goto_combo_and_click_map(monkeypatch):
+def test_session_map_enables_click_jump_and_read_map(monkeypatch):
     tab = _make_tab()
     tab._page_stripe_rects = [[QRect(0, 0, 100, 20), QRect(0, 30, 100, 20)]]
     tab._strips_per_page = [2]
@@ -109,16 +109,15 @@ def test_session_map_populates_goto_combo_and_click_map(monkeypatch):
         {"strip": "A", "sheet": 1, "read": True, "verifiable": True},
         {"strip": "B", "sheet": 1, "read": False, "verifiable": True},
     ])
-    assert tab._m_engine_row.isVisible() or True  # visibility needs a shown parent
-    combo = tab._m_goto_combo
-    assert [combo.itemData(i) for i in range(combo.count())] == ["A", "B"]
-    assert combo.itemText(0).endswith("✓")
-    assert not combo.itemText(1).endswith("✓")
+    # No go-to-strip combo any more — clicking a strip is the only jump UI.
+    assert not hasattr(tab, "_m_goto_combo")
     assert tab._preview._stripe_click_enabled
     assert tab._preview._stripe_read_map == {0: True, 1: False}
 
 
-def test_strip_measured_builds_split_overlay(monkeypatch):
+def test_strip_measured_splits_only_real_patch_boxes(monkeypatch):
+    """The overlay must land on each patch's OWN box (looked up by loc), and
+    draw nothing when the chart exposes no per-patch geometry."""
     tab = _make_tab()
     tab._page_stripe_rects = [[QRect(0, 0, 210, 20), QRect(0, 30, 210, 20)]]
     tab._strips_per_page = [2]
@@ -131,12 +130,20 @@ def test_strip_measured_builds_split_overlay(monkeypatch):
             for i in range(1, 8)
         ],
     }
+    # No geometry → overlay suppressed (never a misaligned block).
+    tab._patch_boxes = [dict()]
+    tab._on_strip_measured(ev)
+    assert tab._preview._patch_overlay.get(0) is None
+    assert tab._engine_read["B"] is True
+
+    # With real per-patch boxes → each split lands on its own box.
+    boxes = {f"B{i}": QRect(5 * i, 30, 4, 18) for i in range(1, 8)}
+    tab._patch_boxes = [boxes]
     tab._on_strip_measured(ev)
     items = tab._preview._patch_overlay.get(0)
     assert items and len(items) == 7
-    rect0 = items[0][0]
-    assert rect0.y() == 30 and rect0.width() == 30   # 210 / 7 patches
-    assert tab._engine_read["B"] is True
+    assert items[0][0] == QRect(5, 30, 4, 18)      # B1's exact box
+    assert items[3][0] == QRect(20, 30, 4, 18)     # B4's exact box
 
 
 def test_preview_click_maps_page_index_to_letter_and_sends_goto(monkeypatch):
