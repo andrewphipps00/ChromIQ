@@ -42,6 +42,23 @@ SHEET_TOKENS = (
 )
 
 
+# Font sizes are shown to the user in points (Word/PowerPoint/PDF units) but
+# stored and rendered by the engine in mm. A font drawn at S mm becomes
+# S·dpi/25.4 px, i.e. a point size of S·72/25.4 — so pt = mm · 72/25.4 (Knut).
+PT_PER_MM = 72.0 / 25.4          # ≈ 2.835
+MM_PER_PT = 25.4 / 72.0          # ≈ 0.3528
+
+
+def mm_to_pt(mm: float) -> float:
+    """Round-trip-stable mm → points for the size spinboxes (0 stays 0=auto)."""
+    return round(float(mm or 0.0) * PT_PER_MM)
+
+
+def pt_to_mm(pt: float) -> float:
+    """Points → mm for storing/rendering (0 stays 0=auto)."""
+    return round(float(pt or 0.0) * MM_PER_PT, 2)
+
+
 class LayoutOptionsPanel(QWidget):
     """All layout-engine controls except instrument/paper/mode."""
 
@@ -318,6 +335,18 @@ class LayoutOptionsPanel(QWidget):
             sb.setRange(0, top); sb.setDecimals(1); sb.setSingleStep(0.5)
             sb.setMinimumWidth(84)            # room for "300,0" / "auto" + buttons
             sb.setMaximumWidth(96)            # (suffix lives in the row label)
+            sb.valueChanged.connect(self._emit)
+            return sb
+
+        def small_pt(top_pt: float = 60.0) -> NoScrollDoubleSpinBox:
+            """A font-size spinbox in **points** — the familiar unit from Word /
+            PowerPoint / PDF (12 pt is body text, ~18–24 pt a heading). The
+            engine stores and renders these sizes in mm, so the value is
+            converted at the recipe boundary (see PT_PER_MM). 0 = "auto"."""
+            sb = NoScrollDoubleSpinBox(self)
+            sb.setRange(0, top_pt); sb.setDecimals(0); sb.setSingleStep(1)
+            sb.setMinimumWidth(84)
+            sb.setMaximumWidth(96)
             sb.valueChanged.connect(self._emit)
             return sb
 
@@ -663,7 +692,7 @@ class LayoutOptionsPanel(QWidget):
         self.indicator_font = NoScrollComboBox(self)
         self._populate_font_combo(self.indicator_font)
         self.indicator_font.currentIndexChanged.connect(self._emit)
-        self.indicator_size = small_mm(top=20.0)
+        self.indicator_size = small_pt(top_pt=72.0)
         self.indicator_size.setSpecialValueText(tr("auto"))
         self.ind_bold = QCheckBox(tr("Bold"), self)
         self.ind_bold.toggled.connect(self._emit)
@@ -1033,7 +1062,7 @@ class LayoutOptionsPanel(QWidget):
         self.chart_text_font = NoScrollComboBox(self)
         self._populate_font_combo(self.chart_text_font)
         self.chart_text_font.currentIndexChanged.connect(self._emit)
-        self.chart_text_size = small_mm(top=20.0)
+        self.chart_text_size = small_pt(top_pt=72.0)
         self.chart_text_size.setSpecialValueText(tr("auto"))
         self.ct_bold = QCheckBox(tr("Bold"), self)
         self.ct_bold.toggled.connect(self._emit)
@@ -1122,7 +1151,7 @@ class LayoutOptionsPanel(QWidget):
         self.clip_text_font.currentIndexChanged.connect(self._emit)
         # Manual text size for the clip strip (auto = fit to the strip width);
         # so the record text doesn't dominate the sheet (#125, Knut).
-        self.clip_text_size = small_mm(top=20.0)
+        self.clip_text_size = small_pt(top_pt=72.0)
         self.clip_text_size.setSpecialValueText(tr("auto"))
         self.clip_text_size.valueChanged.connect(self._emit)
         self.clip_image_path = QLineEdit(self)
@@ -1178,7 +1207,7 @@ class LayoutOptionsPanel(QWidget):
         _cf = QHBoxLayout(_clip_font_w)
         _cf.setContentsMargins(0, 0, 0, 0); _cf.setSpacing(8)
         _cf.addWidget(self.clip_text_font, 1)
-        _cf.addWidget(QLabel(tr("Size:"), self))
+        _cf.addWidget(QLabel(tr("Size (pt):"), self))
         _cf.addWidget(self.clip_text_size)
         add_row(ccg, 3, tr("Font:"), _clip_font_w,
                 tip=TooltipButton(
@@ -1995,7 +2024,7 @@ class LayoutOptionsPanel(QWidget):
         grid.addWidget(combo, r, 1)
         if tip is not None:
             grid.addWidget(tip, r, 2)
-        grid.addWidget(QLabel(tr("Size:"), self), r + 1, 0, Qt.AlignmentFlag.AlignRight)
+        grid.addWidget(QLabel(tr("Size (pt):"), self), r + 1, 0, Qt.AlignmentFlag.AlignRight)
         wrap = QWidget(self)
         box = QHBoxLayout(wrap); box.setContentsMargins(0, 0, 0, 0); box.setSpacing(8)
         box.addWidget(size); box.addWidget(bold); box.addWidget(italic); box.addStretch()
@@ -2196,7 +2225,7 @@ class LayoutOptionsPanel(QWidget):
         self.show_indicators.setChecked(r.show_strip_indicators)
         _fi = self.indicator_font.findData(r.indicator_font)
         self.indicator_font.setCurrentIndex(_fi if _fi >= 0 else 0)
-        self.indicator_size.setValue(r.indicator_size_mm)
+        self.indicator_size.setValue(mm_to_pt(r.indicator_size_mm))
         self.ind_bold.setChecked(r.indicator_bold)
         self.ind_italic.setChecked(r.indicator_italic)
         _rot = self.indicator_rotation.findData(int(r.indicator_rotation))
@@ -2216,7 +2245,7 @@ class LayoutOptionsPanel(QWidget):
         self.chart_text.setText(r.chart_text)
         _ctf = self.chart_text_font.findData(r.chart_text_font)
         self.chart_text_font.setCurrentIndex(_ctf if _ctf >= 0 else 0)
-        self.chart_text_size.setValue(r.chart_text_size_mm)
+        self.chart_text_size.setValue(mm_to_pt(r.chart_text_size_mm))
         self.text_edge.setValue(getattr(r, "text_edge_mm", 4.0) or 4.0)
         self.text_edge_top.setValue(getattr(r, "text_edge_top_mm", 4.0) or 4.0)
         self.text_edge_clip.setValue(getattr(r, "text_edge_clip_mm", 4.0) or 4.0)
@@ -2233,7 +2262,7 @@ class LayoutOptionsPanel(QWidget):
         self.clip_text.setText(r.clip_text)
         _cf = self.clip_text_font.findData(r.clip_text_font)
         self.clip_text_font.setCurrentIndex(_cf if _cf >= 0 else 0)
-        self.clip_text_size.setValue(r.clip_text_size_mm)
+        self.clip_text_size.setValue(mm_to_pt(r.clip_text_size_mm))
         self.clip_image_path.setText(r.clip_image_path)
         self.clip_image_rotation.setValue(int(getattr(r, "clip_image_rotation", 0) or 0))
         self.clip_image_scale.setValue(float(getattr(r, "clip_image_scale", 100.0) or 100.0))
@@ -2298,7 +2327,7 @@ class LayoutOptionsPanel(QWidget):
         r.export_pdf = self.export_pdf.isChecked()
         r.show_strip_indicators = self.show_indicators.isChecked()
         r.indicator_font = self.indicator_font.currentData() or "JetBrains Mono"
-        r.indicator_size_mm = self.indicator_size.value()
+        r.indicator_size_mm = pt_to_mm(self.indicator_size.value())
         r.indicator_bold = self.ind_bold.isChecked()
         r.indicator_italic = self.ind_italic.isChecked()
         r.indicator_rotation = int(self.indicator_rotation.currentData() or 0)
@@ -2311,7 +2340,7 @@ class LayoutOptionsPanel(QWidget):
         r.underline_gap_mm = self.underline_gap.value()
         r.chart_text = self.chart_text.text()
         r.chart_text_font = self.chart_text_font.currentData() or "Inter"
-        r.chart_text_size_mm = self.chart_text_size.value()
+        r.chart_text_size_mm = pt_to_mm(self.chart_text_size.value())
         r.text_edge_mm = self.text_edge.value()
         r.text_edge_top_mm = self.text_edge_top.value()
         r.text_edge_clip_mm = self.text_edge_clip.value()
@@ -2324,7 +2353,7 @@ class LayoutOptionsPanel(QWidget):
         r.clip_side = self.clip_side.currentData() or "left"
         r.clip_text = self.clip_text.text()
         r.clip_text_font = self.clip_text_font.currentData() or "Inter"
-        r.clip_text_size_mm = self.clip_text_size.value()
+        r.clip_text_size_mm = pt_to_mm(self.clip_text_size.value())
         r.clip_image_path = self.clip_image_path.text().strip()
         r.clip_image_rotation = self.clip_image_rotation.value()
         r.clip_image_scale = self.clip_image_scale.value()

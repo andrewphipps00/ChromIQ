@@ -2060,11 +2060,13 @@ class SettingsDialog(QDialog):
         # Reuse the panel's font list so the choices match Create Chart exactly.
         self._layout_panel._populate_font_combo(self._isty_font)
         g.addWidget(self._isty_font, 1, 1)
+        # Font size in points (Word/PowerPoint units), stored in mm — see
+        # layout_options_panel.PT_PER_MM (Knut).
         self._isty_size = NoScrollDoubleSpinBox(self)
-        self._isty_size.setRange(0.0, 20.0)
-        self._isty_size.setDecimals(1)
-        self._isty_size.setSingleStep(0.5)
-        self._isty_size.setSuffix(" mm")
+        self._isty_size.setRange(0.0, 72.0)
+        self._isty_size.setDecimals(0)
+        self._isty_size.setSingleStep(1)
+        self._isty_size.setSuffix(" pt")
         self._isty_size.setSpecialValueText(tr("auto"))
         _size_wrap = QWidget(self)
         _size_row = QHBoxLayout(_size_wrap)
@@ -2130,7 +2132,8 @@ class SettingsDialog(QDialog):
         # ---- load current values ----
         _fi = self._isty_font.findData(s.get("strip_indicator_font"))
         self._isty_font.setCurrentIndex(_fi if _fi >= 0 else 0)
-        self._isty_size.setValue(float(s.get("strip_indicator_size_mm")))
+        from ui.dialogs.layout_options_panel import mm_to_pt
+        self._isty_size.setValue(mm_to_pt(float(s.get("strip_indicator_size_mm"))))
         self._isty_bold.setChecked(bool(s.get("strip_indicator_bold")))
         self._isty_italic.setChecked(bool(s.get("strip_indicator_italic")))
         _ri = self._isty_rotation.findData(int(s.get("strip_indicator_rotation")))
@@ -2150,7 +2153,8 @@ class SettingsDialog(QDialog):
             return
         s = self._settings
         s.set("strip_indicator_font", self._isty_font.currentData() or "JetBrains Mono")
-        s.set("strip_indicator_size_mm", float(self._isty_size.value()))
+        from ui.dialogs.layout_options_panel import pt_to_mm
+        s.set("strip_indicator_size_mm", pt_to_mm(self._isty_size.value()))
         s.set("strip_indicator_bold", self._isty_bold.isChecked())
         s.set("strip_indicator_italic", self._isty_italic.isChecked())
         s.set("strip_indicator_rotation", int(self._isty_rotation.currentData() or 0))
@@ -2304,7 +2308,7 @@ class SettingsDialog(QDialog):
         from core.settings import DEFAULTS
         _fi = self._isty_font.findData(DEFAULTS["strip_indicator_font"])
         self._isty_font.setCurrentIndex(_fi if _fi >= 0 else 0)
-        self._isty_size.setValue(float(DEFAULTS["strip_indicator_size_mm"]))
+        self._isty_size.setValue(mm_to_pt(float(DEFAULTS["strip_indicator_size_mm"])))
         self._isty_bold.setChecked(bool(DEFAULTS["strip_indicator_bold"]))
         self._isty_italic.setChecked(bool(DEFAULTS["strip_indicator_italic"]))
         _ri = self._isty_rotation.findData(int(DEFAULTS["strip_indicator_rotation"]))

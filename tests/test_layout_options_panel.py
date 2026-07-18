@@ -53,10 +53,12 @@ def test_all_engine_options_roundtrip(app):
         max_strip_mm=200.0, offset_x_mm=4.0, offset_y_mm=5.0, bit16=True,
         compression="zlib", export_pdf=True,
         show_strip_indicators=True, indicator_font="Inter",
-        indicator_size_mm=4.0, indicator_bold=True, indicator_italic=False,
+        # Font sizes now quantise to whole points in the UI, so use
+        # point-grid-aligned mm here (4.23 mm = 12 pt) for an exact round-trip.
+        indicator_size_mm=4.23, indicator_bold=True, indicator_italic=False,
         indicator_rotation=270, indicator_align="center",
         underline_mode="cycle", underline_thickness_mm=0.8, underline_gap_mm=1.2,
-        chart_text="{project}", chart_text_font="Inter", chart_text_size_mm=3.5,
+        chart_text="{project}", chart_text_font="Inter", chart_text_size_mm=3.53,  # 10 pt
         chart_text_bold=True, chart_text_italic=False, text_edge_mm=7.0,
         text_edge_top_mm=5.0, text_edge_clip_mm=6.0,
         stamp_command=True,

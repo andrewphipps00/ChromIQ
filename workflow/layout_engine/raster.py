@@ -372,7 +372,8 @@ def render_clip_strip(mode: str, *, width_px: int, height_px: int, dpi: int,
 
     if mode == "branding":
         extra = [ln for ln in (text or "").splitlines() if ln.strip()]
-        overlay = _vwordmark(extra, width_px, height_px, font_family)
+        overlay = _vwordmark(extra, width_px, height_px, font_family,
+                             extra_size_px=(text_size_mm * mm2px) if text_size_mm else 0.0)
         strip.paste(overlay, (0, 0), overlay)
         return strip
 
@@ -415,23 +416,31 @@ def _italic_tile(text: str, font, fill: tuple, stroke_w: int = 0,
 
 
 def _vwordmark(extra_lines: list[str], width_px: int, height_px: int,
-               font_family: str = "Inter") -> Image.Image:
+               font_family: str = "Inter", extra_size_px: float = 0.0) -> Image.Image:
     """The masthead "ChromIQ" wordmark — Instrument Serif, "Chrom" near-black,
     "IQ" bold-italic in magenta — plus optional lines, read up the strip. The
     optional lines use *font_family* (the user's chosen clip font), not the
-    wordmark face (#93, Knut)."""
+    wordmark face (#93, Knut).
+
+    *extra_size_px* > 0 sets the point size of the optional lines (the user's
+    clip-text Size, which now applies to branding too — Knut); 0 keeps the
+    legacy behaviour of matching the wordmark's auto-fit size."""
     canvas = Image.new("RGBA", (max(1, height_px), max(1, width_px)), (0, 0, 0, 0))
     d = ImageDraw.Draw(canvas)
     n = 1 + len(extra_lines)
     chrom_fill = WORDMARK_RGB + (255,)
     iq_fill = WORDMARK_IQ_RGB + (255,)
     size = max(10, int(width_px * 0.55))
+    esize = max(8, int(extra_size_px)) if extra_size_px else None
     for _ in range(40):
         f = _font(size, WORDMARK_FONT)
-        f_extra = _font(size, font_family)
+        f_extra = _font(esize if esize else size, font_family)
         wm_w = d.textlength("Chrom", font=f) + d.textlength("IQ", font=f) * 1.25
         widest = max([wm_w] + [d.textlength(l, font=f_extra) for l in extra_lines])
-        if size * 1.25 * n <= width_px * 0.92 and widest <= height_px * 0.95:
+        # Total stacked height: wordmark line + each extra line at its own size.
+        stack_h = size * 1.25 + (len(extra_lines)
+                                 * (esize if esize else size) * 1.25)
+        if stack_h <= width_px * 0.92 and widest <= height_px * 0.95:
             break
         size = int(size * 0.9)
         if size <= 10:
@@ -439,7 +448,10 @@ def _vwordmark(extra_lines: list[str], width_px: int, height_px: int,
     f = _font(size, WORDMARK_FONT)
     asc, desc = f.getmetrics()
     line_h = size * 1.25
-    cy = (width_px - line_h * n) / 2
+    extra_line_h = (esize if esize else size) * 1.25
+    # Centre the whole stack (wordmark line + extra lines at their own height).
+    stack_h = line_h + len(extra_lines) * extra_line_h
+    cy = (width_px - stack_h) / 2
     # "IQ" is the masthead's real Instrument Serif *Italic* face (the masthead
     # asks for bold too, but Instrument Serif has no bold face and Qt doesn't
     # synthesise one — so the header renders plain italic). Use the genuine
@@ -458,9 +470,10 @@ def _vwordmark(extra_lines: list[str], width_px: int, height_px: int,
         canvas.paste(iq_tile,
                      (int(x + chrom_w + kern - iq_left), int(baseline - iq_base)),
                      iq_tile)
-        f_extra = _font(size, font_family)      # user's chosen clip font
-        for i, ln in enumerate(extra_lines, start=1):
-            d.text((height_px / 2, cy + line_h * (i + 0.5)), ln, font=f_extra,
+        f_extra = _font(esize if esize else size, font_family)  # user's clip font + size
+        for i, ln in enumerate(extra_lines):
+            ly = cy + line_h + extra_line_h * (i + 0.5)
+            d.text((height_px / 2, ly), ln, font=f_extra,
                    fill=chrom_fill, anchor="mm")
     except Exception:  # pragma: no cover - default font without anchor
         d.text((x, baseline), "ChromIQ", font=f, fill=chrom_fill)
