@@ -920,8 +920,19 @@ class TiffPreview(QWidget):
             return
         self._badge_lbl.setText(text)
         self._badge_lbl.adjustSize()
-        self._badge_lbl.move(self.width() - self._badge_lbl.width() - 12,
-                             self.height() - self._badge_lbl.height() - 12)
+        # Anchor to the TOP-right of the image area, not the widget's bottom
+        # edge: the bottom is where the surrounding tab places its controls
+        # (e.g. the Next button), which the old bottom-anchored badge covered
+        # (#125, Knut). mapTo handles the label's nesting inside the header/
+        # image layout.
+        from PyQt6.QtCore import QPoint
+        origin = (self._img_label.mapTo(self, QPoint(0, 0))
+                  if self._img_label is not None
+                  and not sip.isdeleted(self._img_label) else QPoint(0, 0))
+        x = origin.x() + self._img_label.width() - self._badge_lbl.width() - 10
+        y = origin.y() + 10
+        self._badge_lbl.move(max(0, x), max(0, y))
+        self._badge_lbl.raise_()
         self._badge_lbl.setVisible(True)
 
     def _repaint_label(self) -> None:

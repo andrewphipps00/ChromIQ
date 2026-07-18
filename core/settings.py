@@ -320,8 +320,15 @@ _I1_PRIMARY = {"L": 26, "R": 9, "T": 38, "B": 9, "desc": _I1_DESC}
 # (28 / 40 instead of 26 / 38); provisional until confirmed.
 _I1P3_DESC = "i1Pro 3+ ruler / jig"
 _I1P3_PRIMARY = {"L": 28, "R": 9, "T": 40, "B": 9, "desc": _I1P3_DESC}
+# A4 / Letter are also on the primary (jig) list in LANDSCAPE: the i1Pro jig
+# can read those sheets landscape too, and Knut wants the same clip/label
+# margins there as portrait (#125). schema 7 upgrades a stored blob's plain-9
+# entries for these two combos in place.
 _PRIMARY_COMBOS = (
-    "A4 Portrait", "Letter Portrait", "A3 Landscape", "Tabloid Landscape")
+    "A4 Portrait", "Letter Portrait", "A3 Landscape", "Tabloid Landscape",
+    "A4 Landscape", "Letter Landscape")
+# The combos that gained the jig margins in schema 7 (used by the migration).
+_SCHEMA7_LANDSCAPE_COMBOS = ("A4 Landscape", "Letter Landscape")
 _ALL_COMBOS = [(p, o) for p in _MARGIN_PAPERS_ALL
                for o in ("Portrait", "Landscape")]
 _MARGIN_SEED: dict[str, dict[str, Any]] = {
@@ -331,6 +338,35 @@ _MARGIN_SEED: dict[str, dict[str, Any]] = {
     **{f"i1Pro 3+|{c}": dict(_I1P3_PRIMARY) for c in _PRIMARY_COMBOS},
     **_seed_rows("ColorMunki", _CM_DESC, 6, 24, _ALL_COMBOS),
 }
+
+
+def _same_margin(a: dict[str, Any], b: dict[str, Any]) -> bool:
+    """True when two margin entries carry the same L/R/T/B values (the ``desc``
+    label is ignored — only the numeric thresholds decide equality)."""
+    try:
+        return all(abs(float(a.get(k, 0)) - float(b.get(k, 0))) < 1e-9
+                   for k in ("L", "R", "T", "B"))
+    except (TypeError, ValueError):
+        return False
+
+
+def upgrade_margin_landscape_jig(
+    table: dict[str, dict[str, Any]]
+) -> tuple[dict[str, dict[str, Any]], bool]:
+    """Give i1Pro / i1Pro 3+ A4 & Letter *Landscape* the jig margins (schema 7,
+    #125), returning ``(table, changed)``. A combo is upgraded only when it is
+    absent or still equals the old plain-9 default — a customised value is kept.
+    Pure (no I/O) so the rule is unit-tested directly."""
+    changed = False
+    for instr, primary in {"i1Pro": _I1_PRIMARY, "i1Pro 3+": _I1P3_PRIMARY}.items():
+        old_plain = {"L": 9, "R": 9, "T": 9, "B": 9}
+        for combo in _SCHEMA7_LANDSCAPE_COMBOS:
+            key = f"{instr}|{combo}"
+            cur = table.get(key)
+            if cur is None or _same_margin(cur, old_plain):
+                table[key] = dict(primary)
+                changed = True
+    return table, changed
 
 
 def default_margin_thresholds() -> dict[str, dict[str, Any]]:
@@ -419,7 +455,7 @@ def thresholds_for_combo(
 # Bump when a shipped default changes in a way that must reach users who have
 # the OLD default persisted. Settings → Save writes every key, so a stored
 # value otherwise pins a user to the old behaviour for good.
-SETTINGS_SCHEMA = 6
+SETTINGS_SCHEMA = 7
 
 # key → the old default(s) it must no longer be stuck on. Only a stored value
 # EQUAL to one of the old defaults is dropped (so it falls through to the new
@@ -479,11 +515,33 @@ class AppSettings:
             if self._qs.value(key, None) is not None:
                 self._qs.remove(key)
                 dropped.append(key)
+        if self._migrate_margin_landscape_jig():
+            dropped.append("margin_thresholds[A4/Letter Landscape jig]")
         self._qs.setValue("settings_schema", SETTINGS_SCHEMA)
         if dropped:
             log.info("Settings migrated to schema %d; dropped stale defaults: %s",
                      SETTINGS_SCHEMA, ", ".join(dropped))
         return dropped
+
+    def _migrate_margin_landscape_jig(self) -> bool:
+        """schema 7 (#125): give i1Pro / i1Pro 3+ A4 & Letter *Landscape* the jig
+        margins, matching portrait. Upgrades a stored ``margin_thresholds`` blob
+        in place, but only for combos that still hold the old plain-9 default —
+        a value the user customised in Settings is left untouched. Returns True
+        when the blob was changed. Fresh installs need nothing (the seed already
+        carries the new values)."""
+        raw = self._qs.value("margin_thresholds", None)
+        if not raw:
+            return False
+        try:
+            table = parse_margin_thresholds(str(raw))
+        except Exception:  # noqa: BLE001
+            return False
+        table, changed = upgrade_margin_landscape_jig(table)
+        if changed:
+            self._qs.setValue("margin_thresholds",
+                              serialize_margin_thresholds(table))
+        return changed
 
     def get(self, key: str, default: Any = None) -> Any:
         # On Windows the OS print dialog is the only path that works (no CUPS,

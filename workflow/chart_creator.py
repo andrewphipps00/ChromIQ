@@ -116,6 +116,21 @@ ENGINE_INSTRUMENTS = {"i1", "p3", "CM", "SS"}
 CM_TRIPLE_PRINTTARG_SCALE = 1.3
 
 
+def _engine_padding_log_line(total: int, padding: int) -> str:
+    """The log line explaining strip fill-up padding, or "" when there is none.
+
+    Shown right after the engine's "<total> patches" line so a total that grew
+    past the designed count (e.g. 896 designed → 910 printed) is explained at
+    the same place the number appears (#124 follow-up, Knut)."""
+    if not padding or padding <= 0:
+        return ""
+    designed = total - padding
+    return (f"[ChromIQ layout engine] patch count: {designed} designed "
+            f"+ {padding} paper-white fill-up patch(es) completing the last "
+            f"strip = {total} total. Instruments read whole strips; the "
+            f"fill-up patches are measured like any others.")
+
+
 def _chromiq_clip_active(p: "ChartParams") -> bool:
     """True when ChromIQ-style clipping border applies to this chart.
 
@@ -1064,6 +1079,15 @@ class ChartCreator:
             f"[ChromIQ layout engine] {result.layout.total_patches} patches "
             f"({result.layout.steps_in_pass}×{result.layout.passes}), "
             f"{result.layout.pages} page(s), random start {result.seed}")
+        # Explain a total that grew past the designed count: a partial last
+        # strip is topped up with paper-white patches so the instrument reads
+        # whole strips (printtarg behaviour, mirrored by the engine). Knut
+        # missed this on the ENGINE build path (#124 follow-up) — the note was
+        # only on the editor-save and applied-chart copy paths before.
+        pad_line = _engine_padding_log_line(result.layout.total_patches,
+                                            getattr(result.layout, "padding", 0))
+        if pad_line:
+            on_line(pad_line)
         if result.low_contrast_passes:
             on_line(f"[ChromIQ layout engine] note: low patch/spacer contrast in "
                     f"{len(result.low_contrast_passes)} strip(s)")

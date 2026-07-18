@@ -7521,7 +7521,18 @@ class Ti2RelayoutDialog(QDialog):
         layout["seed"] = result.seed
         layout["color_rep"] = result.color_rep
         layout["recipe"] = recipe.to_dict()
-        sidecar.write_text(json.dumps({"layout": layout}))
+        # Top-level ``ink_channels`` so the preview can identify a multi-ink
+        # chart's inks (the printtarg sidecar carries it too). Without it the
+        # applied chart's preview could not decode a >4-channel TIFF and fell
+        # back to an approximate render with a floating badge that overlapped
+        # the Next button (#125). RGB (3-channel) charts still carry it; the
+        # preview only shows the ink row / badge for ≥4-channel charts.
+        from workflow.layout_engine.colorants import rep_ink_codes
+        doc: dict = {"layout": layout}
+        _codes = rep_ink_codes(result.color_rep)
+        if _codes:
+            doc["ink_channels"] = _codes
+        sidecar.write_text(json.dumps(doc))
         if strips.exists():
             strips.unlink()
         # Hand-off sidecars (colour list + i1Profiler pair) — the same set the

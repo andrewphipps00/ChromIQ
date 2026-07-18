@@ -331,7 +331,8 @@ def render_clip_strip(mode: str, *, width_px: int, height_px: int, dpi: int,
                       image_rotation: int = 0, image_scale: float = 100.0,
                       image_offset_x_mm: float = 0.0,
                       image_offset_y_mm: float = 0.0,
-                      image_obj: "Image.Image | None" = None) -> Image.Image:
+                      image_obj: "Image.Image | None" = None,
+                      text_size_mm: float = 0.0) -> Image.Image:
     """Render the left clip-strip content as a ``width_px × height_px`` image.
 
     The strip is tall and narrow, so text/branding are drawn on a landscape
@@ -379,7 +380,8 @@ def render_clip_strip(mode: str, *, width_px: int, height_px: int, dpi: int,
     lines = [ln for ln in (text or "").splitlines() if ln.strip()]
     if not lines:
         return strip
-    overlay = _vtext("\n".join(lines), font_family, width_px, height_px)
+    overlay = _vtext("\n".join(lines), font_family, width_px, height_px,
+                     size_px=(text_size_mm * mm2px) if text_size_mm else 0.0)
     strip.paste(overlay, (0, 0), overlay)
     return strip
 
@@ -466,13 +468,18 @@ def _vwordmark(extra_lines: list[str], width_px: int, height_px: int,
 
 
 def _vtext(text: str, font_family: str, width_px: int, height_px: int,
-           *, valign: str = "center", bold: bool = False) -> Image.Image:
-    """A transparent ``width_px × height_px`` overlay with *text* read up the strip."""
+           *, valign: str = "center", bold: bool = False,
+           size_px: float = 0.0) -> Image.Image:
+    """A transparent ``width_px × height_px`` overlay with *text* read up the strip.
+
+    ``size_px`` (>0) fixes the font size the user chose instead of auto-fitting
+    to the strip width; the shrink-to-fit loop below still caps it so the text
+    can never overrun the strip (#125, Knut — manual clip-text size)."""
     # Draw on a landscape canvas (long = height_px, short = width_px), rotate 90°.
     canvas = Image.new("RGBA", (max(1, height_px), max(1, width_px)), (0, 0, 0, 0))
     d = ImageDraw.Draw(canvas)
     lines = text.split("\n")
-    size = max(8, int(width_px * 0.42))
+    size = max(8, int(size_px) if size_px and size_px > 0 else int(width_px * 0.42))
     f = _font(size, font_family, bold=bold)
     # shrink to fit the short dimension across all stacked lines
     for _ in range(40):
@@ -678,6 +685,25 @@ def _hexagon_points(x0: int, y0: int, w: int, ph: int, step: int):
     ]
 
 
+def _fill_rect(draw: "ImageDraw.ImageDraw", box, fill) -> bool:
+    """Draw a filled rectangle, skipping a degenerate (inverted / zero-area) box.
+
+    Integer rounding of a sub-pixel patch, spacer or furniture dimension can
+    momentarily invert an edge (``x1 < x0`` or ``y1 < y0``) — Pillow then raises
+    "y1 must be greater than or equal to y0" and aborts the entire page, which
+    surfaced as a hard error when applying a dense multi-ink chart (#125). Such a
+    rectangle covers no pixels, so it is safe to skip. Returns ``True`` when a
+    rectangle was actually drawn, so callers can gate the matching
+    device-geometry row on the same condition (keeping the raster, device-TIFF
+    and vector-PDF outputs consistent). The device raster already guards the same
+    way in :func:`build_device_pages`."""
+    x0, y0, x1, y1 = box
+    if x1 < x0 or y1 < y0:
+        return False
+    draw.rectangle([x0, y0, x1, y1], fill=fill)
+    return True
+
+
 def render_pages(
     target: ColorTarget,
     layout: Layout,
@@ -713,6 +739,7 @@ def render_pages(
     clip_content_mode: str = "off",
     clip_text: str = "",
     clip_text_font: str = "Inter",
+    clip_text_size_mm: float = 0.0,
     clip_image_path: str = "",
     clip_image_rotation: int = 0,
     clip_image_scale: float = 100.0,
@@ -910,8 +937,8 @@ def render_pages(
                 if underline_on and underline_mode == "cycle":   # one accent / strip
                     _ly = _y + label_band_h + ul_gap
                     _acc = ACCENT_RGB[global_strip % len(ACCENT_RGB)]
-                    draw.rectangle([x0, _ly, xR - 1, _ly + ul_th - 1], fill=_acc)
-                    if collect_device_geom:
+                    if _fill_rect(draw, [x0, _ly, xR - 1, _ly + ul_th - 1], _acc) \
+                            and collect_device_geom:
                         _geom_rows.append(
                             ("vrect", (x0, _ly, xR - 1, _ly + ul_th - 1), _acc))
                 # SpectroScan labels the grid 2-D: column letters on top (above)
@@ -954,8 +981,8 @@ def render_pages(
                     if collect_device_geom:
                         _geom_rows.append(("hex", _pts, dev_by_slot[gslot]))
                 else:
-                    draw.rectangle([x0, y0, xR - 1, yB - 1], fill=rgb)
-                    if collect_device_geom:
+                    if _fill_rect(draw, [x0, y0, xR - 1, yB - 1], rgb) \
+                            and collect_device_geom:
                         _geom_rows.append(
                             ("rect", (x0, y0, xR, yB), dev_by_slot[gslot]))
                 if sp_px > 0 and j + 1 < len(col_slots):
@@ -967,8 +994,8 @@ def render_pages(
                     _ov = spacer_overrides.get(_flat) if spacer_overrides else None
                     _fill = _ov if _ov is not None else contrast.spacer_for_mode(
                         spacer_mode, rgb, nxt, spacer_palette)
-                    draw.rectangle([x0, yB, xR - 1, y_next - 1], fill=_fill)
-                    if collect_device_geom:      # coloured spacer → device ink
+                    if _fill_rect(draw, [x0, yB, xR - 1, y_next - 1], _fill) \
+                            and collect_device_geom:  # coloured spacer → device ink
                         _geom_rows.append(
                             ("spacer", (x0, yB, xR, y_next), _fill))
             # Bracket the strip with a leading + trailing spacer (printtarg does
@@ -983,14 +1010,16 @@ def render_pages(
                 _yl = px(place.y_of(0)) + _stag - sp_px     # leading: above patch 0
                 _lead = contrast.spacer_for_mode(spacer_mode, _white, _first,
                                                  spacer_palette)
-                draw.rectangle([x0, _yl, xR - 1, _yl + sp_px - 1], fill=_lead)
+                _lead_ok = _fill_rect(draw, [x0, _yl, xR - 1, _yl + sp_px - 1], _lead)
                 _yt = px(place.y_of(len(col_slots) - 1) + place.plen) + _stag  # trailing
                 _trail = contrast.spacer_for_mode(spacer_mode, _last, _white,
                                                   spacer_palette)
-                draw.rectangle([x0, _yt, xR - 1, _yt + sp_px - 1], fill=_trail)
+                _trail_ok = _fill_rect(draw, [x0, _yt, xR - 1, _yt + sp_px - 1], _trail)
                 if collect_device_geom:
-                    _geom_rows.append(("spacer", (x0, _yl, xR, _yl + sp_px), _lead))
-                    _geom_rows.append(("spacer", (x0, _yt, xR, _yt + sp_px), _trail))
+                    if _lead_ok:
+                        _geom_rows.append(("spacer", (x0, _yl, xR, _yl + sp_px), _lead))
+                    if _trail_ok:
+                        _geom_rows.append(("spacer", (x0, _yt, xR, _yt + sp_px), _trail))
         # Full-width rule under the whole label row (one continuous line):
         # "segments" splits it into the five accents across the entire width;
         # "black" is a single plain line. ("cycle" is drawn per strip above.)
@@ -1001,8 +1030,8 @@ def render_pages(
             x_left = px(place.x_of(0))
             x_right = px(place.x_of(n_passes - 1) + place.pwid) - 1
             if underline_mode == "black":
-                draw.rectangle([x_left, _ly, x_right, _yb], fill=(0, 0, 0))
-                if collect_device_geom:
+                if _fill_rect(draw, [x_left, _ly, x_right, _yb], (0, 0, 0)) \
+                        and collect_device_geom:
                     _geom_rows.append(("vrect", (x_left, _ly, x_right, _yb), (0, 0, 0)))
             else:                                     # 5 equal segments full-width
                 _span = x_right - x_left + 1
@@ -1010,8 +1039,8 @@ def render_pages(
                 for _k in range(_n):
                     _sx0 = x_left + round(_span * _k / _n)
                     _sx1 = x_left + round(_span * (_k + 1) / _n) - 1
-                    draw.rectangle([_sx0, _ly, _sx1, _yb], fill=ACCENT_RGB[_k])
-                    if collect_device_geom:
+                    if _fill_rect(draw, [_sx0, _ly, _sx1, _yb], ACCENT_RGB[_k]) \
+                            and collect_device_geom:
                         _geom_rows.append(
                             ("vrect", (_sx0, _ly, _sx1, _yb), ACCENT_RGB[_k]))
 
@@ -1027,6 +1056,7 @@ def render_pages(
                 _clip = render_clip_strip(
                     clip_content_mode, width_px=_aw, height_px=_ah, dpi=dpi,
                     text=_clip_text, font_family=clip_text_font,
+                    text_size_mm=clip_text_size_mm,
                     image_path=clip_image_path, ctx=_notes_ctx,
                     image_rotation=clip_image_rotation,
                     image_scale=clip_image_scale,

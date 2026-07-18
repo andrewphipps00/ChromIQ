@@ -67,6 +67,7 @@ class ChartLayoutInfoPanel(QGroupBox):
 
         rows = (
             ("total", tr("Total patches")),
+            ("fillup", tr("… of those, fill-up")),
             ("page_patches", tr("Patches (this page)")),
             ("rows", tr("Patches per strip")),
             ("cols", tr("Strips (this page)")),
@@ -99,6 +100,15 @@ class ChartLayoutInfoPanel(QGroupBox):
                "• Total patches — how many colour squares the whole chart holds. "
                "More patches usually means a more accurate profile, but a bigger "
                "chart to print and measure.\n"
+               "• … of those, fill-up — how many of the total are paper-white "
+               "fill-up patches. Measuring instruments read whole strips, so "
+               "when your designed patches don't fill the last strip exactly, "
+               "it is topped up with plain paper-white patches (Argyll's "
+               "printtarg does the same). That's why the total can be a little "
+               "higher than the number of patches you designed — for example "
+               "896 designed becoming 910 printed. The fill-up patches are "
+               "measured like any others and are harmless; nothing of yours is "
+               "lost or changed.\n"
                "• Patches per strip — how many patches sit in one strip (a strip "
                "is a single column the instrument reads from top to bottom).\n"
                "• Strips (this page) — how many of those strips fit across the "
@@ -130,22 +140,27 @@ class ChartLayoutInfoPanel(QGroupBox):
 
     @staticmethod
     def _as_dict(total, rows, cols, pages, patch_w, patch_h,
-                 page_patches=None) -> dict:
+                 page_patches=None, fillup=None) -> dict:
         # Patch size is held as a rounded (w, h) tuple so the diff-highlight can
         # compare it; formatted to "w×h mm" at render time. 2 decimals so a
         # derived size like 7.34 mm is visible instead of hidden by 1-dp rounding.
         patch = None
         if patch_w and patch_h and patch_w > 0 and patch_h > 0:
             patch = (round(float(patch_w), 2), round(float(patch_h), 2))
-        return {"total": total, "page_patches": page_patches, "rows": rows,
-                "cols": cols, "pages": pages, "patch": patch}
+        return {"total": total, "fillup": fillup, "page_patches": page_patches,
+                "rows": rows, "cols": cols, "pages": pages, "patch": patch}
 
     def set_actual(self, *, total: int, rows: int, cols: int, pages: int,
                    patch_w: float = 0.0, patch_h: float = 0.0,
-                   page_patches: "int | None" = None) -> None:
-        """The measured values of the chart currently in the preview."""
+                   page_patches: "int | None" = None,
+                   fillup: "int | None" = None) -> None:
+        """The measured values of the chart currently in the preview.
+
+        *fillup* = how many of *total* are paper-white strip fill-up patches
+        (None = unknown), so a total that grew past the designed count is
+        explained right where the number is read (#124, Knut)."""
         self._actual = self._as_dict(total, rows, cols, pages, patch_w, patch_h,
-                                     page_patches)
+                                     page_patches, fillup)
         self._render()
 
     def clear_actual(self) -> None:
@@ -154,10 +169,11 @@ class ChartLayoutInfoPanel(QGroupBox):
 
     def set_estimate(self, *, total: int, rows: int, cols: int, pages: int,
                      patch_w: float = 0.0, patch_h: float = 0.0,
-                     page_patches: "int | None" = None) -> None:
+                     page_patches: "int | None" = None,
+                     fillup: "int | None" = None) -> None:
         """The predicted values for the current (engine) settings."""
         self._estimate = self._as_dict(total, rows, cols, pages, patch_w, patch_h,
-                                       page_patches)
+                                       page_patches, fillup)
         self._render()
 
     def clear_estimate(self) -> None:

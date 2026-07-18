@@ -130,6 +130,7 @@ class LayoutRecipe:
     clip_content_mode: str = "notes"
     clip_text: str = ""                  # rotated text / notes caption (tokens ok)
     clip_text_font: str = "Inter"
+    clip_text_size_mm: float = 0.0       # 0 = auto-fit to the strip width
     clip_image_path: str = ""            # imported logo/graphic for "image" mode
     clip_image_rotation: int = 0         # degrees, clip image transform
     clip_image_scale: float = 100.0      # % of fit-to-band (100 = fit)
@@ -233,6 +234,7 @@ class LayoutRecipe:
             clip_content_mode=d.get("clip_content_mode", "off"),
             clip_text=d.get("clip_text", ""),
             clip_text_font=d.get("clip_text_font", "Inter"),
+            clip_text_size_mm=float(d.get("clip_text_size_mm") or 0.0),
             clip_image_path=d.get("clip_image_path", ""),
             clip_image_rotation=int(d.get("clip_image_rotation") or 0),
             clip_image_scale=float(d.get("clip_image_scale") or 100.0),
@@ -345,6 +347,7 @@ class LayoutRecipe:
             "clip_content_mode": self.clip_content_mode,
             "clip_text": self.clip_text,
             "clip_text_font": self.clip_text_font,
+            "clip_text_size_mm": self.clip_text_size_mm,
             "clip_image_path": self.clip_image_path,
             "clip_image_rotation": self.clip_image_rotation,
             "clip_image_scale": self.clip_image_scale or 100.0,

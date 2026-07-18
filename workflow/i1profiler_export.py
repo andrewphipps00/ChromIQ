@@ -50,6 +50,34 @@ EXTRA_INK = {
 }
 _PLACEHOLDER_LAB = {"R", "c", "m"}
 
+# Fallback names + rough Lab anchors for extra-ink channel letters that aren't
+# in the verified EXTRA_INK table above (White, light yellow, light/medium
+# inks). Without these the best-effort i1Profiler export crashed on any ink set
+# containing one of them — e.g. a chart with a White ink raised KeyError 'W'
+# (#125). i1Profiler only needs a name + a colour hint per spot ink here, so a
+# placeholder Lab is fine; these inks carry no verified reference.
+_EXTRA_INK_FALLBACK = {
+    "W":  ("White", "100|0|0"),
+    "y":  ("Light Yellow", "92|-6|55"),
+    "k":  ("Light Black", "55|0|0"),
+    "2c": ("Medium Cyan", "70|-25|-30"),
+    "2m": ("Medium Magenta", "62|45|-10"),
+    "2y": ("Medium Yellow", "88|-5|70"),
+    "2k": ("Medium Black", "40|0|0"),
+    "1k": ("Light Light Black", "75|0|0"),
+}
+
+
+def _extra_ink(letter: str) -> tuple[str, str]:
+    """``(name, Lab)`` for an extra-ink channel letter, defensively.
+
+    Falls back to :data:`_EXTRA_INK_FALLBACK` and then to a generic placeholder,
+    so the export handles any ChromIQ ink set instead of raising ``KeyError`` on
+    an unknown channel (#125)."""
+    if letter in EXTRA_INK:
+        return EXTRA_INK[letter]
+    return _EXTRA_INK_FALLBACK.get(letter, (f"Ink {letter}", "50|0|0"))
+
 # i1Profiler's internal ink-colorspace enum. Verified against shipped
 # references: CMYK (4 ch) -> 9, CMYKOGV (7 ch) -> 15. Both fit 2*ch+1, which is
 # used (and flagged) for the CMYK+1/+2/+4 cases that ship no reference anywhere.
@@ -362,7 +390,7 @@ def _cmyk_object(idx: int, v: dict[str, float], extras: list[str], created: str)
     for letter in extras:
         out += [
             "\t\t\t\t\t\t<cc:SpotColor>",
-            f"\t\t\t\t\t\t\t<cc:Name>{EXTRA_INK[letter][0]}</cc:Name>",
+            f"\t\t\t\t\t\t\t<cc:Name>{_extra_ink(letter)[0]}</cc:Name>",
             f"\t\t\t\t\t\t\t<cc:Percentage>{_trim(v.get(letter, 0.0))}</cc:Percentage>",
             "\t\t\t\t\t\t</cc:SpotColor>",
         ]
@@ -429,7 +457,7 @@ def write_pxf(
 
     plus_attrs = ""
     for i, letter in enumerate(extras, start=1):
-        name, lab = EXTRA_INK[letter]
+        name, lab = _extra_ink(letter)
         plus_attrs += f' PLUS_{i}_COLOR="{name}|{lab}|1|2|50|50|{i}"'
     colorspace = "CMYK" if n_plus == 0 else f"CMYK + {n_plus}"
     ink_limit = 100 * target.n_channels

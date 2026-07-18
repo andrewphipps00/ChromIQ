@@ -264,36 +264,35 @@ def test_cm_ss_clip_enable_selector(app):
     assert p.clip_enable.currentData() == "on"
 
 
-def test_clip_border_floors_then_restores_margin(app):
-    """Turning the clip band ON floors the clip-side margin at the clip width
-    (clip-inside-margin); turning it OFF restores the margin the user had — it
-    must NOT stay stuck at the clip width (Knut/Sebastian, double-border bug)."""
+def _has_conflict(spin) -> bool:
+    """True when the spin currently carries the red conflict outline (#125)."""
+    return "d9534f" in spin.styleSheet()
+
+
+def test_clip_width_does_not_mutate_margin(app):
+    """The clip band must NOT copy the clip width into the margin box any more
+    (Knut #125): the margin keeps the user's value; the smaller of the two
+    fields is flagged instead. The engine still reserves max(width, margin)."""
     from ui.dialogs.layout_options_panel import LayoutOptionsPanel
     from workflow.layout_engine.presets import default_recipe
-    # ColorMunki, clip off, left margin 6, clip width 26.
     p = LayoutOptionsPanel(with_selectors=True)
     r = default_recipe("CM", "A4", mode="extrahigh")
-    r.use_instrument_margins = False   # editable margins (the clip-floor applies)
+    r.use_instrument_margins = False
     r.margin_left = 6.0
     r.clip_border_width_mm = 26.0
     r.clip_content_mode = "off"
     p.set_recipe(r)
     assert p.margins["l"].value() == 6.0
     p.clip_enable.setCurrentIndex(p.clip_enable.findData("on"))
-    assert p.margins["l"].value() == 26.0          # floored to clip width
-    p.clip_enable.setCurrentIndex(p.clip_enable.findData("off"))
-    assert p.margins["l"].value() == 6.0           # restored, not stuck at 26
-    # i1Pro via its Mode selector: same floor/restore on the clip-side margin.
-    r2 = default_recipe("i1", "A4", mode="clip")
-    r2.use_instrument_margins = False
-    r2.margin_left = 6.0
-    r2.clip_border_width_mm = 26.0
-    p.set_recipe(r2)
-    p.mode.setCurrentIndex(p.mode.findData("noclip"))
-    p.mode.setCurrentIndex(p.mode.findData("clip"))
-    assert p.margins["l"].value() == 26.0
-    p.mode.setCurrentIndex(p.mode.findData("noclip"))
+    # Margin box is left at the user's 6 mm — no silent copy to 26.
     assert p.margins["l"].value() == 6.0
+    # clip width (26) > left margin (6) → the MARGIN is flagged as overridden.
+    assert _has_conflict(p.margins["l"])
+    assert not _has_conflict(p.clip_width)
+    # Turning the band off clears the flag; margin unchanged.
+    p.clip_enable.setCurrentIndex(p.clip_enable.findData("off"))
+    assert p.margins["l"].value() == 6.0
+    assert not _has_conflict(p.margins["l"])
 
 
 def test_mode_tooltip_is_instrument_specific(app):
@@ -316,27 +315,31 @@ def test_mode_tooltip_is_instrument_specific(app):
     assert "ColorMunki" not in p._mode_tip._body
 
 
-def test_clip_width_floors_clip_side_margin(app):
-    """The clip / notes band lives inside the clip-side margin, so turning the
-    clip on (or widening it) floors that page margin at the clip width and shows
-    it in the box — editable (Knut beta-13, clip-inside-margin)."""
+def test_clip_width_margin_conflict_flagging(app):
+    """Clip width and the clip-side margin are independent; the field that loses
+    the max() is flagged with a red outline, and the winner switches as the
+    values cross (Knut #125)."""
     from ui.dialogs.layout_options_panel import LayoutOptionsPanel
     p = LayoutOptionsPanel(with_selectors=True)
     p.show()
     p.instr.setCurrentIndex(p.instr.findData("i1"))   # clip on by default
     p.margins["l"].setValue(9.0)
     p.clip_width.setValue(30.0)
-    assert p.margins["l"].value() == 30.0             # floored up to the clip width
-    # Clip off → the floor no longer applies; the box is free again.
+    # width (30) > left margin (9): margin overridden, margin flagged.
+    assert p.margins["l"].value() == 9.0
+    assert _has_conflict(p.margins["l"]) and not _has_conflict(p.clip_width)
+    # Now make the margin the larger one: the CLIP WIDTH is ignored → flagged.
+    p.margins["l"].setValue(40.0)
+    assert _has_conflict(p.clip_width) and not _has_conflict(p.margins["l"])
+    # Clip off → all flags cleared.
     p.mode.setCurrentIndex(p.mode.findData("noclip"))
-    p.margins["l"].setValue(5.0)
-    assert p.margins["l"].value() == 5.0
-    # Right-side clip floors the RIGHT margin instead.
+    assert not _has_conflict(p.margins["l"]) and not _has_conflict(p.clip_width)
+    # Right-side clip flags the RIGHT margin instead of the left.
     p.mode.setCurrentIndex(p.mode.findData("clip"))
     p.clip_side.setCurrentIndex(p.clip_side.findData("right"))
     p.margins["r"].setValue(8.0)
     p.clip_width.setValue(28.0)
-    assert p.margins["r"].value() == 28.0
+    assert _has_conflict(p.margins["r"]) and not _has_conflict(p.margins["l"])
 
 
 def test_use_instrument_margins_fills_and_locks(app):

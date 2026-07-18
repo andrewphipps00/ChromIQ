@@ -7728,7 +7728,8 @@ class TabChart(QWidget):
             cols = (n0 + rows - 1) // rows if rows else 0
             panel.set_estimate(total=lay.total_patches, rows=rows, cols=cols,
                                pages=lay.pages, patch_w=geom.pwid, patch_h=geom.plen,
-                               page_patches=n0)
+                               page_patches=n0,
+                               fillup=getattr(lay, "padding", None))
         except Exception:
             panel.clear_estimate()
 
@@ -7766,8 +7767,16 @@ class TabChart(QWidget):
             before = rows * sum(passes[:idx]) if passes else 0
             page_patches = (min(rows * cols, total - before)
                             if rows and cols else None)
+            # Fill-up count = laid-out total minus the designed patch count (the
+            # .ti1 next to the .ti2): a partial last strip is topped up with
+            # paper-white patches, and this row is where Knut read the grown
+            # total without an explanation (#124 follow-up).
+            designed = _number_of_sets(Path(ti2).with_suffix(".ti1"))
+            fillup = (total - designed
+                      if designed is not None and 0 <= total - designed else None)
             panel.set_actual(total=total, rows=rows, cols=cols, pages=len(tiffs),
-                             patch_w=pw, patch_h=ph, page_patches=page_patches)
+                             patch_w=pw, patch_h=ph, page_patches=page_patches,
+                             fillup=fillup)
         except Exception:
             panel.clear_actual()
 

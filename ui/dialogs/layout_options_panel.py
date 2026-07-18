@@ -120,10 +120,6 @@ class LayoutOptionsPanel(QWidget):
         # Per-spacer manual colour overrides {str(flat_idx): "#hex"} — set by
         # clicking spacers in the editor preview; carried in the recipe (#93).
         self._spacer_overrides: dict = {}
-        # The clip-side margin the user had before the clip band floored it, so it
-        # can be restored when the band is turned off (Knut/Sebastian); None = not
-        # currently floored. (key, value) e.g. ("l", 6.0).
-        self._saved_clip_margin: "tuple[str, float] | None" = None
         self._border: float = 6.0      # base margin (-m); preserved, no control
         self._inst = "i1"           # last-known instrument / clip state, for
         self._clip = True           # clip-border-width row visibility
@@ -835,22 +831,39 @@ class LayoutOptionsPanel(QWidget):
         # scanner's paper clip; printtarg hard-codes 26 mm, we make it adjustable.
         self.clip_width = small_mm(top=100.0)
         self.clip_width.setMinimum(10.0)
-        self.clip_width.valueChanged.connect(self._sync_clip_margin_floor)
+        self.clip_width.valueChanged.connect(self._update_clip_margin_conflict)
+        # The left/right margins feed the same clip-side priority check.
+        self.margins["l"].valueChanged.connect(self._update_clip_margin_conflict)
+        self.margins["r"].valueChanged.connect(self._update_clip_margin_conflict)
         self.clip_width_label = QLabel(tr("Clip border width:"), self)
         self.clip_width_tip = TooltipButton(
             tr("Clip border width"),
-            tr("Width of the blank zone reserved down the left edge for the "
+            tr("Width of the blank zone reserved down the clip edge for the "
                "clip that holds the sheet against the scanner bed. Make it wider "
-               "if your clip covers more of the page; the patches start to its "
-               "right. Only applies to the i1Pro / i1Pro 3 in clip-border mode "
-               "(printtarg fixes this at 26 mm)."), self)
+               "if your clip covers more of the page; the patches start just "
+               "past it. Only applies to the i1Pro / i1Pro 3 in clip-border "
+               "mode (printtarg fixes this at 26 mm).\n\n"
+               "Works together with the page margin on the same edge (Left or "
+               "Right, set by “Side” under Clip-border content): the reserved "
+               "clip zone is whichever of the two is larger. If that margin is "
+               "wider than this width, the margin wins and this value is "
+               "ignored — the box is outlined in red to show it. Raise this "
+               "above the margin to make the clip zone wider than the margin."),
+            self)
         add_row(gg, 1, tr("Margins (mm):"), _margins_w,
                 tip=TooltipButton(
                     tr("Margins"),
                     tr("Blank borders kept clear of patches on each edge — Top, "
                        "Right, Bottom, Left, in mm. Most printers can't print to "
                        "the very edge, so keep a few mm here; the smallest of the "
-                       "four also sets the instrument's leader/clip base."), self))
+                       "four also sets the instrument's leader/clip base.\n\n"
+                       "When a clip border / notes band is on, the margin on the "
+                       "clip edge (Left or Right, set by “Side” under Clip-border "
+                       "content) shares that edge with the clip-border width: the "
+                       "larger of the two is what's reserved. If the clip-border "
+                       "width is wider than this margin, it wins and the margin "
+                       "box is outlined in red to show it's being overridden."),
+                    self))
         gg.addWidget(self.clip_width_label, 2, 0, _Qt.AlignmentFlag.AlignRight)
         self._clip_width_row = mm_inch(self.clip_width)   # spin + inch readout
         gg.addWidget(self._clip_width_row, 2, 1)
@@ -884,15 +897,42 @@ class LayoutOptionsPanel(QWidget):
         add_row(gg, 6, tr("Strip pattern:"), self.strip_pat,
                 tip=TooltipButton(
                     tr("Strip pattern"),
-                    tr("How strips (columns) are labelled — the letter part of a "
-                       "patch's location, e.g. A, B, C. Leave the default unless "
-                       "you have a specific labelling scheme to match."), self))
+                    tr("How each strip (column of patches) is labelled — the first "
+                       "part of a patch's location, e.g. the “A” in A12. ChromIQ "
+                       "reads this the way ArgyllCMS's printtarg does; in practice "
+                       "it decides whether strips are labelled with LETTERS or "
+                       "NUMBERS.\n\n"
+                       "Valid examples:\n"
+                       "• A-Z, A-Z — the default: letters A, B, C … Z, then AA, "
+                       "AB, AC … once past 26 strips (like spreadsheet columns).\n"
+                       "• A-Z — plain letters A, B, C … (same result while a chart "
+                       "has 26 strips or fewer).\n"
+                       "• 1-999 — numbers 1, 2, 3 …\n"
+                       "• 0-9 — also numbers 1, 2, 3 …\n\n"
+                       "Rule: any pattern that contains “A-Z” labels with letters; "
+                       "anything else counts in plain numbers (no zero-padding). "
+                       "This works together with the Patch pattern below — the two "
+                       "combine into each location label, strip then patch (e.g. "
+                       "strip “A” + patch “12” = A12). Leave the default unless "
+                       "you're matching a specific reading-sheet scheme."), self))
         add_row(gg, 7, tr("Patch pattern:"), self.patch_pat,
                 tip=TooltipButton(
                     tr("Patch pattern"),
-                    tr("How patches within a strip are numbered — the number part "
-                       "of a location, e.g. A1, A2, A3. Leave the default unless "
-                       "matching a specific scheme."), self))
+                    tr("How patches within a strip are labelled — the second part "
+                       "of a location, e.g. the “12” in A12. Same rule as the "
+                       "Strip pattern above: LETTERS if the pattern contains "
+                       "“A-Z”, otherwise plain NUMBERS.\n\n"
+                       "Valid examples:\n"
+                       "• 0-9,@-9,@-9;1-999 — the default (ArgyllCMS's own "
+                       "notation): numbers 1, 2, 3 …\n"
+                       "• 1-999 — numbers 1, 2, 3 … (simpler, same result).\n"
+                       "• A-Z, A-Z — letters A, B, C … Z, AA, AB … instead of "
+                       "numbers.\n"
+                       "• A-Z — plain letters A, B, C ….\n\n"
+                       "The patch label is joined to the strip label to form each "
+                       "patch's full location (strip then patch, e.g. A12). Leave "
+                       "the default unless you're matching a specific scheme."),
+                    self))
         self._patch_align_row = add_row(gg, 8, tr("Patch area alignment:"),
                 self.patch_align,
                 tip=TooltipButton(
@@ -1071,7 +1111,7 @@ class LayoutOptionsPanel(QWidget):
         self.clip_side = NoScrollComboBox(self)
         self.clip_side.addItem(tr("Left"), "left")
         self.clip_side.addItem(tr("Right"), "right")
-        self.clip_side.currentIndexChanged.connect(self._sync_clip_margin_floor)
+        self.clip_side.currentIndexChanged.connect(self._update_clip_margin_conflict)
         self.clip_side.currentIndexChanged.connect(self._emit)
         self.clip_text = QLineEdit(self)
         self.clip_text.setPlaceholderText(tr("e.g. {project} — {date}"))
@@ -1080,6 +1120,11 @@ class LayoutOptionsPanel(QWidget):
         self.clip_text_font = NoScrollComboBox(self)
         self._populate_font_combo(self.clip_text_font)
         self.clip_text_font.currentIndexChanged.connect(self._emit)
+        # Manual text size for the clip strip (auto = fit to the strip width);
+        # so the record text doesn't dominate the sheet (#125, Knut).
+        self.clip_text_size = small_mm(top=20.0)
+        self.clip_text_size.setSpecialValueText(tr("auto"))
+        self.clip_text_size.valueChanged.connect(self._emit)
         self.clip_image_path = QLineEdit(self)
         self.clip_image_path.setPlaceholderText(tr("no image selected"))
         self.clip_image_path.textChanged.connect(self._emit)
@@ -1122,9 +1167,28 @@ class LayoutOptionsPanel(QWidget):
                        "on — Left or Right. Choose whichever matches how you feed "
                        "the chart into your instrument's ruler. The patches fill "
                        "the rest of the page; the patch count is the same either "
-                       "way."), self))
+                       "way.\n\n"
+                       "This also decides which page margin the clip-border width "
+                       "shares an edge with: Left → the Left margin, Right → the "
+                       "Right margin. On that edge the wider of the two (margin "
+                       "or clip-border width) is what gets reserved; the smaller "
+                       "one is outlined in red to show it's overridden."), self))
         add_row(ccg, 2, tr("Text:"), cell_fill(self.clip_text, self.clip_insert_btn))
-        add_row(ccg, 3, tr("Font:"), self.clip_text_font)
+        _clip_font_w = QWidget(self)
+        _cf = QHBoxLayout(_clip_font_w)
+        _cf.setContentsMargins(0, 0, 0, 0); _cf.setSpacing(8)
+        _cf.addWidget(self.clip_text_font, 1)
+        _cf.addWidget(QLabel(tr("Size:"), self))
+        _cf.addWidget(self.clip_text_size)
+        add_row(ccg, 3, tr("Font:"), _clip_font_w,
+                tip=TooltipButton(
+                    tr("Clip text font & size"),
+                    tr("Typeface and size for the clip-strip text. Size is in mm; "
+                       "leave it at “auto” to let ChromIQ fit the text to the "
+                       "strip width. Set a smaller size when the auto text looks "
+                       "too large and you want to keep the strip narrow / maximise "
+                       "patch space. Applies to the custom-text clip content; the "
+                       "Notes-box record has its own auto layout."), self))
         self._clip_image_row = add_row(
             ccg, 4, tr("Image:"),
             cell_fill(self.clip_image_path, self.clip_image_browse))
@@ -1272,9 +1336,6 @@ class LayoutOptionsPanel(QWidget):
         if self.instr is None:
             return
         self._loading = True
-        # New instrument = new clip context; forget any clip-floor restore point
-        # so it can't clobber the new instrument's margins (e.g. a mode preset).
-        self._saved_clip_margin = None
         inst = self.instr.currentData() or "i1"
         prev_paper = self.paper.currentData()
         self.paper.clear()
@@ -1349,7 +1410,7 @@ class LayoutOptionsPanel(QWidget):
             if show_group:
                 self._refresh_clip_preview()
         # Floor the clip-side margin at the clip width whenever a band is active.
-        self._sync_clip_margin_floor()
+        self._update_clip_margin_conflict()
 
     # ---- Clip-border content -------------------------------------------
     def _sync_clip_content_enabled(self) -> None:
@@ -1361,6 +1422,10 @@ class LayoutOptionsPanel(QWidget):
         self.clip_text.setEnabled(custom_text)
         self.clip_insert_btn.setEnabled(custom_text)
         self.clip_text_font.setEnabled(font_modes)
+        # Manual size applies to the free-text clip content; the notes design
+        # lays itself out, so the size box is inert there (#125).
+        if hasattr(self, "clip_text_size"):
+            self.clip_text_size.setEnabled(custom_text)
         # The image path / rotate / scale / move rows only make sense for an
         # imported image, so HIDE them entirely unless "Imported image" is the
         # content type (Knut), rather than just greying them out.
@@ -1500,35 +1565,69 @@ class LayoutOptionsPanel(QWidget):
                     and self.clip_content_mode.currentData() not in (None, "off"))
         return False
 
-    def _sync_clip_margin_floor(self, *_a) -> None:
-        """The clip / notes band lives inside the clip-side page margin, so while
-        the band is ON floor that margin at the clip-border width and show it in
-        the box — editable, so the user can push the patches further in (Knut
-        beta-13). When the band is turned OFF, RESTORE the margin the user had
-        before it was floored (otherwise it stays stuck at the clip width and the
-        band looks permanently reserved — Knut/Sebastian). Skipped while "Use
-        instrument margins" locks the margins."""
+    def _set_field_conflict(self, widget, message: "str | None") -> None:
+        """Flag ``widget`` with a red outline + ``message`` tooltip, or clear the
+        flag (restoring its original tooltip) when ``message`` is None. Used for
+        the clip-width ↔ clip-side-margin priority conflict (#125, Knut)."""
+        if not hasattr(self, "_field_conflict_orig"):
+            self._field_conflict_orig: dict[int, str] = {}
+        wid = id(widget)
+        if message:
+            self._field_conflict_orig.setdefault(wid, widget.toolTip())
+            widget.setStyleSheet("border: 1px solid #d9534f; border-radius: 3px;")
+            widget.setToolTip(message)
+        else:
+            if wid in self._field_conflict_orig:
+                widget.setToolTip(self._field_conflict_orig.pop(wid))
+            widget.setStyleSheet("")
+
+    def _update_clip_margin_conflict(self, *_a) -> None:
+        """Clip-border width and the clip-side page margin are **independent**
+        inputs; the LARGER of the two is what the engine reserves on that edge
+        (``instruments.build`` takes the max). The old code silently copied the
+        clip width into the margin box, which confused users (Knut #125) — now
+        the field being overridden is flagged with a red outline + a tooltip
+        that explains which value wins:
+
+          • band ON, clip width > clip-side margin → clip width wins; the margin
+            box is flagged (too small to matter).
+          • band ON, clip width < clip-side margin → the margin wins; the clip
+            width box is flagged (smaller than the margin, so ignored).
+          • equal, band OFF, or margins locked by "Use instrument margins" → no
+            conflict; both fields shown normally.
+        """
         if self._loading or not (hasattr(self, "clip_width")
                                  and hasattr(self, "clip_side")):
             return
-        if (hasattr(self, "use_instr_margins") and self.use_instr_margins.isChecked()):
+        m_l, m_r = self.margins.get("l"), self.margins.get("r")
+        if m_l is None or m_r is None:
             return
-        key = "r" if (self.clip_side.currentData() or "left") == "right" else "l"
-        if not self._clip_band_active():
-            # Band off → give back the margin we floored when it went on.
-            saved = getattr(self, "_saved_clip_margin", None)
-            if saved is not None:
-                skey, sval = saved
-                self._saved_clip_margin = None
-                self.margins[skey].setValue(sval)     # fires its own _emit
+        # Always start from a clean slate.
+        for w in (m_l, m_r, self.clip_width):
+            self._set_field_conflict(w, None)
+        locked = (hasattr(self, "use_instr_margins")
+                  and self.use_instr_margins.isChecked())
+        if not self._clip_band_active() or locked:
             return
-        clip_w = self.clip_width.value()
-        if self.margins[key].value() < clip_w:
-            # Remember the user's margin once, before the first floor, so it can be
-            # restored when the band is turned off again.
-            if getattr(self, "_saved_clip_margin", None) is None:
-                self._saved_clip_margin = (key, self.margins[key].value())
-            self.margins[key].setValue(clip_w)        # fires its own _emit
+        side = (self.clip_side.currentData() or "left")
+        side_margin = m_r if side == "right" else m_l
+        side_name = tr("right") if side == "right" else tr("left")
+        cw = self.clip_width.value()
+        mv = side_margin.value()
+        if cw > mv + 1e-9:
+            self._set_field_conflict(side_margin, tr(
+                "The clip-border width ({cw:.1f} mm) is wider than this {side} "
+                "margin, so the clip-border width is what gets reserved on the "
+                "{side} edge. Raise this margin above the clip-border width if "
+                "you want to push the patches further in.").format(
+                    cw=cw, side=side_name))
+        elif mv > cw + 1e-9:
+            self._set_field_conflict(self.clip_width, tr(
+                "The {side} margin ({mv:.1f} mm) is wider than the clip-border "
+                "width, so the {side} margin is what gets reserved and this "
+                "clip-border width is ignored. Raise it above the {side} margin "
+                "to widen the reserved clip zone.").format(
+                    mv=mv, side=side_name))
 
     def _sync_layout_mode(self, *_a) -> None:
         """Show only the fields each layout choice needs (#93 / Knut). Area-first
@@ -1995,9 +2094,6 @@ class LayoutOptionsPanel(QWidget):
 
     def set_recipe(self, r: LayoutRecipe) -> None:
         self._loading = True
-        # The loaded recipe's margins are authoritative; forget any clip-floor
-        # restore point from the previous chart so it can't clobber them.
-        self._saved_clip_margin = None
         if self.instr is not None:
             ii = self.instr.findData(r.instrument)
             self.instr.setCurrentIndex(ii if ii >= 0 else 0)
@@ -2111,6 +2207,7 @@ class LayoutOptionsPanel(QWidget):
         self.clip_text.setText(r.clip_text)
         _cf = self.clip_text_font.findData(r.clip_text_font)
         self.clip_text_font.setCurrentIndex(_cf if _cf >= 0 else 0)
+        self.clip_text_size.setValue(r.clip_text_size_mm)
         self.clip_image_path.setText(r.clip_image_path)
         self.clip_image_rotation.setValue(int(getattr(r, "clip_image_rotation", 0) or 0))
         self.clip_image_scale.setValue(float(getattr(r, "clip_image_scale", 100.0) or 100.0))
@@ -2201,6 +2298,7 @@ class LayoutOptionsPanel(QWidget):
         r.clip_side = self.clip_side.currentData() or "left"
         r.clip_text = self.clip_text.text()
         r.clip_text_font = self.clip_text_font.currentData() or "Inter"
+        r.clip_text_size_mm = self.clip_text_size.value()
         r.clip_image_path = self.clip_image_path.text().strip()
         r.clip_image_rotation = self.clip_image_rotation.value()
         r.clip_image_scale = self.clip_image_scale.value()

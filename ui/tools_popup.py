@@ -77,6 +77,9 @@ _GROUPS: tuple[tuple[str, tuple[ToolEntry, ...]], ...] = (
     (tr("Language"), (
         ToolEntry("translate", tr("Translate / edit language")),
     )),
+    (tr("Help"), (
+        ToolEntry("file_guide", tr("Where are my files? (folder guide)")),
+    )),
 )
 
 # Flat display model: ("header", label) or ("tool", ToolEntry), in order.

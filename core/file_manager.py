@@ -467,7 +467,29 @@ Other files and folders you may see, and why:
                                     printtarg. You don't normally touch it.
 
   runs/runN/{name}.channels.json    Ink-channel sidecar — lets ChromIQ identify
-                                    inks when re-opening a chart later.
+                                    inks when re-opening a chart later (engine
+                                    charts also keep their exact layout and
+                                    creation recipe in here).
+
+  runs/runN/{name}.pdf              The chart as a vector PDF — only written
+                                    when "Also export PDF" is ticked in the
+                                    layout options.
+
+  runs/runN/{name}.ps               PostScript copy created for printing (sent
+                                    to the printer bypassing colour
+                                    management).
+
+  runs/runN/{name}-colours.txt      The chart's colours as a plain hex list
+                                    (RGB charts only) — can be pasted back
+                                    into the New-chart dialog.
+
+  runs/runN/{name}-i1profiler.txt   The patch set in i1Profiler's formats, so
+  runs/runN/{name}-i1profiler.pxf   the chart can be measured in i1Profiler.
+
+  runs/runN/{name}.cht / .cie       Recognition template + reference values
+                                    for scanner/camera measurement (made by
+                                    the "Create scanner or camera target"
+                                    tool once a measurement exists).
 
   runs/runN/reads/readN.ti3         Per-read measurements when you use
                                     "Read again & average". They get averaged
