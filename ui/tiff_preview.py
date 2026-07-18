@@ -254,6 +254,9 @@ class TiffPreview(QWidget):
     # Emitted (with the new 0-based page index) when the shown page changes, so
     # observers like the margin inspector can re-measure the visible page.
     page_changed = pyqtSignal(int)
+    # #126: user clicked a strip in the preview (page index, local stripe
+    # index on that page). Only emitted while set_stripe_click_enabled(True).
+    stripe_clicked = pyqtSignal(int, int)
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -262,6 +265,13 @@ class TiffPreview(QWidget):
         self._active_stripe: int = -1
         self._bidirectional: bool = False
         self._stripe_rects: list[QRect] = []
+        # #126 chart-reading engine overlays
+        self._stripe_click_enabled: bool = False
+        self._stripe_read_map: dict[int, bool] = {}
+        self._hover_stripe: int = -1
+        self._pan_dist: int = 0
+        self._patch_overlay: dict[int, list] = {}
+        self.stripe_clicked_page = -1  # last emit bookkeeping (tests)
         self._stripe_arrow_mode: str = "base"
         self._pixmap: QPixmap | None = None
         self._frame_color = QColor(Qt.GlobalColor.white)   # the margin around the image
@@ -522,6 +532,59 @@ class TiffPreview(QWidget):
             return
         self._bidirectional = enabled
         self._schedule_refresh()
+
+    # ------------------------------------------------------------------
+    # ChromIQ chart-reading engine overlays (#126)
+    # ------------------------------------------------------------------
+
+    def set_stripe_click_enabled(self, on: bool,
+                                 read_map: "dict[int, bool] | None" = None) -> None:
+        """Enable click-to-jump: hovering a known stripe shows a pointing
+        hand + tooltip, clicking emits stripe_clicked(page, local_index).
+        `read_map` marks stripes already measured (affects the tooltip)."""
+        self._stripe_click_enabled = on
+        self._stripe_read_map = read_map or {}
+        if not on:
+            self._hover_stripe = -1
+            self.unsetCursor()
+        self._schedule_refresh()
+
+    def set_stripe_read_map(self, read_map: "dict[int, bool]") -> None:
+        self._stripe_read_map = dict(read_map)
+
+    def set_patch_overlay(self, page: int,
+                          items: "list[tuple[QRect, QColor, QColor, bool]]",
+                          replace_page: bool = False) -> None:
+        """Add split-patch results for `page`: each item is (image-px rect,
+        expected colour, measured colour, warn). Drawn as an i1Profiler-style
+        corner-to-corner split — expected upper-left, measured lower-right —
+        with a red outline when warn is set."""
+        if replace_page or page not in self._patch_overlay:
+            self._patch_overlay[page] = list(items)
+        else:
+            self._patch_overlay[page].extend(items)
+        self._schedule_refresh()
+
+    def clear_patch_overlay(self) -> None:
+        self._patch_overlay = {}
+        self._schedule_refresh()
+
+    def has_patch_overlay(self) -> bool:
+        return bool(self._patch_overlay)
+
+    def _stripe_at(self, widget_pos) -> int:
+        """Local stripe index under a widget position, or -1."""
+        if not (self._stripe_click_enabled and self._stripe_rects):
+            return -1
+        pos = self._img_label.mapFrom(self, widget_pos)
+        px = self._image_px_at(pos)
+        if px is None:
+            return -1
+        ix, iy = px
+        for i, r in enumerate(self._stripe_rects):
+            if r.left() <= ix <= r.right() and r.top() <= iy <= r.bottom():
+                return i
+        return -1
 
     def set_stripe_rects(self, rects: list[QRect],
                          arrow_mode: str = "base") -> None:
@@ -1024,8 +1087,62 @@ class TiffPreview(QWidget):
             self._draw_margin_guides(
                 painter, B, scaled.width() / dpr, scaled.height() / dpr)
 
+        # #126 engine overlays (split patches, hover outline, legend)
+        self._draw_cq_overlay(painter,
+                              (scaled.width() / dpr) / max(1, self._pixmap.width()),
+                              B, B)
+
         painter.end()
         self._img_label.setPixmap(canvas)
+
+    def _draw_cq_overlay(self, painter: QPainter,
+                         s: float, ox: float, oy: float) -> None:
+        """#126 chart-reading engine overlays, drawn in canvas coordinates
+        (image px × `s` + offset). Three layers: the split-patch results for
+        the current page, a hover outline for click-to-jump, and a small
+        expected/measured legend once any patches are shown."""
+        from PyQt6.QtGui import QPen, QPainterPath as _QP
+
+        items = self._patch_overlay.get(self._current, [])
+        for rect, c_exp, c_meas, warn in items:
+            x0 = rect.x() * s + ox
+            y0 = rect.y() * s + oy
+            w  = max(2.0, rect.width() * s)
+            h  = max(2.0, rect.height() * s)
+            # Expected: upper-left triangle; measured: lower-right — the
+            # i1Profiler split, corner to corner, hard edge, no gap.
+            tri = _QP()
+            tri.moveTo(x0, y0)
+            tri.lineTo(x0 + w, y0)
+            tri.lineTo(x0, y0 + h)
+            tri.closeSubpath()
+            painter.fillRect(int(x0), int(y0), int(w), int(h), c_meas)
+            painter.fillPath(tri, c_exp)
+            if warn:
+                pen = QPen(QColor("#e0564b"))
+                pen.setWidthF(max(1.5, s * 2))
+                painter.setPen(pen)
+                painter.drawRect(int(x0), int(y0), int(w), int(h))
+
+        if self._stripe_click_enabled and self._hover_stripe >= 0 \
+                and self._hover_stripe < len(self._stripe_rects):
+            r = self._stripe_rects[self._hover_stripe]
+            pen = QPen(QColor("#56d6a5"))
+            pen.setWidthF(2.5)
+            painter.setPen(pen)
+            painter.drawRect(int(r.x() * s + ox), int(r.y() * s + oy),
+                             int(r.width() * s), int(r.height() * s))
+
+        if items:
+            # Legend chip: "expected ◤ / measured ◢" — i1Profiler leaves the
+            # halves unlabelled; we don't.
+            txt = tr("expected ◤ · measured ◢ (screen colours approximate)")
+            fm = painter.fontMetrics()
+            tw = fm.horizontalAdvance(txt) + 16
+            th = fm.height() + 8
+            painter.fillRect(int(ox), int(oy), tw, th, QColor(20, 20, 20, 190))
+            painter.setPen(QColor("#f4f2ef"))
+            painter.drawText(int(ox) + 8, int(oy) + th - 6, txt)
 
     def _draw_margin_guides(
         self, painter: QPainter, border: float, disp_w: float, disp_h: float
@@ -1130,6 +1247,8 @@ class TiffPreview(QWidget):
         painter.fillRect(int(x - B), int(y - B), int(disp_w + 2 * B),
                          int(disp_h + 2 * B), self._frame_color)   # thin tinted frame
         painter.drawPixmap(int(x), int(y), scaled)
+        # #126 engine overlays (split patches, hover outline, legend)
+        self._draw_cq_overlay(painter, scale, x, y)
         painter.end()
         self._paint_geom = (scale, x, y)   # for the cursor→image mapping (#72)
         self._img_label.setPixmap(canvas)
@@ -1149,6 +1268,7 @@ class TiffPreview(QWidget):
         if self._interactive and self._pixmap and event.button() in (
                 Qt.MouseButton.MiddleButton, Qt.MouseButton.LeftButton):
             self._panning = True
+            self._pan_dist = 0
             self._pan_anchor = event.position().toPoint()
             self.setCursor(Qt.CursorShape.ClosedHandCursor)
             event.accept()
@@ -1159,11 +1279,30 @@ class TiffPreview(QWidget):
         if self._panning:
             now = event.position().toPoint()
             d = now - self._pan_anchor
+            self._pan_dist += abs(d.x()) + abs(d.y())
             self._pan_anchor = now
             self._pan = QPointF(self._pan.x() + d.x(), self._pan.y() + d.y())
             self._repaint_label()
             event.accept()
             return
+        # #126: hovering a clickable strip
+        if self._stripe_click_enabled:
+            idx = self._stripe_at(event.position().toPoint())
+            if idx != self._hover_stripe:
+                self._hover_stripe = idx
+                if idx >= 0:
+                    self.setCursor(Qt.CursorShape.PointingHandCursor)
+                    if self._stripe_read_map.get(idx):
+                        self.setToolTip(tr("Click to jump to this strip. It "
+                                           "has already been read — clicking "
+                                           "lets you measure it again."))
+                    else:
+                        self.setToolTip(tr("Click to jump to this strip and "
+                                           "measure it next."))
+                else:
+                    self.unsetCursor()
+                    self.setToolTip("")
+                self._schedule_refresh()
         self._update_ink_readout(event)   # per-ink cursor readout (#72)
         super().mouseMoveEvent(event)
 
@@ -1171,8 +1310,25 @@ class TiffPreview(QWidget):
         if self._panning:
             self._panning = False
             self.unsetCursor()
+            # #126: a press-release without meaningful movement on a strip
+            # is a click, not a pan.
+            if (self._stripe_click_enabled and self._pan_dist < 4
+                    and event.button() == Qt.MouseButton.LeftButton):
+                idx = self._stripe_at(event.position().toPoint())
+                if idx >= 0:
+                    self.stripe_clicked_page = self._current
+                    self.stripe_clicked.emit(self._current, idx)
+            self._pan_dist = 0
             event.accept()
             return
+        if (self._stripe_click_enabled
+                and event.button() == Qt.MouseButton.LeftButton):
+            idx = self._stripe_at(event.position().toPoint())
+            if idx >= 0:
+                self.stripe_clicked_page = self._current
+                self.stripe_clicked.emit(self._current, idx)
+                event.accept()
+                return
         super().mouseReleaseEvent(event)
 
     def mouseDoubleClickEvent(self, event) -> None:  # type: ignore[override]

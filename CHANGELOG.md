@@ -1,5 +1,43 @@
 # Changelog
 
+## v3.13.12-beta.1
+
+A beta introducing an optional **ChromIQ chart-reading engine** for the
+Measure tab (issue #126), switched off by default. With the option off,
+nothing changes — this release behaves exactly like v3.13.11.
+
+**This engine has not yet been tested against real measuring hardware.**
+It is offered for testing behind a clearly-labelled beta switch; keep your
+first sessions supervised and verify results before relying on them.
+
+### New (opt-in): a ChromIQ chart-reading engine
+
+Enable it under **Settings → Beta features → Chart reading**. It is a fork
+of ArgyllCMS's own `chartread`, built from the same source and driving your
+instrument with Argyll's own unmodified drivers, so the measurements
+themselves are identical. What it adds around them:
+
+- **Per-strip autosave.** Your readings are written to disk after every
+  accepted strip. If the instrument disconnects, the app closes or the
+  power drops, you lose at most the one strip you were reading — never the
+  whole session. Resuming picks up exactly where you stopped.
+- **Click a strip in the preview to jump to it.** No more stepping strip by
+  strip to re-measure one row; hover shows a hand cursor, and read strips
+  are marked. A "Go to strip" dropdown is there too.
+- **Live split-patch feedback.** After each strip the preview fills in what
+  the instrument saw, split diagonally against what the chart expected — a
+  smudged or shifted row is visible immediately (screen colours are
+  approximate; the file's numbers are exact).
+- **A safety net for fixed-order charts.** On charts whose patches aren't
+  shuffled, the engine checks — wherever it is mathematically able — that
+  the row you swiped is the row it expected, and warns you on the spot.
+  Stock chartread trusts you silently there.
+
+If the engine binary isn't present on a platform, or a mode it doesn't yet
+cover is used (patch-by-patch, XY tables), ChromIQ falls back to stock
+chartread automatically and says so in the log. The result `.ti3` file has
+the identical format, and resuming works interchangeably between both.
+
 ## v3.13.11
 
 A small but important fix for anyone whose instrument drops its USB

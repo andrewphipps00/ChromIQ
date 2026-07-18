@@ -134,6 +134,25 @@ jobs:
           cp build/gammap/chromiq-gammap.exe native/chromiq-gammap.exe
           echo "helper deps:"; objdump -p native/chromiq-gammap.exe | grep -i "DLL Name" || true
 
+      # Chart-reading engine (x64) — chromiq-chartread, same mingw-w64 toolchain.
+      # Links the vendored Argyll instrument library (native/instlib) incl. its
+      # Windows USB/HID backend (usbio_nt, hidio); ChromIQWin.spec bundles the
+      # binary when present and the engine falls back to stock chartread if not.
+      - name: Build chart-reading engine (x64, mingw-w64)
+        if: matrix.arch == 'x64'
+        shell: bash
+        run: |
+          set -euo pipefail
+          command -v cmake >/dev/null 2>&1 || {
+            choco install cmake -y --no-progress --installargs 'ADD_CMAKE_TO_PATH=System'
+            export PATH="/c/Program Files/CMake/bin:$PATH"; }
+          cmake -S native/chartread_helper -B build/chartread -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER=gcc
+          cmake --build build/chartread
+          cp build/chartread/chromiq-chartread.exe native/chromiq-chartread.exe
+          echo "engine deps:"; objdump -p native/chromiq-chartread.exe | grep -i "DLL Name" || true
+
       # arm64 counterpart: mingw-w64 has no arm64 host toolchain, so use
       # LLVM-mingw (clang -> aarch64-w64-mingw32). CMake treats it as MINGW, so
       # the same static-linking path applies unchanged (self-contained .exe,
@@ -164,6 +183,30 @@ jobs:
           Copy-Item build/gammap/chromiq-gammap.exe native/chromiq-gammap.exe -Force
           Write-Host "helper deps:"
           & "$llvmDir\bin\llvm-readobj.exe" --coff-imports native/chromiq-gammap.exe |
+            Select-String 'Name:' | Sort-Object -Unique
+
+      - name: Build chart-reading engine (arm64, LLVM-mingw)
+        if: matrix.arch == 'arm64'
+        shell: pwsh
+        run: |
+          $llvmVer = '20250430'
+          $llvmDir = "$PWD\tools\llvm-mingw-$llvmVer-ucrt-aarch64"
+          if (-not (Test-Path $llvmDir)) {
+            $url = "https://github.com/mstorsjo/llvm-mingw/releases/download/$llvmVer/llvm-mingw-$llvmVer-ucrt-aarch64.zip"
+            Invoke-WebRequest $url -OutFile llvm.zip
+            Expand-Archive llvm.zip -DestinationPath tools -Force
+          }
+          $env:PATH = "$llvmDir\bin;$env:PATH"
+          if (-not (Get-Command cmake -ErrorAction SilentlyContinue)) {
+            $env:PATH = "C:\Program Files\CMake\bin;$env:PATH"
+          }
+          cmake -S native/chartread_helper -B build/chartread -G Ninja `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DCMAKE_C_COMPILER=aarch64-w64-mingw32-clang
+          cmake --build build/chartread
+          Copy-Item build/chartread/chromiq-chartread.exe native/chromiq-chartread.exe -Force
+          Write-Host "engine deps:"
+          & "$llvmDir\bin\llvm-readobj.exe" --coff-imports native/chromiq-chartread.exe |
             Select-String 'Name:' | Sort-Object -Unique
 
       - name: Build Windows executable

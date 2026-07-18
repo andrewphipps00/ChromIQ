@@ -102,6 +102,13 @@ class MeasureParams:
     high_res: bool = False
     resume: bool = False
     extra_args: str = ""
+    # ChromIQ chart-reading engine (#126). When set, `engine_helper` is the
+    # absolute path of the chromiq-chartread binary and chartread's console
+    # is replaced by the JSON event/command protocol. Patch-by-patch mode
+    # always uses stock chartread (the engine covers strip reading only).
+    engine_helper: Path | None = None
+    # Dev/testing: replay script path — no instrument needed.
+    engine_replay: Path | None = None
 
 
 class MeasureManager(QObject):
@@ -138,6 +145,12 @@ class MeasureManager(QObject):
     spot_ready                 = pyqtSignal(str)       # patch id
     abort_confirm              = pyqtSignal()
 
+    # E. ChromIQ chart-reading engine (#126) — only fire when the engine is
+    # active; the stock chartread path never emits them.
+    session_map                = pyqtSignal(list)      # [{strip, sheet, read, verifiable}, …]
+    strip_measured             = pyqtSignal(dict)      # full strip_read event payload
+    readings_saved             = pyqtSignal(str, int)  # (.ti3 path, patches on disk)
+
     def __init__(self, runner: "ArgyllRunner", parent: QObject | None = None) -> None:
         super().__init__(parent)
         self._runner         = runner
@@ -154,6 +167,9 @@ class MeasureManager(QObject):
         #   "wait_strip_menu" — waiting for the strip-menu prompt to send 'd'
         #   "wait_sure"       — waiting for "Are you sure [y/n]" to send 'y'
         self._save_partial_state: str | None = None
+        # ChromIQ chart-reading engine (#126): True while a --json helper
+        # session is running; send_key() then translates keys to commands.
+        self._engine_active: bool = False
 
     # ------------------------------------------------------------------
 
@@ -165,18 +181,37 @@ class MeasureManager(QObject):
     ) -> None:
         args = self._build_args(params)
         cwd  = params.ti1_path.parent
-        log.info("chartread: %s  [cwd=%s]", " ".join(args), cwd)
         self._is_resume      = params.resume
         self._guided_on_line = on_line
         # Reset guided state for this run
         self._guided_idx   = 0
         self._guided_state = "idle" if self._guided_strips else "disabled"
+        self._engine_active = (params.engine_helper is not None
+                               and not params.patch_by_patch)
 
         def _on_finish(code: int) -> None:
             self._pending_post_retry_key = None
             self._save_partial_state = None
+            self._engine_active = False
             on_finish(code)
 
+        if self._engine_active:
+            eargs = ["--json"]
+            if params.engine_replay is not None:
+                eargs += ["--replay", str(params.engine_replay)]
+            eargs += args
+            log.info("chromiq-chartread: %s  [cwd=%s]", " ".join(eargs), cwd)
+            self._runner.run(
+                str(params.engine_helper),
+                eargs,
+                cwd,
+                on_line=lambda line: self._handle_engine_line(line, on_line),
+                on_finish=_on_finish,
+                use_pty=False,          # JSON over plain pipes — no PTY
+            )
+            return
+
+        log.info("chartread: %s  [cwd=%s]", " ".join(args), cwd)
         self._runner.run(
             "chartread",
             args,
@@ -193,8 +228,33 @@ class MeasureManager(QObject):
         self._guided_state  = "idle" if strips else "disabled"
 
     def send_key(self, key: str) -> None:
-        """Send a keystroke to the running chartread process."""
+        """Send a keystroke to the running chartread process.
+
+        With the engine active the key is translated to its JSON command —
+        same semantics, so every existing call site works on both paths."""
+        if self._engine_active:
+            from workflow.chartread_engine import command_for_key
+            cmd = command_for_key(key)
+            if cmd is not None:
+                self.send_command(cmd)
+            else:
+                log.warning("engine: no command mapping for key %r", key)
+            return
         self._runner.write_stdin(key)
+
+    def send_command(self, cmd: dict) -> None:
+        """Send a raw JSON command to the engine (engine mode only)."""
+        import json as _json
+        self._runner.write_stdin(_json.dumps(cmd) + "\n")
+
+    def goto_strip(self, strip: str) -> None:
+        """Jump the engine directly to `strip` (engine mode only)."""
+        if self._engine_active:
+            self.send_command({"cmd": "goto", "strip": strip})
+
+    @property
+    def engine_active(self) -> bool:
+        return self._engine_active
 
     def send_post_retry_key(self, key: str) -> None:
         """Acknowledge a misread (any-key = retry) and queue ``key`` for the
@@ -249,6 +309,90 @@ class MeasureManager(QObject):
         # Base name without extension
         args.append(str(p.ti1_path.with_suffix("")))
         return args
+
+    def _handle_engine_line(self, line: str,
+                            on_line: Callable[[str], None]) -> None:
+        """Engine mode: typed events replace the regex forest. Prose lines
+        (chartread's ordinary console output) still go to the log."""
+        from workflow.chartread_engine import parse_engine_line
+
+        ev = parse_engine_line(line)
+        if ev is None:
+            if line.strip():
+                on_line(line)
+            return
+
+        kind = ev["event"]
+
+        if kind == "session_start":
+            self.session_map.emit(ev.get("strips", []))
+
+        elif kind == "strip_ready":
+            strip = ev.get("strip", "")
+            self.stripe_changed.emit(strip)
+            if ev.get("all_done"):
+                self.all_stripes_done.emit()
+            # Same follow-up logic the console path runs on the menu prompt:
+            if self._save_partial_state == "wait_strip_menu":
+                self._save_partial_state = "wait_sure"
+                self.send_key("d")
+            elif self._pending_post_retry_key is not None:
+                key = self._pending_post_retry_key
+                self._pending_post_retry_key = None
+                self.send_key(key)
+            elif self._guided_state not in ("idle_done", "disabled"):
+                self._guided_step(strip, on_line)
+
+        elif kind == "strip_read":
+            self.strip_measured.emit(ev)
+            on_line(f" Strip read OK — {ev.get('strip', '?')} "
+                    f"(worst patch ΔE {ev.get('worst_de', 0):.1f})")
+            if self._guided_state == "waiting":
+                self._advance_guided_strip(on_line)
+
+        elif kind == "saved":
+            self.readings_saved.emit(ev.get("path", ""),
+                                     int(ev.get("read_patches", 0)))
+
+        elif kind == "unread_confirm":
+            if self._save_partial_state == "wait_sure":
+                self._save_partial_state = None
+                self.send_key("y")
+            else:
+                info = f"{ev.get('id', '?')}, {ev.get('loc', '?')}"
+                self.unread_confirm.emit(info)
+
+        elif kind == "strip_warning":
+            if ev.get("kind") == "wrong_strip":
+                self.wrong_strip.emit(str(ev.get("read", "?")).upper(),
+                                      str(ev.get("expected", "?")).upper())
+            else:
+                self.unexpected_response.emit(f"{ev.get('worst_de', 0):.2f}")
+
+        elif kind == "error":
+            ekind = ev.get("kind", "")
+            if ekind == "misread":
+                self.strip_error.emit(ev.get("detail") or "misread")
+            elif ekind == "coms":
+                self.strip_error.emit("communication problem")
+            elif ekind == "needs_cal":
+                on_line("[Engine] Instrument needs calibration…")
+            elif ekind == "no_instrument":
+                self.no_instrument.emit()
+            elif ekind == "cal_failed":
+                self.inst_init_failed.emit(ev.get("detail", ""))
+
+        elif kind == "cal_required":
+            self.calibration_prompt.emit()
+
+        elif kind in ("cal_done", "cal_message"):
+            if kind == "cal_done":
+                self.calibration_done.emit()
+
+        elif kind == "done":
+            on_line("[Engine] Measurement session complete — file saved.")
+
+        # "aborted" needs no handling: the process exit drives on_finish.
 
     def _handle_line(self, line: str, on_line: Callable[[str], None]) -> None:
         on_line(line)
@@ -455,6 +599,10 @@ class MeasureManager(QObject):
                     self._navigate_toward(letter, next_target)
 
     def _navigate_toward(self, current: str, target: str) -> None:
+        # Engine mode: one direct jump instead of a simulated keystream.
+        if self._engine_active:
+            self.goto_strip(target)
+            return
         ci = letter_to_idx(current)
         ti = letter_to_idx(target)
         key = "f" if ti > ci else "b"

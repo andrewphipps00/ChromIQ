@@ -143,6 +143,26 @@ log = get_logger(__name__)
 
 
 
+def _xyz_d50_to_srgb8(xyz: "list[float]") -> tuple[int, int, int]:
+    """D50 XYZ (0..100) → display sRGB 0..255 (Bradford to D65). Preview
+    colouring only — never feeds back into measurement data (#126)."""
+    x, y, z = (float(v) / 100.0 for v in xyz[:3])
+    # Bradford D50→D65
+    xd = 0.9555766 * x + -0.0230393 * y + 0.0631636 * z
+    yd = -0.0282895 * x + 1.0099416 * y + 0.0210077 * z
+    zd = 0.0122982 * x + -0.0204830 * y + 1.3299098 * z
+    r = 3.2404542 * xd + -1.5371385 * yd + -0.4985314 * zd
+    g = -0.9692660 * xd + 1.8760108 * yd + 0.0415560 * zd
+    b = 0.0556434 * xd + -0.2040259 * yd + 1.0572252 * zd
+
+    def enc(c: float) -> int:
+        c = max(0.0, min(1.0, c))
+        c = 12.92 * c if c <= 0.0031308 else 1.055 * c ** (1 / 2.4) - 0.055
+        return max(0, min(255, round(c * 255.0)))
+
+    return enc(r), enc(g), enc(b)
+
+
 def _detect_stripe_rects(tiff_path: Path) -> list[QRect]:
     """Locate vertical strip columns in a printtarg TIFF.
 
@@ -663,6 +683,9 @@ class TabMeasure(QWidget):
         self._pending_avg_action: str | None = None
         self._pending_avg_method: str = "mean"
         self._instrument_disconnected: bool = False
+        # #126 chart-reading engine session state
+        self._engine_strips: list[dict] = []      # session_start strip map
+        self._engine_read: dict[str, bool] = {}   # letter → measured?
         self._device_busy: bool = False
         self._no_instrument: bool = False
         self._usb_claimed_by_vm: bool = False
@@ -685,6 +708,10 @@ class TabMeasure(QWidget):
         self._manager.calibration_prompt.connect(self._on_calibration_prompt)
         self._manager.calibration_done.connect(self._on_calibration_done)
         self._manager.strip_error.connect(self._on_strip_error)
+        # #126 chart-reading engine
+        self._manager.session_map.connect(self._on_session_map)
+        self._manager.strip_measured.connect(self._on_strip_measured)
+        self._manager.readings_saved.connect(self._on_readings_saved)
         self._manager.instrument_disconnected.connect(self._on_instrument_disconnected)
         self._manager.device_busy.connect(self._on_device_busy)
         self._manager.no_instrument.connect(self._on_no_instrument)
@@ -981,6 +1008,7 @@ class TabMeasure(QWidget):
         rl.setContentsMargins(0, 0, 0, 12)
         rl.setSpacing(0)
         self._preview = TiffPreview(right)
+        self._preview.stripe_clicked.connect(self._on_preview_strip_clicked)
         self._preview.set_caption(tr("CHART PREVIEW"))
         rl.addWidget(self._preview, stretch=1)
         splitter.addWidget(right)
@@ -1385,6 +1413,50 @@ class TabMeasure(QWidget):
         self._m_resume_tip.setVisible(False)
         m_resume_row.addWidget(self._m_resume_tip)
         mcg.addLayout(m_resume_row)
+
+        # --- ChromIQ chart-reading engine extras (#126) ------------------
+        # Visible only while the engine is selected in Settings → Beta.
+        self._m_engine_row = QWidget(left)
+        _eng_rl = QHBoxLayout(self._m_engine_row)
+        _eng_rl.setContentsMargins(0, 0, 0, 0)
+        _eng_rl.setSpacing(6)
+        _eng_rl.addWidget(QLabel(tr("Go to strip"), self._m_engine_row))
+        self._m_goto_combo = NoScrollComboBox(self._m_engine_row)
+        self._m_goto_combo.setMinimumWidth(90)
+        _eng_rl.addWidget(self._m_goto_combo)
+        self._m_goto_btn = QPushButton(tr("Go"), self._m_engine_row)
+        self._m_goto_btn.setFixedHeight(26)
+        self._m_goto_btn.clicked.connect(self._on_goto_combo)
+        _eng_rl.addWidget(self._m_goto_btn)
+        _eng_rl.addStretch()
+        _eng_rl.addWidget(TooltipButton(
+            tr("Go to Strip"),
+            tr("Jump straight to any strip of the chart instead of stepping "
+            "through them one by one with 'f' and 'b'.\n\n"
+            "Pick a strip here and press Go, or simply click the strip "
+            "directly in the chart preview on the right — while a "
+            "measurement is running, every strip under your mouse shows a "
+            "hand cursor and can be clicked.\n\n"
+            "Strips you have already read are marked with a check mark. "
+            "Jumping to one of those lets you measure it again — useful "
+            "after a smudge, a misread, or when Check && Refine has "
+            "flagged strips that are worth a second pass.\n\n"
+            "This control appears because the ChromIQ chart-reading "
+            "engine is enabled in Settings → Beta features."),
+            self._m_engine_row,
+        ))
+        mcg.addWidget(self._m_engine_row)
+
+        self._m_autosave_note = QLabel(
+            tr("Every strip is saved to disk the moment it is accepted — "
+               "if anything goes wrong, you can always continue where you "
+               "left off."), left)
+        self._m_autosave_note.setWordWrap(True)
+        self._m_autosave_note.setObjectName("engineAutosaveNote")
+        mcg.addWidget(self._m_autosave_note)
+        self._m_engine_row.setVisible(False)
+        self._m_autosave_note.setVisible(False)
+        # ------------------------------------------------------------------
 
         self._m_refine_row = QWidget(left)
         m_refine_rl = QHBoxLayout(self._m_refine_row)
@@ -3217,7 +3289,20 @@ class TabMeasure(QWidget):
         layout.setContentsMargins(24, 20, 24, 20)
 
         is_coms = "communication" in reason.lower()
-        if is_coms:
+        if is_coms and self._manager.engine_active:
+            # Engine: the readings were already written to disk before this
+            # dialog appeared — no data-loss warning needed, just calm facts.
+            advice = tr(
+                "<b>The instrument lost communication with the computer.</b><br><br>"
+                "Check that the instrument's cable is firmly connected (try a "
+                "different USB port or cable), make sure no other application is "
+                "using the device, then reconnect it before retrying.") + "<br><br>" + tr(
+                "<b>Good news:</b> everything you have read so far is already "
+                "saved on disk — the engine writes your readings after every "
+                "strip. Whatever you choose here, nothing is lost, and "
+                "<i>Continue Measurement</i> can pick up exactly where you "
+                "stopped.") + "<br><br>"
+        elif is_coms:
             advice = tr(
                 "<b>The instrument lost communication with the computer.</b><br><br>"
                 "Check that the instrument's cable is firmly connected (try a "
@@ -3910,6 +3995,10 @@ class TabMeasure(QWidget):
     def _on_measure_done(self, code: int) -> None:
         self._preview.highlight_stripe(-1)
         self._preview.set_bidirectional(False)
+        # #126: click-to-jump only lives while an engine session runs; the
+        # split-patch overlay stays so the finished chart can be inspected.
+        self._preview.set_stripe_click_enabled(False)
+        self._m_engine_row.setVisible(False)
         self._key_watchdog.stop()
         self.measurement_active.emit(False)
         QApplication.instance().removeEventFilter(self)
@@ -4572,6 +4661,165 @@ class TabMeasure(QWidget):
         self._preview.highlight_stripe(local_idx)
 
     # ------------------------------------------------------------------
+    # ChromIQ chart-reading engine (#126)
+    # ------------------------------------------------------------------
+
+    def _engine_selected(self) -> bool:
+        return str(self._settings.get("chartread_engine", "argyll")) == "chromiq"
+
+    def _locate_strip(self, letter: str) -> "tuple[int, int, QRect | None]":
+        """(page, local index, image-px rect) for a strip letter — the same
+        mapping _on_stripe_changed uses for the measure arrow."""
+        global_idx = letter_to_idx(letter)
+        page, local_idx = 0, global_idx
+        if self._strips_per_page:
+            for count in self._strips_per_page:
+                if local_idx < count:
+                    break
+                local_idx -= count
+                page += 1
+        elif self._page_stripe_rects:
+            spp = max(1, len(self._page_stripe_rects[0]))
+            page, local_idx = global_idx // spp, global_idx % spp
+        rect = None
+        if self._page_stripe_rects:
+            ridx = min(page, len(self._page_stripe_rects) - 1)
+            rects = self._page_stripe_rects[ridx]
+            if 0 <= local_idx < len(rects):
+                rect = rects[local_idx]
+        return page, local_idx, rect
+
+    def _letter_for_page_idx(self, page: int, local_idx: int) -> str | None:
+        """Inverse of _locate_strip for preview clicks."""
+        if self._strips_per_page:
+            base = sum(self._strips_per_page[:page])
+        elif self._page_stripe_rects:
+            base = page * max(1, len(self._page_stripe_rects[0]))
+        else:
+            base = 0
+        global_idx = base + local_idx
+        # idx → letters (A..Z, AA..): inverse of letter_to_idx
+        letters = ""
+        n = global_idx
+        while True:
+            letters = chr(ord("A") + n % 26) + letters
+            n = n // 26 - 1
+            if n < 0:
+                break
+        return letters or None
+
+    def _on_session_map(self, strips: list) -> None:
+        self._engine_strips = list(strips)
+        self._engine_read = {s.get("strip", ""): bool(s.get("read"))
+                             for s in strips}
+        self._refresh_goto_combo()
+        self._preview.clear_patch_overlay()
+        is_manual = self._current_mode() == "manual"
+        self._m_engine_row.setVisible(is_manual)
+        self._m_autosave_note.setVisible(is_manual)
+        if is_manual:
+            read_map = {}
+            for s in strips:
+                _pg, li, _r = self._locate_strip(s.get("strip", "A"))
+                read_map[li] = bool(s.get("read"))
+            self._preview.set_stripe_click_enabled(True, read_map)
+        if any(not s.get("verifiable", True) for s in strips):
+            self._log.appendPlainText(
+                tr("[Engine] Note: some rows of this chart are too similar "
+                   "for automatic row identification — for those, take the "
+                   "usual care to swipe the row shown in the preview."))
+
+    def _refresh_goto_combo(self) -> None:
+        self._m_goto_combo.clear()
+        for s in self._engine_strips:
+            letter = s.get("strip", "?")
+            mark = " ✓" if self._engine_read.get(letter) else ""
+            self._m_goto_combo.addItem(f"{letter}{mark}", letter)
+
+    def _on_goto_combo(self) -> None:
+        letter = self._m_goto_combo.currentData()
+        if letter and self._manager.engine_active:
+            self._manager.goto_strip(str(letter))
+            self._log.appendPlainText(
+                tr("[Engine] Jumping to strip {strip}…").format(strip=letter))
+
+    def _on_preview_strip_clicked(self, page: int, local_idx: int) -> None:
+        if not self._manager.engine_active:
+            return
+        letter = self._letter_for_page_idx(page, local_idx)
+        if letter:
+            self._manager.goto_strip(letter)
+            self._log.appendPlainText(
+                tr("[Engine] Jumping to strip {strip}…").format(strip=letter))
+
+    def _on_strip_measured(self, ev: dict) -> None:
+        letter = str(ev.get("strip", ""))
+        self._engine_read[letter] = True
+        self._refresh_goto_combo()
+        page, local_idx, rect = self._locate_strip(letter)
+        if rect is None:
+            return
+        patches = ev.get("patches", [])
+        if not patches:
+            return
+        warn = float(ev.get("worst_de", 0)) >= 15.0
+        n = len(patches)
+        items = []
+        from PyQt6.QtGui import QColor as _QC
+        # Patches run along the strip's LONG axis: printtarg charts read as
+        # vertical columns subdivide top-to-bottom, engine row charts
+        # left-to-right.
+        vertical = rect.height() >= rect.width()
+        step = (rect.height() if vertical else rect.width()) / n
+        for i, p in enumerate(patches):
+            if vertical:
+                sub = QRect(rect.x(), int(rect.y() + i * step),
+                            rect.width(), max(1, int(step)))
+            else:
+                sub = QRect(int(rect.x() + i * step), rect.y(),
+                            max(1, int(step)), rect.height())
+            items.append((sub,
+                          _QC(*_xyz_d50_to_srgb8(p.get("exyz", [0, 0, 0]))),
+                          _QC(*_xyz_d50_to_srgb8(p.get("xyz", [0, 0, 0]))),
+                          warn))
+        self._preview.set_patch_overlay(page, items)
+        read_map = {}
+        for s in self._engine_strips:
+            _pg, li, _r = self._locate_strip(s.get("strip", "A"))
+            read_map[li] = self._engine_read.get(s.get("strip", ""), False)
+        self._preview.set_stripe_read_map(read_map)
+
+    def _on_readings_saved(self, path: str, n: int) -> None:
+        self._m_autosave_note.setText(
+            tr("Saved: {count} patches are safe on disk — every strip is "
+               "written the moment it is accepted.").format(count=n))
+
+    def _apply_engine_params(self, p: MeasureParams) -> MeasureParams:
+        """Attach the chart-reading engine when selected and usable."""
+        if not self._engine_selected():
+            return p
+        if p.patch_by_patch:
+            self._log.appendPlainText(
+                tr("[Engine] Patch-by-patch mode isn't covered by the "
+                   "ChromIQ engine yet — using regular chartread for this "
+                   "run."))
+            return p
+        from workflow import chartread_engine
+        try:
+            p.engine_helper = chartread_engine.helper_path()
+        except chartread_engine.EngineUnavailable:
+            self._log.appendPlainText(
+                tr("[Engine] The ChromIQ chart-reading engine isn't "
+                   "available on this system — using regular chartread. "
+                   "Everything works as before."))
+            return p
+        import os as _os
+        replay = _os.environ.get("CHROMIQ_REPLAY")
+        if replay:
+            p.engine_replay = Path(replay)
+        return p
+
+    # ------------------------------------------------------------------
     # Param collection
     # ------------------------------------------------------------------
 
@@ -4611,8 +4859,8 @@ class TabMeasure(QWidget):
 
     def _collect_params(self) -> MeasureParams:
         if self._current_mode() == "guided":
-            return self._collect_guided()
-        return self._collect_manual()
+            return self._apply_engine_params(self._collect_guided())
+        return self._apply_engine_params(self._collect_manual())
 
     # ------------------------------------------------------------------
     # Settings

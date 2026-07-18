@@ -706,6 +706,10 @@ class ArgyllRunner(QObject):
     # ------------------------------------------------------------------
 
     def _resolve(self, tool: str) -> Path:
+        # Bundled helpers (chromiq-chartread) pass their absolute path —
+        # they don't live in the Argyll bin dir.
+        if Path(tool).is_absolute():
+            return Path(tool)
         bin_dir = Path(self._settings.get("argyll_bin_path", "/Applications/Argyll/bin"))
         candidate = bin_dir / argyll_binary(tool)
         if not candidate.exists():

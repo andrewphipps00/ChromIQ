@@ -107,6 +107,15 @@ if not _gammap_datas:
     print(f"[ChromIQ.spec] {_gm_path} not built — bit-exact gamut helper "
           f"will be unavailable in this bundle (fast mapper still works).")
 
+# Chart-reading engine (native/chromiq-chartread[.exe], #126). Same pattern:
+# present when CI built it, otherwise the app falls back to stock chartread.
+_cr_name = 'chromiq-chartread.exe' if sys.platform == 'win32' else 'chromiq-chartread'
+_cr_path = os.path.join('native', _cr_name)
+_engine_datas = [(_cr_path, 'native')] if os.path.exists(_cr_path) else []
+if not _engine_datas:
+    print(f"[ChromIQ.spec] {_cr_path} not built — chart-reading engine "
+          f"will be unavailable in this bundle (stock chartread still works).")
+
 a = Analysis(
     ['main.py'],
     pathex=['.'],
@@ -119,6 +128,7 @@ a = Analysis(
         ('data/scanner_targets', 'data/scanner_targets'),
         (certifi_where, 'certifi'),
         *_gammap_datas,
+        *_engine_datas,
         *_ft_vendor_datas,
         *_ic_datas,
         *_we_datas,

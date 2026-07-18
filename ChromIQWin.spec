@@ -69,6 +69,14 @@ if not _gammap_datas:
     print(f"[ChromIQWin.spec] {_gm_path} not built — bit-exact gamut helper "
           f"unavailable in this bundle (fast mapper still works).")
 
+# Chart-reading engine (native/chromiq-chartread.exe, #126). Bundled when CI
+# built it; otherwise the app falls back to stock chartread.
+_cr_path = os.path.join('native', 'chromiq-chartread.exe')
+_engine_datas = [(_cr_path, 'native')] if os.path.exists(_cr_path) else []
+if not _engine_datas:
+    print(f"[ChromIQWin.spec] {_cr_path} not built — chart-reading engine "
+          f"unavailable in this bundle (stock chartread still works).")
+
 # Vector-PDF export (#72) needs libfreetype for glyph outlining. On Windows x64
 # freetype-py's own PyInstaller hook (collect_dynamic_libs) bundles the wheel's
 # libfreetype.dll automatically. On Windows/ARM there is no wheel with a native
@@ -94,6 +102,7 @@ a = Analysis(
         ('data/i18n',            'data/i18n'),
         (certifi_where,          'certifi'),
         *_gammap_datas,
+        *_engine_datas,
         *_ft_vendor_datas,
         *_ic_datas,
         *_winpty_datas,

@@ -152,6 +152,12 @@ DEFAULTS: dict[str, Any] = {
     # chromiq-gammap helper running Argyll's real gamut mapper (bit-exact,
     # slower). Falls back to "fast" when the helper binary isn't present.
     "gammap_mode":               "fast",
+    # Chart-reading engine for the Measure tab (#126): "argyll" = stock
+    # chartread over a PTY (the classic path); "chromiq" = the bundled
+    # chromiq-chartread fork (JSON protocol, per-strip autosave, direct
+    # strip jumps, live patch feedback). Falls back to "argyll" when the
+    # helper binary isn't present.
+    "chartread_engine":          "argyll",
     # "Read again & average" — master switch. OFF (default) restores the classic
     # behaviour: a finished full read proceeds straight to Build Profile. ON adds
     # the post-read completion dialog offering measure-again / average.

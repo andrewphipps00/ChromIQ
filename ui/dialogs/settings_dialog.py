@@ -637,6 +637,63 @@ class SettingsDialog(QDialog):
         _eng_row.addWidget(engine_tip)
         _beta.addLayout(_eng_row)
         _beta.addWidget(self._gammap_mode_cell)
+
+        # Chart-reading engine (#126) — Measure tab beta.
+        self._chartread_engine_combo = NoScrollComboBox(self)
+        self._chartread_engine_combo.addItem(tr("Argyll chartread (default)"), "argyll")
+        self._chartread_engine_combo.addItem(tr("ChromIQ engine (beta)"), "chromiq")
+        self._chartread_engine_combo.setSizeAdjustPolicy(
+            NoScrollComboBox.SizeAdjustPolicy.AdjustToContents)
+        chartread_engine_tip = TooltipButton(
+            tr("Chart reading"),
+            tr("This chooses which program ChromIQ uses when you measure a "
+            "printed chart in the Measure tab.\n\n"
+            "  • Argyll chartread (default) — the classic, proven path. "
+            "Nothing changes: this is exactly how ChromIQ has always "
+            "measured.\n\n"
+            "  • ChromIQ engine (beta) — ChromIQ's own version of chartread. "
+            "It is built from the very same ArgyllCMS source code and talks "
+            "to your instrument with Argyll's own, unmodified drivers, so "
+            "the measurements themselves are identical. What changes is "
+            "everything around them:\n"
+            "       – Your readings are saved to disk after every single "
+            "strip. If the instrument loses its connection, the app "
+            "crashes or the power goes out, you lose at most the one "
+            "strip you were reading — never the whole session.\n"
+            "       – You can click any strip in the chart preview to jump "
+            "straight to it — handy when you want to re-measure one "
+            "strip, or when Check && Refine flags a few strips as worth "
+            "reading again.\n"
+            "       – After each swipe the preview shows what the "
+            "instrument actually saw, patch by patch, next to what the "
+            "chart expected — a smudged or mixed-up row jumps out "
+            "immediately instead of ruining the profile.\n"
+            "       – On charts whose patches are printed in a fixed order "
+            "(not shuffled), the engine checks that you really swiped the "
+            "row it expected wherever that is mathematically possible, and "
+            "warns you on the spot. Regular chartread silently trusts you "
+            "there.\n\n"
+            "The measuring itself — instrument control, calibration, the "
+            "numbers in your measurement file — is Argyll's, unchanged. "
+            "The result file has exactly the same format as before, and "
+            "resuming works between both choices interchangeably.\n\n"
+            "This is a new beta and has not yet been tested against every "
+            "instrument, so keep an eye on your first sessions. If the "
+            "engine is missing on your system or a mode needs a feature "
+            "the engine doesn't cover (patch-by-patch reading, XY tables), "
+            "ChromIQ quietly uses regular chartread and tells you so in "
+            "the log.\n\nDefault: Argyll chartread"),
+            self,
+            min_width=680,
+        )
+        self._chartread_engine_cell = QWidget(self)
+        _cr_row = QHBoxLayout(self._chartread_engine_cell)
+        _cr_row.setContentsMargins(0, 0, 0, 0)
+        _cr_row.addWidget(QLabel(tr("Chart reading"), self))
+        _cr_row.addWidget(self._chartread_engine_combo)
+        _cr_row.addStretch()
+        _cr_row.addWidget(chartread_engine_tip)
+        _beta.addWidget(self._chartread_engine_cell)
         _beta.addStretch()
 
         self._native_print_check = QCheckBox(tr("Use default macOS printer dialog"), self)
@@ -1657,6 +1714,9 @@ class SettingsDialog(QDialog):
         # A no-change setChecked above may not emit toggled, so sync explicitly.
         self._gammap_mode_cell.setVisible(
             self._profile_engine_check.isChecked())
+        self._chartread_engine_combo.setCurrentIndex(
+            max(0, self._chartread_engine_combo.findData(
+                str(s.get("chartread_engine", "argyll")))))
         self._native_print_check.setChecked(bool(s.get("use_native_print_dialog", False)))
         self._pdf_fallback_check.setChecked(bool(s.get("pdf_print_fallback", False)))
         self._confirm_print_check.setChecked(bool(s.get("confirm_before_printing", True)))
@@ -2286,6 +2346,7 @@ class SettingsDialog(QDialog):
         s.set("averaging_enabled",         self._averaging_check.isChecked())
         s.set("profile_engine_beta",       self._profile_engine_check.isChecked())
         s.set("gammap_mode",               self._gammap_mode_combo.currentData())
+        s.set("chartread_engine",          self._chartread_engine_combo.currentData())
         s.set("use_native_print_dialog",   self._native_print_check.isChecked())
         s.set("pdf_print_fallback",        self._pdf_fallback_check.isChecked())
         s.set("confirm_before_printing",   self._confirm_print_check.isChecked())

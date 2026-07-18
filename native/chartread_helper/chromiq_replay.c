@@ -108,6 +108,21 @@ typedef struct _cq_inst {
 	INST_OBJ_BASE
 } cq_inst;
 
+/* Minimal icoms stand-in: read_strips touches it->icom only for
+ * port_type()/port_attr() guards (serial baud fallback, fast-serial
+ * checks) — report a plain USB port so those branches stay inert. */
+static icom_type cq_icom_port_type(struct _icoms *p) {
+	(void)p;
+	return icomt_usb;
+}
+
+static icom_type cq_icom_port_attr(struct _icoms *p) {
+	(void)p;
+	return icomt_usb;
+}
+
+static icoms cq_fake_icom;	/* zero-init; only the two members below are set */
+
 static inst_code cq_init_coms(inst *p, baud_rate br, flow_control fc, double tout) {
 	(void)br; (void)fc; (void)tout;
 	p->gotcoms = 1;
@@ -329,7 +344,9 @@ inst *cq_new_replay_inst(a1log *log,
 	p->last_scomerr       = cq_last_scomerr;
 	p->del                = cq_del;
 	p->dtype              = instI1Pro;
-	p->icom               = NULL;
+	cq_fake_icom.port_type = cq_icom_port_type;
+	cq_fake_icom.port_attr = cq_icom_port_attr;
+	p->icom               = &cq_fake_icom;
 	p->uicallback         = uicallback;
 	p->uic_cntx           = cntx;
 

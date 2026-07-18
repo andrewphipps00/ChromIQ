@@ -183,6 +183,20 @@ jobs:
           cp build/gammap/chromiq-gammap native/chromiq-gammap
           echo "helper archs: $(lipo -archs native/chromiq-gammap)"
 
+      # Chart-reading engine — the chromiq-chartread fork of ArgyllCMS
+      # chartread (native/chartread_helper + vendored native/instlib). Same
+      # universal2 discipline; ChromIQ.spec bundles native/chromiq-chartread
+      # when present, and the engine falls back to stock chartread otherwise.
+      - name: Build chart-reading engine (universal2)
+        run: |
+          set -euo pipefail
+          cmake -S native/chartread_helper -B build/chartread \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"
+          cmake --build build/chartread -j3
+          cp build/chartread/chromiq-chartread native/chromiq-chartread
+          echo "engine archs: $(lipo -archs native/chromiq-chartread)"
+
       - name: Build app bundle
         env:
           PYINSTALLER_TARGET_ARCH: ${{ matrix.target_arch_env }}
