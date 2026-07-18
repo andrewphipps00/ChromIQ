@@ -1111,6 +1111,57 @@ def load_tinted_folder_icon(color: str, size: int = 22) -> QIcon:
     return QIcon(out)
 
 
+def load_reveal_folder_icon(color: str, size: int = 22) -> QIcon:
+    """A distinct “reveal in the file manager” glyph — a folder with a small
+    arrow springing out of it — painted in an accent ``color`` (Knut). Kept
+    visually different from the plain folder glyph used to *load* a file, so
+    the two buttons don't read as the same action."""
+    from PyQt6.QtGui import QGuiApplication, QImage, QPainter, QPainterPath, QPen
+
+    dpr = QGuiApplication.primaryScreen().devicePixelRatio()
+    phys = round(size * dpr)
+    img = QImage(phys, phys, QImage.Format.Format_ARGB32_Premultiplied)
+    img.fill(Qt.GlobalColor.transparent)
+    p = QPainter(img)
+    p.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+    c = QColor(color)
+    s = phys
+    pen = QPen(c)
+    pen.setWidthF(max(1.4, s * 0.075))
+    pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+    pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+    p.setPen(pen)
+    # Folder body (lower-left), leaving room for the arrow top-right.
+    fx, fy, fw, fh = s * 0.12, s * 0.40, s * 0.60, s * 0.42
+    tab = QPainterPath()
+    tab.moveTo(fx, fy)
+    tab.lineTo(fx + fw * 0.34, fy)
+    tab.lineTo(fx + fw * 0.46, fy - s * 0.09)
+    tab.lineTo(fx + fw, fy - s * 0.09)
+    p.drawPath(tab)
+    p.drawRoundedRect(int(fx), int(fy - s * 0.09), int(fw), int(fh + s * 0.09),
+                      int(s * 0.05), int(s * 0.05))
+    # Arrow springing out to the upper-right.
+    a0x, a0y = s * 0.52, s * 0.42
+    a1x, a1y = s * 0.86, s * 0.14
+    p.drawLine(int(a0x), int(a0y), int(a1x), int(a1y))
+    head = QPainterPath()
+    head.moveTo(a1x - s * 0.16, a1y + s * 0.02)
+    head.lineTo(a1x, a1y)
+    head.lineTo(a1x - s * 0.02, a1y + s * 0.16)
+    p.drawPath(head)
+    p.end()
+    out = QPixmap.fromImage(img)
+    out.setDevicePixelRatio(dpr)
+    return QIcon(out)
+
+
+def set_reveal_folder_icon(btn: QPushButton, color: str) -> None:
+    """Stamp the reveal-folder glyph (tab accent) and tag for theme refresh."""
+    btn.setIcon(load_reveal_folder_icon(color))
+    btn.setProperty("themed_reveal_icon", color)
+
+
 def load_magenta_folder_icon() -> QIcon:
     """The standard folder glyph tinted in the app's spectrum magenta — used by
     the "open an existing profile" button beside the built-in-presets star, so
@@ -1203,6 +1254,10 @@ def apply_themed_icons(root: QWidget) -> None:
         preset_name = btn.property("themed_preset_icon")
         if preset_name:
             btn.setIcon(load_preset_icon(str(preset_name)))
+            continue
+        reveal_color = btn.property("themed_reveal_icon")
+        if reveal_color:
+            btn.setIcon(load_reveal_folder_icon(str(reveal_color)))
 
 
 def tint_dialog_primary(dlg: "QWidget", color: str) -> None:

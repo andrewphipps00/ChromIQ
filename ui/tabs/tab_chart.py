@@ -1297,6 +1297,9 @@ class TabChart(QWidget):
         # working folder; put their location one click away (Knut).
         self._reveal_folder_btn = QPushButton(tr("Reveal folder"), self)
         self._reveal_folder_btn.setFixedHeight(36)
+        from ui.styles import SPEC_MAGENTA
+        from ui.widgets import set_reveal_folder_icon
+        set_reveal_folder_icon(self._reveal_folder_btn, SPEC_MAGENTA)
         self._reveal_folder_btn.setToolTip(tr(
             "Open the folder holding the generated chart's files (the TIFF "
             "pages, .ti1/.ti2 and sidecars) in your file manager."))
@@ -2003,7 +2006,7 @@ class TabChart(QWidget):
         self._preset_reveal_btn = QPushButton(w)
         self._preset_reveal_btn.setObjectName("icon_btn")
         self._preset_reveal_btn.setFixedSize(28, 28)
-        set_folder_icon(self._preset_reveal_btn, "folder")
+        set_folder_icon(self._preset_reveal_btn, "folder_create")
         self._preset_reveal_btn.setIconSize(QSize(14, 14))
         self._preset_reveal_btn.setToolTip(
             tr("Open this tab's presets folder in Finder/Explorer.\n"

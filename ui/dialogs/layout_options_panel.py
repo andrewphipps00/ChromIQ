@@ -1214,7 +1214,32 @@ class LayoutOptionsPanel(QWidget):
                        "Right margin. On that edge the wider of the two (margin "
                        "or clip-border width) is what gets reserved; the smaller "
                        "one is outlined in red to show it's overridden."), self))
-        add_row(ccg, 2, tr("Text:"), cell_fill(self.clip_text, self.clip_insert_btn))
+        add_row(ccg, 2, tr("Text:"), cell_fill(self.clip_text, self.clip_insert_btn),
+                tip=TooltipButton(
+                    tr("Clip-border text"),
+                    tr("The text printed up the clip-border strip (the tall band "
+                       "along one edge that holds the instrument's calibration "
+                       "area). Type freely, and use Insert ▾ to drop in either a "
+                       "placeholder or a blank line to write on:\n\n"
+                       "Placeholders are replaced with real values when the chart "
+                       "is built:\n"
+                       "  • {project} — your printer-profile name\n"
+                       "  • {page} — this page, e.g. “page 1/3”\n"
+                       "  • {date} — the build date\n"
+                       "  • {paper} — paper size and orientation\n"
+                       "  • {instrument} — the instrument name\n"
+                       "  • {patchcount} — the number of patches (with the word "
+                       "“patches”)\n"
+                       "  • {pages} — the total number of pages\n"
+                       "  • {seed} — the shuffle seed (shown as “seed 1234”), which "
+                       "lets you reproduce the exact patch order later\n"
+                       "  • {dpi} — the resolution (with “dpi”)\n\n"
+                       "Blank lines to write on — “Underline — long/short” inserts "
+                       "a run of underscores (10 or 5). Put several in a row for a "
+                       "longer line; they join with no gap unless you type a space "
+                       "between them. Handy for a hand-written date or paper name.\n\n"
+                       "The font and size below apply to this text."),
+                    self))
         _clip_font_w = QWidget(self)
         _cf = QHBoxLayout(_clip_font_w)
         _cf.setContentsMargins(0, 0, 0, 0); _cf.setSpacing(8)
@@ -1269,7 +1294,23 @@ class LayoutOptionsPanel(QWidget):
                        "clip band, in mm."), self))
         self._clip_image_move_row = add_row(
                 ccg, 6, tr("Image move (mm):"), self._clip_image_move_w)
-        add_row(ccg, 7, tr("Clip area:"), self.clip_dims_label)
+        add_row(ccg, 7, tr("Clip area:"), self.clip_dims_label,
+                tip=TooltipButton(
+                    tr("Clip area measurements"),
+                    tr("The size of the printable clip-border strip — width × "
+                       "height in millimetres — where your text or branding is "
+                       "placed.\n\n"
+                       "Where the numbers come from:\n"
+                       "  • Width is the “Clip border width” you set above (or the "
+                       "clip-side page margin, whichever is larger — the engine "
+                       "reserves the bigger of the two on that edge).\n"
+                       "  • Height is the paper height minus the top and bottom "
+                       "text distances (so the strip clears the very edges), for "
+                       "the current paper and orientation.\n\n"
+                       "It updates live as you change the clip-border width, the "
+                       "margins, the paper or the orientation, so you can see how "
+                       "much room your text has before you print."),
+                    self))
         add_row(ccg, 8, tr("Preview:"), self.clip_preview)
         ccg.addWidget(self.clip_export_btn, 9, 1)
         _expert_v.addWidget(self._clip_content_grp)
@@ -1917,6 +1958,15 @@ class LayoutOptionsPanel(QWidget):
             act = menu.addAction(f"{{{tok}}} — {desc}")
             act.triggered.connect(
                 lambda _c=False, t=tok, tgt=target: self._insert_token_into(tgt, t))
+        # Underline runs — a blank line to hand-write on (Knut). Insert several
+        # in a row for a longer line; they join with no gap unless you type a
+        # space between them.
+        menu.addSeparator()
+        for label, run in ((tr("Underline — long (10 “_”)"), "_" * 10),
+                           (tr("Underline — short (5 “_”)"), "_" * 5)):
+            act = menu.addAction(label)
+            act.triggered.connect(
+                lambda _c=False, r=run, tgt=target: self._insert_literal_into(tgt, r))
         btn.setMenu(menu)
         return btn
 
@@ -1990,6 +2040,11 @@ class LayoutOptionsPanel(QWidget):
     def _insert_token_into(self, target, token: str) -> None:
         """Drop ``{token}`` into *target* at the cursor."""
         target.insert("{%s}" % token)
+        target.setFocus()
+
+    def _insert_literal_into(self, target, text: str) -> None:
+        """Drop literal *text* (e.g. an underline run) at the cursor."""
+        target.insert(text)
         target.setFocus()
 
     def _resolve_sample(self, text: str) -> str:

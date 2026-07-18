@@ -412,6 +412,8 @@ class TabProfile(QWidget):
         fg.addWidget(self._load_btn)
         fg.addWidget(self._file_lbl, stretch=1)
         self._reveal_btn = QPushButton(tr("Reveal folder"), file_grp)
+        from ui.widgets import set_reveal_folder_icon
+        set_reveal_folder_icon(self._reveal_btn, SPEC_CYAN)
         self._reveal_btn.setToolTip(tr(
             "Open this chart's folder in Finder / your file manager — where "
             "the measurement and the finished ICC profile live. Handy for "
@@ -1696,7 +1698,7 @@ class TabProfile(QWidget):
         self._m_preset_reveal_btn = QPushButton(container)
         self._m_preset_reveal_btn.setObjectName("icon_btn")
         self._m_preset_reveal_btn.setFixedSize(28, 28)
-        set_folder_icon(self._m_preset_reveal_btn, "folder")
+        set_folder_icon(self._m_preset_reveal_btn, "folder_build")
         self._m_preset_reveal_btn.setToolTip(
             tr("Open this tab's presets folder in Finder/Explorer.\n"
             "Each preset is a plain .json file — copy one to a colleague\n"

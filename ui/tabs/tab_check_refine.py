@@ -732,7 +732,7 @@ class TabCheckRefine(QWidget):
         self._m_preset_reveal_btn = QPushButton(container)
         self._m_preset_reveal_btn.setObjectName("icon_btn")
         self._m_preset_reveal_btn.setFixedSize(28, 28)
-        set_folder_icon(self._m_preset_reveal_btn, "folder")
+        set_folder_icon(self._m_preset_reveal_btn, "folder_check")
         self._m_preset_reveal_btn.setToolTip(
             tr("Open this tab's presets folder in Finder/Explorer.\n"
             "Each preset is a plain .json file — copy one to a colleague\n"

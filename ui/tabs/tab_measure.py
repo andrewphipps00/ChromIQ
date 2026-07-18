@@ -965,6 +965,8 @@ class TabMeasure(QWidget):
         file_row.addWidget(self._load_ti1_btn)
         file_row.addWidget(self._ti1_lbl, stretch=1)
         self._reveal_btn = QPushButton(tr("Reveal folder"), file_outer)
+        from ui.widgets import set_reveal_folder_icon
+        set_reveal_folder_icon(self._reveal_btn, _TAB_COLOR)
         self._reveal_btn.setToolTip(tr(
             "Open this chart's folder in Finder / your file manager — where "
             "the chart, its measurements and the finished profile all live. "
@@ -1340,7 +1342,7 @@ class TabMeasure(QWidget):
         self._m_preset_reveal_btn = QPushButton(container)
         self._m_preset_reveal_btn.setObjectName("icon_btn")
         self._m_preset_reveal_btn.setFixedSize(28, 28)
-        set_folder_icon(self._m_preset_reveal_btn, "folder")
+        set_folder_icon(self._m_preset_reveal_btn, "folder_measure")
         self._m_preset_reveal_btn.setToolTip(
             tr("Open this tab's presets folder in Finder/Explorer.\n"
             "Each preset is a plain .json file — copy one to a colleague\n"
@@ -1558,7 +1560,10 @@ class TabMeasure(QWidget):
         _report_row.setContentsMargins(0, 0, 0, 0)
         _report_row.setSpacing(6)
         self._m_report_btn = QPushButton(tr("Measurement report…"), left)
-        self._m_report_btn.setFixedHeight(28)          # compact, matches dense rows
+        # min-height in the button's OWN stylesheet — the app QSS min-height on
+        # QPushButton otherwise overrides setFixedHeight (feedback_qt_button_sizing).
+        self._m_report_btn.setStyleSheet(
+            "QPushButton { min-height: 20px; max-height: 24px; padding: 2px 12px; }")
         self._m_report_btn.clicked.connect(self._open_measurement_report)
         _report_row.addWidget(self._m_report_btn)
         _report_row.addStretch(1)                       # push the tip icon to the right
@@ -1578,7 +1583,6 @@ class TabMeasure(QWidget):
             "Measure the chart first, then open this. Screen colours are "
             "approximate; the numbers come from your measurement file."),
             left))
-        _report_row.addStretch(1)
         mcg.addLayout(_report_row)
 
         m_precond_row = QHBoxLayout()
