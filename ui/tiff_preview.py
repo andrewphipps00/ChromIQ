@@ -1129,10 +1129,16 @@ class TiffPreview(QWidget):
 
         items = self._patch_overlay.get(self._current, [])
         for rect, c_exp, c_meas, warn in items:
-            x0 = rect.x() * s + ox
-            y0 = rect.y() * s + oy
-            w  = max(2.0, rect.width() * s)
-            h  = max(2.0, rect.height() * s)
+            # Round BOTH edges to whole pixels so the split covers exactly the
+            # same span as the printed patch — flooring each of x/y/w/h
+            # separately (the old int() calls) shifted every patch up-left by
+            # up to a pixel and let edges drift (Knut/Basti).
+            x0 = round(rect.x() * s + ox)
+            y0 = round(rect.y() * s + oy)
+            x1 = round((rect.x() + rect.width()) * s + ox)
+            y1 = round((rect.y() + rect.height()) * s + oy)
+            w = max(2, x1 - x0)
+            h = max(2, y1 - y0)
             # Expected: upper-left triangle; measured: lower-right — the
             # i1Profiler split, corner to corner, hard edge, no gap.
             tri = _QP()
@@ -1140,13 +1146,13 @@ class TiffPreview(QWidget):
             tri.lineTo(x0 + w, y0)
             tri.lineTo(x0, y0 + h)
             tri.closeSubpath()
-            painter.fillRect(int(x0), int(y0), int(w), int(h), c_meas)
+            painter.fillRect(x0, y0, w, h, c_meas)
             painter.fillPath(tri, c_exp)
             if warn:
                 pen = QPen(QColor("#e0564b"))
                 pen.setWidthF(max(1.5, s * 2))
                 painter.setPen(pen)
-                painter.drawRect(int(x0), int(y0), int(w), int(h))
+                painter.drawRect(x0, y0, w, h)
 
         if self._stripe_click_enabled and self._hover_stripe >= 0 \
                 and self._hover_stripe < len(self._stripe_rects):
@@ -1157,16 +1163,21 @@ class TiffPreview(QWidget):
             painter.drawRect(int(r.x() * s + ox), int(r.y() * s + oy),
                              int(r.width() * s), int(r.height() * s))
 
-        if items:
+        if items and self._pixmap is not None:
             # Legend chip: "expected ◤ / measured ◢" — i1Profiler leaves the
-            # halves unlabelled; we don't.
+            # halves unlabelled; we don't. Anchored BOTTOM-RIGHT of the image
+            # so it never covers the strip indicators along the top (Basti).
             txt = tr("expected ◤ · measured ◢ (screen colours approximate)")
             fm = painter.fontMetrics()
             tw = fm.horizontalAdvance(txt) + 16
             th = fm.height() + 8
-            painter.fillRect(int(ox), int(oy), tw, th, QColor(20, 20, 20, 190))
+            img_r = ox + self._pixmap.width() * s
+            img_b = oy + self._pixmap.height() * s
+            cx = int(img_r - tw - 6)
+            cy = int(img_b - th - 6)
+            painter.fillRect(cx, cy, tw, th, QColor(20, 20, 20, 190))
             painter.setPen(QColor("#f4f2ef"))
-            painter.drawText(int(ox) + 8, int(oy) + th - 6, txt)
+            painter.drawText(cx + 8, cy + th - 6, txt)
 
     def _draw_margin_guides(
         self, painter: QPainter, border: float, disp_w: float, disp_h: float
