@@ -510,6 +510,23 @@ Other files and folders you may see, and why:
   runs/runN/calibrated.icc          applycal output — the run's profile with
                                     the calibration .cal baked in.
 
+  runs/runN/Quality_Check_1_{name}.txt
+  runs/runN/Quality_Check_2_{name}.txt
+                                    Readable reports from "Check profile
+                                    quality" (Check & Refine tab): the
+                                    quality grade, an explanation, the
+                                    strips with the highest error and the
+                                    full check output. Numbered so repeated
+                                    checks keep a little history of how the
+                                    profile improved; safe to delete.
+
+  runs/runN/Refine_Strips_{name}.txt
+                                    The strips flagged for re-measurement
+                                    when a quality check finds weak strips.
+                                    Guided refinement reads it back so the
+                                    Measure tab knows which strips to redo;
+                                    replaced on each new check.
+
   cal/                              Calibration target (optional; shared by
                                     every run in this project).
 
@@ -531,6 +548,12 @@ Other files and folders you may see, and why:
   Where are my files.txt            This file. Informational only — ChromIQ
                                     does not read or update it after creating
                                     it. Edit or delete it freely.
+
+
+Safe to tidy: everything can in principle be recreated except your
+measurements ({name}.ti3, reads/, cal/{name}-cal.ti3) — those represent
+real ink on real paper and are worth keeping. The quickest tidy-up is
+deleting old runN folders you no longer need.
 """
 
 

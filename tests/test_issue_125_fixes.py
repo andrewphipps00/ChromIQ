@@ -192,6 +192,7 @@ def test_file_guide_covers_every_file_family(qapp):
     for needle in (".icc", "_01.tif", ".ti3", ".ti1", ".ti2", "channels.json",
                    ".pdf", ".ps", "-colours.txt", "-i1profiler", ".cht", ".cie",
                    "reads/", "preconditioning", "merged", "calibrated.icc",
+                   "Quality_Check_1_", "Refine_Strips_",
                    "project.json", "meta.json", "cal/", "exports/",
                    "Where are my files.txt"):
         assert needle in body, f"guide lost its {needle!r} entry"
@@ -231,5 +232,6 @@ def test_project_readme_mentions_new_sidecars():
     from core.file_manager import _PROJECT_README_TEMPLATE
     s = _PROJECT_README_TEMPLATE.format(name="P")
     for needle in ("P.pdf", "P.ps", "P-colours.txt", "P-i1profiler.txt",
-                   "P.cht"):
+                   "P.cht", "Quality_Check_1_P.txt", "Refine_Strips_P.txt",
+                   "Safe to tidy"):
         assert needle in s
