@@ -280,6 +280,13 @@ class TabPrint(QWidget):
         _tl.setSpacing(6)
         _tl.addWidget(self._load_image_btn)
         _tl.addWidget(self._load_btn)
+        self._reveal_btn = QPushButton(tr("Reveal folder"), _trailing)
+        self._reveal_btn.setToolTip(tr(
+            "Open this chart's folder in Finder / your file manager — where "
+            "the printable pages live. Handy if you'd rather print the pages "
+            "from another application."))
+        self._reveal_btn.clicked.connect(self._reveal_folder)
+        _tl.addWidget(self._reveal_btn)
         self._header = TabHeader(
             tr("STEP 02 · PRINT CHART"), tr("Print test chart"), "#ffb42d", left,
             tooltip_title=_initial_tt_title,
@@ -730,6 +737,18 @@ class TabPrint(QWidget):
         self._current_ti2 = ti2_path
         if tiffs:
             self.load_tiffs(tiffs)
+
+    def _reveal_folder(self) -> None:
+        """Open the current chart's folder in the file manager (Knut — same
+        button as the other tabs, for consistency)."""
+        from core.preset_store import reveal_in_file_manager
+        ti2 = getattr(self, "_current_ti2", None)
+        if ti2 is not None:
+            target = Path(ti2).parent
+        else:
+            custom = str(self._settings.get("custom_output_path", "")).strip()
+            target = Path(custom).expanduser() if custom else Path.home() / "ChromIQ"
+        reveal_in_file_manager(target)
 
     def _on_load_ti2(self) -> None:
         from ui.ti2_loader import resolve_ti2

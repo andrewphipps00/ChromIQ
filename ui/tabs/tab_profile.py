@@ -411,6 +411,13 @@ class TabProfile(QWidget):
         self._file_lbl.setWordWrap(True)
         fg.addWidget(self._load_btn)
         fg.addWidget(self._file_lbl, stretch=1)
+        self._reveal_btn = QPushButton(tr("Reveal folder"), file_grp)
+        self._reveal_btn.setToolTip(tr(
+            "Open this chart's folder in Finder / your file manager — where "
+            "the measurement and the finished ICC profile live. Handy for "
+            "finding the profile after you build it, to install or share it."))
+        self._reveal_btn.clicked.connect(self._reveal_folder)
+        fg.addWidget(self._reveal_btn)
         cc.addWidget(file_grp)
 
         self._stack = QStackedWidget(colprof_container)
@@ -3718,6 +3725,16 @@ class TabProfile(QWidget):
                 flag=flag, src=src or tr("(empty path)")),
         )
         return False
+
+    def _reveal_folder(self) -> None:
+        """Open the current measurement/profile folder in the file manager
+        (Knut — same button as the other tabs, for consistency)."""
+        if self._ti3_path is not None:
+            target = self._ti3_path.parent
+        else:
+            custom = str(self._settings.get("custom_output_path", "")).strip()
+            target = Path(custom).expanduser() if custom else Path.home() / "ChromIQ"
+        reveal_in_file_manager(target)
 
     def _on_load_ti3(self) -> None:
         path = open_file_dialog(

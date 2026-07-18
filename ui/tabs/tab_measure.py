@@ -964,6 +964,14 @@ class TabMeasure(QWidget):
         self._ti1_lbl.setStyleSheet("color: #909090; font-size: 11px;")
         file_row.addWidget(self._load_ti1_btn)
         file_row.addWidget(self._ti1_lbl, stretch=1)
+        self._reveal_btn = QPushButton(tr("Reveal folder"), file_outer)
+        self._reveal_btn.setToolTip(tr(
+            "Open this chart's folder in Finder / your file manager — where "
+            "the chart, its measurements and the finished profile all live. "
+            "Handy for finding the printable pages, or the ICC profile after "
+            "you build it."))
+        self._reveal_btn.clicked.connect(self._reveal_chart_folder)
+        file_row.addWidget(self._reveal_btn)
         fg.addLayout(file_row)
         fo_layout.addWidget(file_grp)
         lc_layout.addWidget(file_outer)
@@ -1475,57 +1483,27 @@ class TabMeasure(QWidget):
         m_resume_row.addWidget(self._m_resume_tip)
         mcg.addLayout(m_resume_row)
 
-        # --- ChromIQ chart-reading engine info (#126) --------------------
+        # --- ChromIQ chart-reading engine: view toggle (#126) ------------
         # Shown only while the engine is active. There is no "go to strip"
         # control by design (Knut): you jump by clicking a strip directly in
-        # the chart preview, and guided refinement does the same under the
-        # hood. This row is just the reassuring autosave note + how-to.
+        # the chart preview. The "Show" combo matches the other compact
+        # Measure-tab selectors; its help icon sits at the panel's right edge.
         self._m_engine_row = QWidget(left)
-        _eng_vl = QVBoxLayout(self._m_engine_row)
-        _eng_vl.setContentsMargins(0, 0, 0, 0)
-        _eng_vl.setSpacing(6)
-        _hint_row = QHBoxLayout()
-        _hint_row.setContentsMargins(0, 0, 0, 0)
-        _hint_row.setSpacing(6)
-        self._m_engine_hint = QLabel(
-            tr("Tip: click any strip in the chart preview to jump straight "
-               "to it — for example to measure a strip again."),
-            self._m_engine_row)
-        self._m_engine_hint.setWordWrap(True)
-        _hint_row.addWidget(self._m_engine_hint, stretch=1)
-        _hint_row.addWidget(TooltipButton(
-            tr("Jumping between strips"),
-            tr("With the ChromIQ chart-reading engine on, you don't have to "
-            "step through the strips one by one.\n\n"
-            "Simply click a strip directly in the chart preview on the "
-            "right — while a measurement is running, every strip under your "
-            "mouse shows a hand cursor. Clicking takes you straight there.\n\n"
-            "Strips you have already read are marked with a check mark; "
-            "clicking one lets you measure it again — handy after a smudge, "
-            "a misread, or when Check && Refine has flagged strips worth a "
-            "second pass. Guided refinement uses the very same jump "
-            "automatically.\n\n"
-            "This tip appears because the ChromIQ chart-reading engine is "
-            "enabled in Settings → Beta features."),
-            self._m_engine_row))
-        _eng_vl.addLayout(_hint_row)
-        # Expected / measured / both view toggle (Knut) — its own line, with a
-        # compact combo like the other Measure-tab selectors and the help icon
-        # on the same line.
-        _show_row = QHBoxLayout()
+        _show_row = QHBoxLayout(self._m_engine_row)
         _show_row.setContentsMargins(0, 0, 0, 0)
         _show_row.setSpacing(6)
         _show_row.addWidget(QLabel(tr("Show:"), self._m_engine_row))
         self._m_overlay_mode = NoScrollComboBox(self._m_engine_row)
+        self._m_overlay_mode.setObjectName("compact_input")   # match Strip recognition
+        self._m_overlay_mode.setMinimumWidth(210)
         self._m_overlay_mode.addItem(tr("Both (split)"), "both")
         self._m_overlay_mode.addItem(tr("Expected"), "expected")
         self._m_overlay_mode.addItem(tr("Measured"), "measured")
-        self._m_overlay_mode.setSizeAdjustPolicy(
-            NoScrollComboBox.SizeAdjustPolicy.AdjustToContents)
         self._m_overlay_mode.currentIndexChanged.connect(
             lambda _i: self._preview.set_overlay_mode(
                 self._m_overlay_mode.currentData()))
         _show_row.addWidget(self._m_overlay_mode)
+        _show_row.addStretch(1)                                # push the tip icon right
         _show_row.addWidget(TooltipButton(
             tr("Expected / measured view"),
             tr("Choose what the coloured patches in the preview show:\n\n"
@@ -1535,18 +1513,19 @@ class TabMeasure(QWidget):
             "the seam.\n"
             "  • Expected — every patch shows the colour the chart was "
             "supposed to have.\n"
-            "  • Measured — every patch shows what your instrument read.\n\n"
+            "  • Measured — every patch shows what your instrument read; "
+            "patches you haven't read yet keep their expected colour.\n\n"
             "You can switch between these at any time, during a measurement "
             "or after it's finished — it only changes the preview, never your "
             "readings. (Screen colours are approximate; the numbers in your "
             "file are exact.)"),
             self._m_engine_row))
-        _show_row.addStretch(1)
-        _eng_vl.addLayout(_show_row)
         mcg.addWidget(self._m_engine_row)
         self._m_engine_row.setVisible(False)
         # The autosave reassurance lives on the preview itself (as a banner
         # under the caption), not here — see _set_autosave_banner().
+        # The click-a-strip tip lives at the BOTTOM of the manual options
+        # (built later), not here — see self._m_engine_tip.
         # ------------------------------------------------------------------
 
         self._m_refine_row = QWidget(left)
@@ -1579,8 +1558,10 @@ class TabMeasure(QWidget):
         _report_row.setContentsMargins(0, 0, 0, 0)
         _report_row.setSpacing(6)
         self._m_report_btn = QPushButton(tr("Measurement report…"), left)
+        self._m_report_btn.setFixedHeight(28)          # compact, matches dense rows
         self._m_report_btn.clicked.connect(self._open_measurement_report)
         _report_row.addWidget(self._m_report_btn)
+        _report_row.addStretch(1)                       # push the tip icon to the right
         _report_row.addWidget(TooltipButton(
             tr("Measurement report"),
             tr("Opens a report on the chart you've measured: how close each "
@@ -1660,6 +1641,36 @@ class TabMeasure(QWidget):
             TooltipButton(tr(_VERIFY_TIP_TITLE), tr(_VERIFY_TIP_BODY), left))
         mvg.addLayout(m_verify_row)
         ll.addWidget(m_verify_grp)
+
+        # Click-a-strip tip — at the BOTTOM of the manual options (Knut: it
+        # looked out of place in the middle). Shown only with the engine on.
+        self._m_engine_tip = QWidget(left)
+        _tip_row = QHBoxLayout(self._m_engine_tip)
+        _tip_row.setContentsMargins(0, 4, 0, 0)
+        _tip_row.setSpacing(6)
+        _tip_lbl = QLabel(
+            tr("Tip: click any strip in the chart preview to jump straight "
+               "to it — for example to measure a strip again."),
+            self._m_engine_tip)
+        _tip_lbl.setWordWrap(True)
+        _tip_row.addWidget(_tip_lbl, stretch=1)
+        _tip_row.addWidget(TooltipButton(
+            tr("Jumping between strips"),
+            tr("With the ChromIQ chart-reading engine on, you don't have to "
+            "step through the strips one by one.\n\n"
+            "Simply click a strip directly in the chart preview on the "
+            "right — while a measurement is running, every strip under your "
+            "mouse shows a hand cursor. Clicking takes you straight there.\n\n"
+            "Strips you have already read are marked with a check mark; "
+            "clicking one lets you measure it again — handy after a smudge, "
+            "a misread, or when Check && Refine has flagged strips worth a "
+            "second pass. Guided refinement uses the very same jump "
+            "automatically.\n\n"
+            "This tip appears because the ChromIQ chart-reading engine is "
+            "enabled in Settings → Beta features."),
+            self._m_engine_tip))
+        self._m_engine_tip.setVisible(False)
+        ll.addWidget(self._m_engine_tip)
         ll.addStretch(1)
 
         scroll.setWidget(left)
@@ -4123,6 +4134,7 @@ class TabMeasure(QWidget):
         self._preview.set_stripe_click_enabled(False)
         self._preview.set_notice(None)
         self._m_engine_row.setVisible(False)
+        self._m_engine_tip.setVisible(False)
         self._key_watchdog.stop()
         self.measurement_active.emit(False)
         QApplication.instance().removeEventFilter(self)
@@ -4840,6 +4852,7 @@ class TabMeasure(QWidget):
         self._patch_geom_warned = False
         is_manual = self._current_mode() == "manual"
         self._m_engine_row.setVisible(is_manual)
+        self._m_engine_tip.setVisible(is_manual)
         # Autosave reassurance shows on the preview for both modes (autosave
         # protects guided reads too).
         self._set_autosave_banner()
@@ -4915,6 +4928,17 @@ class TabMeasure(QWidget):
             _pg, li, _r = self._locate_strip(s.get("strip", "A"))
             read_map[li] = self._engine_read.get(s.get("strip", ""), False)
         self._preview.set_stripe_read_map(read_map)
+
+    def _reveal_chart_folder(self) -> None:
+        """Open the current chart's folder in the file manager (Knut — same
+        button name and behaviour as the Create Chart tab, for consistency)."""
+        from core.preset_store import reveal_in_file_manager
+        if self._ti1_path is not None:
+            target = self._ti1_path.parent
+        else:
+            custom = str(self._settings.get("custom_output_path", "")).strip()
+            target = Path(custom).expanduser() if custom else Path.home() / "ChromIQ"
+        reveal_in_file_manager(target)
 
     def _maybe_save_measurement_report(self, ti3) -> None:
         """When the Settings option is on, build + save a dated accuracy report
