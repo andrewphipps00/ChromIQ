@@ -2364,6 +2364,7 @@ class SettingsDialog(QDialog):
         if getattr(self, "_isty_font", None) is None:
             return
         from core.settings import DEFAULTS
+        from ui.dialogs.layout_options_panel import mm_to_pt
         _fi = self._isty_font.findData(DEFAULTS["strip_indicator_font"])
         self._isty_font.setCurrentIndex(_fi if _fi >= 0 else 0)
         self._isty_size.setValue(mm_to_pt(float(DEFAULTS["strip_indicator_size_mm"])))

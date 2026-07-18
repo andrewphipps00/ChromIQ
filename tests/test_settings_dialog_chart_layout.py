@@ -136,12 +136,15 @@ def test_indicator_style_settings_round_trip(_app, tmp_path):
     Knut #93) save to the strip_indicator_* / strip_underline_* keys and reload."""
     import core.preset_store as ps
     from ui.dialogs.settings_dialog import SettingsDialog
+    from ui.dialogs.layout_options_panel import pt_to_mm
     with mock.patch.object(ps, "presets_dir", lambda: Path(tmp_path)):
         st = _FakeSettings()
         dlg = SettingsDialog(st, None)
         try:
             dlg._isty_bold.setChecked(True)
-            dlg._isty_size.setValue(3.5)
+            # The label-size control is now in whole points (#15); it persists
+            # as millimetres via pt_to_mm.
+            dlg._isty_size.setValue(12)
             dlg._isty_rotation.setCurrentIndex(dlg._isty_rotation.findData(90))
             dlg._isty_align.setCurrentIndex(dlg._isty_align.findData("center"))
             dlg._isty_underline.setCurrentIndex(
@@ -151,7 +154,7 @@ def test_indicator_style_settings_round_trip(_app, tmp_path):
         finally:
             dlg.deleteLater()
     assert st.get("strip_indicator_bold") is True
-    assert st.get("strip_indicator_size_mm") == 3.5
+    assert st.get("strip_indicator_size_mm") == pytest.approx(pt_to_mm(12))
     assert st.get("strip_indicator_rotation") == 90
     assert st.get("strip_indicator_align") == "center"
     assert st.get("strip_underline_mode") == "black"
@@ -207,16 +210,21 @@ def test_restore_layout_defaults_resets_indicator_style(_app, tmp_path):
     had no way back before (#108 follow-up)."""
     import core.preset_store as ps
     from ui.dialogs.settings_dialog import SettingsDialog
+    from ui.dialogs.layout_options_panel import mm_to_pt, pt_to_mm
+    # Seed a size that lands exactly on the whole-point grid the control now
+    # uses (#15), so the loaded value is unambiguous.
+    seed_mm = pt_to_mm(9)
     with mock.patch.object(ps, "presets_dir", lambda: Path(tmp_path)):
         st = _FakeSettings(**{"strip_indicator_font": "Inter",
-                              "strip_indicator_size_mm": 0.5,
+                              "strip_indicator_size_mm": seed_mm,
                               "strip_indicator_bold": True})
         dlg = SettingsDialog(st, None)
         try:
-            assert dlg._isty_size.value() == 0.5
+            assert dlg._isty_size.value() == 9          # 9 pt, shown in points
             dlg._restore_layout_defaults()
             assert dlg._isty_font.currentData() == DEFAULTS["strip_indicator_font"]
-            assert dlg._isty_size.value() == DEFAULTS["strip_indicator_size_mm"]
+            assert dlg._isty_size.value() == mm_to_pt(
+                DEFAULTS["strip_indicator_size_mm"])
             assert dlg._isty_bold.isChecked() is bool(
                 DEFAULTS["strip_indicator_bold"])
             dlg._save_and_close()

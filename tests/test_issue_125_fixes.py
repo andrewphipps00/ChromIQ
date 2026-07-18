@@ -211,7 +211,9 @@ def test_welcome_window_has_file_guide_card(qapp):
 
 def test_welcome_file_guide_card_opens_body(qapp):
     from ui.dialogs.welcome_dialog import WelcomeDialog
-    from ui.file_guide import file_guide_body
+    # The card now renders the guide as an HTML table (Knut, #126), not the
+    # plain-text body.
+    from ui.file_guide import file_guide_html
 
     class _S:
         def get(self, k, d=None):
@@ -224,7 +226,7 @@ def test_welcome_file_guide_card_opens_body(qapp):
     dlg._on_card_clicked("file_guide")
     from PyQt6.QtWidgets import QLabel
     texts = [w.text() for w in dlg.findChildren(QLabel)]
-    assert any(t == file_guide_body() for t in texts)
+    assert any(t == file_guide_html() for t in texts)
     assert dlg._stack.currentIndex() == 1
 
 

@@ -76,7 +76,7 @@ def _rows():
             ("reports/report_*.json", "runs/runN/reports", tr("Dated measurement reports (accuracy & drift), when “Save a measurement report” is on. Compared over time in the Measurement report window."), tr("Measure tab")),
         ]),
         (tr("Files from the quality check"), [
-            ("Quality_Check_N_{name}.txt", "runs/runN", tr("A readable quality report — grade, explanation, worst strips, full output. Numbered so checks don't overwrite each other. Safe to delete."), tr("Check & Refine")),
+            ("Quality_Check_1_{name}.txt", "runs/runN", tr("A readable quality report — grade, explanation, worst strips, full output. Numbered so checks don't overwrite each other. Safe to delete."), tr("Check & Refine")),
             ("Refine_Strips_{name}.txt", "runs/runN", tr("The list of strips to re-measure after a check; the guided refinement reads it back."), tr("Check & Refine")),
         ]),
         (tr("Scanner / camera profiling (Build profile with scanner or camera)"), [
