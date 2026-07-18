@@ -280,11 +280,8 @@ class TabPrint(QWidget):
         _tl.setSpacing(6)
         _tl.addWidget(self._load_image_btn)
         _tl.addWidget(self._load_btn)
-        self._reveal_btn = QPushButton(_trailing)   # icon-only (Sebastian)
-        self._reveal_btn.setObjectName("icon_btn")
-        self._reveal_btn.setFixedSize(36, 36)
-        from ui.widgets import set_reveal_folder_icon
-        set_reveal_folder_icon(self._reveal_btn, SPEC_AMBER)
+        from ui.widgets import RevealFolderButton
+        self._reveal_btn = RevealFolderButton(SPEC_AMBER, _trailing)
         self._reveal_btn.setToolTip(tr(
             "Open this chart's folder in Finder / your file manager — where "
             "the printable pages live. Handy if you'd rather print the pages "

@@ -411,11 +411,8 @@ class TabProfile(QWidget):
         self._file_lbl.setWordWrap(True)
         fg.addWidget(self._load_btn)
         fg.addWidget(self._file_lbl, stretch=1)
-        self._reveal_btn = QPushButton(file_grp)   # icon-only (Sebastian)
-        self._reveal_btn.setObjectName("icon_btn")
-        self._reveal_btn.setFixedSize(36, 36)
-        from ui.widgets import set_reveal_folder_icon
-        set_reveal_folder_icon(self._reveal_btn, SPEC_CYAN)
+        from ui.widgets import RevealFolderButton
+        self._reveal_btn = RevealFolderButton(SPEC_CYAN, file_grp)
         self._reveal_btn.setToolTip(tr(
             "Open this chart's folder in Finder / your file manager — where "
             "the measurement and the finished ICC profile live. Handy for "

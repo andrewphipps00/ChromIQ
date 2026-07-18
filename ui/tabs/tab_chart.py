@@ -1295,11 +1295,8 @@ class TabChart(QWidget):
 
         # "Reveal folder" — the chart's files are written deep under the
         # working folder; put their location one click away (Knut).
-        self._reveal_folder_btn = QPushButton(self)   # icon-only (Sebastian)
-        self._reveal_folder_btn.setObjectName("icon_btn")
-        self._reveal_folder_btn.setFixedSize(36, 36)
-        from ui.widgets import set_reveal_folder_icon
-        set_reveal_folder_icon(self._reveal_folder_btn, SPEC_MAGENTA)
+        from ui.widgets import RevealFolderButton
+        self._reveal_folder_btn = RevealFolderButton(SPEC_MAGENTA, self)
         self._reveal_folder_btn.setToolTip(tr(
             "Open the folder holding the generated chart's files (the TIFF "
             "pages, .ti1/.ti2 and sidecars) in your file manager."))

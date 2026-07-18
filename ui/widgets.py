@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
 
-from PyQt6.QtCore import QEvent, QModelIndex, QObject, QRect, QRectF, QSize, QSortFilterProxyModel, Qt, QUrl
+from PyQt6.QtCore import QEvent, QModelIndex, QObject, QPointF, QRect, QRectF, QSize, QSortFilterProxyModel, Qt, QUrl
 from PyQt6.QtGui import QColor, QFont, QIcon, QPainter, QPainterPath, QPalette, QPen, QPixmap, QTextCursor
 
 from core.i18n import tr
@@ -1357,6 +1357,74 @@ def replace_log_line(
 
 
 @dataclass
+
+class RevealFolderButton(QToolButton):
+    """A small painted "reveal in the file manager" glyph — an up-arrow rising
+    out of an open-top tray — in a given accent colour. Same flat style as
+    :class:`ImageFileButton` / :class:`PatchGridButton` so a row of icon
+    buttons reads as one set (Sebastian)."""
+
+    FRAC = 0.58
+
+    def __init__(self, color: str, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._color = color
+        self.setObjectName("tooltip_btn")
+        self.setFixedSize(QSize(40, 40))
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._hover = False
+
+    def set_appearance(self, mode: str) -> None:
+        pass
+
+    def enterEvent(self, event) -> None:  # noqa: N802
+        self._hover = True
+        self.update()
+        super().enterEvent(event)
+
+    def leaveEvent(self, event) -> None:  # noqa: N802
+        self._hover = False
+        self.update()
+        super().leaveEvent(event)
+
+    def paintEvent(self, ev) -> None:  # noqa: N802
+        super().paintEvent(ev)  # QSS background (incl. :hover) under the glyph
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        side = min(self.width(), self.height()) * self.FRAC
+        cx = self.width() / 2.0
+        y0 = (self.height() - side) / 2.0
+        color = QColor(self._color)
+        if not self._hover:
+            color.setAlpha(230)
+        pen = QPen(color)
+        pen.setWidthF(1.7)
+        pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        p.setPen(pen)
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        # Up-arrow (upper two-thirds).
+        ax_top = y0 + side * 0.04
+        ax_bot = y0 + side * 0.60
+        p.drawLine(QPointF(cx, ax_bot), QPointF(cx, ax_top))
+        head = side * 0.22
+        p.drawLine(QPointF(cx, ax_top), QPointF(cx - head, ax_top + head))
+        p.drawLine(QPointF(cx, ax_top), QPointF(cx + head, ax_top + head))
+        # Open-top tray (lower third): ⊔ shape.
+        tw = side * 0.66
+        ty = y0 + side * 0.66
+        tb = y0 + side
+        lip = side * 0.16
+        tray = QPainterPath()
+        tray.moveTo(cx - tw / 2, ty)
+        tray.lineTo(cx - tw / 2, tb - lip)
+        tray.quadTo(cx - tw / 2, tb, cx - tw / 2 + lip, tb)
+        tray.lineTo(cx + tw / 2 - lip, tb)
+        tray.quadTo(cx + tw / 2, tb, cx + tw / 2, tb - lip)
+        tray.lineTo(cx + tw / 2, ty)
+        p.drawPath(tray)
+        p.end()
+
 
 class ImageFileButton(QToolButton):
     """A small painted image-file glyph (frame + mountains + sun) in a given
