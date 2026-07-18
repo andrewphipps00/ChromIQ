@@ -1,5 +1,28 @@
 # Changelog
 
+## v3.13.11
+
+A small but important fix for anyone whose instrument drops its USB
+connection mid-measurement (reported on the forum with an i1Pro).
+
+### Fixed: partial readings were lost when the instrument disconnected during "Save Partial & Quit"
+
+chartread keeps everything you have scanned in memory and only writes the
+`.ti3` file at the very end. When a strip read failed with a communication
+error and you chose **Save Partial & Quit**, a follow-up USB error
+(`ReadPipeAsync failed`) could make ChromIQ kill chartread before it had a
+chance to write the file — every strip you had read in that session was
+gone, and "Continue Measurement" had nothing to resume from.
+
+ChromIQ no longer stops chartread while the save is still in progress. If
+the connection hiccup was transient (a flaky hub or cable contact), the
+save now goes through and you can resume later; if the instrument is truly
+gone, chartread ends on its own and the failure is reported as before.
+
+The "Strip Read Failed" dialog also explains this now: after a
+communication error, **Save Partial & Quit** needs the instrument to answer
+one more time — re-seat the USB cable before clicking it.
+
 ## v3.13.10
 
 The second feedback round on the multi-ink tools (issue #125), plus a wish
