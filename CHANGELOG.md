@@ -1,5 +1,38 @@
 # Changelog
 
+## v3.13.12-beta.3
+
+A small polish beta on top of beta.2 — the same opt-in chart-reading engine
+(issue #126), plus interface tidying from Sebastian's and Knut's feedback.
+With the engine off, nothing about your results changes.
+
+### Clip border ↔ page margins
+
+- When **Use instrument margins** is on (so the four page margins are locked
+  to your instrument's limits), the **Left / Right margin box now lights up
+  red** whenever the clip-border width and that side's margin disagree — on
+  whichever side the clip border is set to. Before, the clip-border-width box
+  itself was outlined, which read as if that field were at fault. The margin
+  box is the one affected, so that's the one that's flagged now; hovering the
+  clip-border-width field explains, in plain language, which value wins and
+  why.
+
+### Load buttons are now matching icons
+
+The **Load** buttons on the Measure and Build Profile tabs are now small
+icon-only glyphs in each tab's accent colour, matching the Create Chart and
+Print tabs (their meaning is in the section heading and a friendly tooltip):
+
+- **Measure → Load chart (.ti2):** a strip of patches with a scan arrow —
+  "read this chart".
+- **Build Profile → Load measurement data (.ti3 / .txt):** a patch grid with
+  a checkmark — "a measured chart".
+- **Create Chart → Load profile:** two stacked pages carrying a small patch
+  grid — "reopen a project you started earlier".
+
+On the Create Chart tab the **Reveal-folder button** now sits with the other
+icon buttons at the top-right of the panel, instead of down by Generate.
+
 ## v3.13.12-beta.2
 
 The second beta of the chart-reading engine (issue #126): the same opt-in
