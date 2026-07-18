@@ -1228,6 +1228,124 @@ class PatchGridButton(QToolButton):
         p.end()
 
 
+class StackedPagesButton(QToolButton):
+    """Two stacked document pages, the front one carrying a small patch grid,
+    painted in a given accent colour — "reopen a profiling project you started
+    earlier". The front page **fully occludes** the one behind it (rendered on a
+    transparent layer with a clear-composition knockout, so there is no
+    see-through — Sebastian). Same flat 40×40 / ``#tooltip_btn`` styling as the
+    other icon-only load buttons."""
+
+    FRAC = 0.72
+    GRID_N = 2
+
+    def __init__(self, color: str, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._color = color
+        self.setObjectName("tooltip_btn")
+        self.setFixedSize(QSize(40, 40))
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._hover = False
+
+    def set_appearance(self, mode: str) -> None:
+        pass
+
+    def enterEvent(self, event) -> None:  # noqa: N802
+        self._hover = True
+        self.update()
+        super().enterEvent(event)
+
+    def leaveEvent(self, event) -> None:  # noqa: N802
+        self._hover = False
+        self.update()
+        super().leaveEvent(event)
+
+    @staticmethod
+    def _page_path(x: float, y: float, w: float, h: float, fold: float
+                   ) -> QPainterPath:
+        pp = QPainterPath()
+        pp.moveTo(x, y)
+        pp.lineTo(x + w - fold, y)
+        pp.lineTo(x + w, y + fold)
+        pp.lineTo(x + w, y + h)
+        pp.lineTo(x, y + h)
+        pp.closeSubpath()
+        return pp
+
+    def _draw_page(self, gp: QPainter, x: float, y: float, w: float, h: float,
+                   fold: float, color: QColor, sw: float, grid_n: int = 0) -> None:
+        _p = QPen(color)
+        _p.setWidthF(sw)
+        _p.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+        _p.setCapStyle(Qt.PenCapStyle.RoundCap)
+        gp.setPen(_p)
+        gp.setBrush(Qt.BrushStyle.NoBrush)
+        gp.drawPath(self._page_path(x, y, w, h, fold))
+        # Folded corner.
+        corner = QPainterPath()
+        corner.moveTo(x + w - fold, y)
+        corner.lineTo(x + w - fold, y + fold)
+        corner.lineTo(x + w, y + fold)
+        gp.drawPath(corner)
+        if grid_n:
+            gs = w * 0.22
+            gg = w * 0.13
+            gw = grid_n * gs + (grid_n - 1) * gg
+            gx = x + (w - gw) / 2
+            gy = y + h * 0.36
+            gp.setPen(Qt.PenStyle.NoPen)
+            gp.setBrush(color)
+            for r in range(grid_n):
+                for c in range(grid_n):
+                    gp.drawRoundedRect(
+                        QRectF(gx + c * (gs + gg), gy + r * (gs + gg), gs, gs),
+                        gs * 0.24, gs * 0.24)
+
+    def paintEvent(self, ev) -> None:  # noqa: N802
+        super().paintEvent(ev)  # QSS background (incl. :hover) under the glyph
+        dpr = self.devicePixelRatioF()
+        layer = QPixmap(int(self.width() * dpr), int(self.height() * dpr))
+        layer.setDevicePixelRatio(dpr)
+        layer.fill(Qt.GlobalColor.transparent)
+        gp = QPainter(layer)
+        gp.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        box = min(self.width(), self.height()) * self.FRAC
+        cx = self.width() / 2.0
+        cy = self.height() / 2.0
+        color = QColor(self._color)
+        if not self._hover:
+            color.setAlpha(230)
+        sw = 1.7
+        pw = box * 0.52
+        ph = box * 0.64
+        fold = pw * 0.26
+        dx = box * 0.11
+        dy = box * 0.10
+        # Back page (up-right).
+        self._draw_page(gp, cx - pw / 2 + dx, cy - ph / 2 - dy, pw, ph, fold,
+                        color, sw)
+        # Knock out the front-page silhouette (+ a gap ring) so the back page
+        # can't show through, then draw the front page with its grid.
+        fx = cx - pw / 2 - dx
+        fy = cy - ph / 2 + dy
+        front = self._page_path(fx, fy, pw, ph, fold)
+        gp.save()
+        gp.setCompositionMode(QPainter.CompositionMode.CompositionMode_Clear)
+        clear_pen = QPen(QColor(0, 0, 0, 255))
+        clear_pen.setWidthF(2.6)
+        gp.setPen(clear_pen)
+        gp.setBrush(QColor(0, 0, 0, 255))
+        gp.drawPath(front)
+        gp.restore()
+        self._draw_page(gp, fx, fy, pw, ph, fold, color, sw, grid_n=self.GRID_N)
+        gp.end()
+
+        p = QPainter(self)
+        p.drawPixmap(0, 0, layer)
+        p.end()
+
+
 class StripReadButton(QToolButton):
     """A single strip (column) of patches with a scan arrow above it, painted in
     a given accent colour — "read a strip". The Measure-tab sibling of

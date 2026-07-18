@@ -1233,6 +1233,16 @@ class TabChart(QWidget):
         self._builtin_preset_btn = BuiltinPresetButton(self._mode_row_widget)
         self._builtin_preset_btn.clicked.connect(self._open_builtin_preset_overlay)
         mode_row.addWidget(self._builtin_preset_btn)
+        # "Reveal folder" — sits at the very right of the icon row with the other
+        # load/preset glyphs (Sebastian). The chart's files are written deep under
+        # the working folder; put their location one click away (Knut).
+        from ui.widgets import RevealFolderButton
+        self._reveal_folder_btn = RevealFolderButton(SPEC_MAGENTA, self._mode_row_widget)
+        self._reveal_folder_btn.setToolTip(tr(
+            "Open the folder holding the generated chart's files (the TIFF "
+            "pages, .ti1/.ti2 and sidecars) in your file manager."))
+        self._reveal_folder_btn.clicked.connect(self._reveal_chart_folder)
+        mode_row.addWidget(self._reveal_folder_btn)
         left_layout.addWidget(self._mode_row_widget)
 
         # Stacked panel
@@ -1293,18 +1303,8 @@ class TabChart(QWidget):
         self._save_defaults_btn.setFixedHeight(36)
         self._save_defaults_btn.clicked.connect(self._on_save_defaults)
 
-        # "Reveal folder" — the chart's files are written deep under the
-        # working folder; put their location one click away (Knut).
-        from ui.widgets import RevealFolderButton
-        self._reveal_folder_btn = RevealFolderButton(SPEC_MAGENTA, self)
-        self._reveal_folder_btn.setToolTip(tr(
-            "Open the folder holding the generated chart's files (the TIFF "
-            "pages, .ti1/.ti2 and sidecars) in your file manager."))
-        self._reveal_folder_btn.clicked.connect(self._reveal_chart_folder)
-
         btn_row.addWidget(self._generate_btn)
         btn_row.addStretch()
-        btn_row.addWidget(self._reveal_folder_btn)
         btn_row.addWidget(self._save_defaults_btn)
         left_layout.addLayout(btn_row)
 
@@ -3342,17 +3342,14 @@ class TabChart(QWidget):
     # Load an existing printer profile to continue it later (#70, Knut)
     # ------------------------------------------------------------------
     def _make_load_profile_button(self, parent: QWidget) -> QToolButton:
-        """The magenta folder button (left of the built-in-presets star) that
-        reopens an existing profiling project, so a profile started earlier can
-        be picked up another day (#70, Knut). Styled to match the star — same
-        40×40 hit target, the ``#tooltip_btn`` hover background, and the spectrum
-        magenta — so the two read as a pair."""
-        btn = QToolButton(parent)
-        btn.setObjectName("tooltip_btn")
-        btn.setFixedSize(QSize(40, 40))
-        btn.setIcon(load_magenta_folder_icon())
-        btn.setIconSize(QSize(22, 22))
-        btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        """The magenta stacked-pages button (left of the built-in-presets star)
+        that reopens an existing profiling project, so a profile started earlier
+        can be picked up another day (#70, Knut). Two stacked pages = "a project
+        (its files) you started earlier" (Sebastian). Styled to match the star
+        and the other load glyphs — same 40×40 hit target, the ``#tooltip_btn``
+        hover background, and the spectrum magenta."""
+        from ui.widgets import StackedPagesButton
+        btn = StackedPagesButton(SPEC_MAGENTA, parent)
         btn.setToolTip(
             tr("Load profile.\n"
                "Reopen a printer profile you started earlier to carry on\n"

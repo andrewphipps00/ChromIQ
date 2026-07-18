@@ -59,6 +59,28 @@ def test_measure_load_button_is_icon_only_strip(_app):
     assert tab._load_ti1_btn.toolTip()            # but a helpful tooltip
 
 
+def test_stacked_pages_button_paints(_app):
+    from ui.widgets import StackedPagesButton
+    btn = StackedPagesButton("#e0447b")
+    assert btn.text() == ""                       # icon-only
+    assert _paints_without_error(btn)
+    btn._hover = True                              # hover branch (opaque knockout)
+    assert _paints_without_error(btn)
+
+
+def test_create_chart_load_profile_is_stacked_pages(_app):
+    from core.settings import AppSettings
+    from core.argyll_runner import ArgyllRunner
+    from core.file_manager import FileManager
+    from ui.tabs.tab_chart import TabChart
+    from ui.widgets import StackedPagesButton
+    s = AppSettings()
+    tab = TabChart(ArgyllRunner(s), FileManager(s), s)
+    assert isinstance(tab._load_profile_btn, StackedPagesButton)
+    assert tab._load_profile_btn.text() == ""     # icon-only
+    assert tab._load_profile_btn.toolTip()        # friendly tooltip
+
+
 def test_build_load_buttons_are_icon_only_measured_glyph(_app):
     from core.argyll_runner import ArgyllRunner
     from ui.tabs.tab_profile import TabProfile
