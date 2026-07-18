@@ -46,7 +46,11 @@ if(WIN32)
   # default (Jamtop USE_LIBUSB0 = true). Without it usbio.c #errors out.
   target_compile_definitions(instlib PUBLIC NT EN_LIBUSB0)
   # Force-include the UTF compat shim so usbio_w0/hidio see icmUTF16.
+  # -Wno-implicit-function-declaration: same as the mac/Linux branches —
+  # Argyll 3.5.0 SALONEINSTLIB misses a few prototypes (sa_Clamp3); upstream
+  # warns, modern clang errors. Sources stay byte-identical.
   target_compile_options(instlib PRIVATE
+    -Wno-implicit-function-declaration
     -include "${CMAKE_CURRENT_SOURCE_DIR}/chromiq_utf_compat.h")
 elseif(APPLE)
   target_compile_definitions(instlib PUBLIC UNIX)
