@@ -271,6 +271,9 @@ class TiffPreview(QWidget):
         self._hover_stripe: int = -1
         self._pan_dist: int = 0
         self._patch_overlay: dict[int, list] = {}
+        # Split-patch display: "both" (diagonal split), "expected" or
+        # "measured" (whole patch one side). Switchable any time (#126, Knut).
+        self._overlay_mode: str = "both"
         self.stripe_clicked_page = -1  # last emit bookkeeping (tests)
         self._stripe_arrow_mode: str = "base"
         self._pixmap: QPixmap | None = None
@@ -578,6 +581,25 @@ class TiffPreview(QWidget):
     def clear_patch_overlay(self) -> None:
         self._patch_overlay = {}
         self._schedule_refresh()
+
+    def set_overlay_mode(self, mode: str) -> None:
+        """How the split-patch overlay draws: "both" (expected ◤ / measured ◢
+        diagonal split), "expected" (whole patch = expected colour) or
+        "measured" (whole patch = measured colour). Applies immediately, at any
+        point during or after a measurement (#126, Knut)."""
+        if mode not in ("both", "expected", "measured"):
+            mode = "both"
+        if mode != self._overlay_mode:
+            self._overlay_mode = mode
+            # Repaint the overlay immediately (no TIFF reload) so the switch is
+            # instant — the split/expected/measured view is just a redraw.
+            if self._pixmap is not None:
+                self._repaint_label()
+            else:
+                self._schedule_refresh()
+
+    def overlay_mode(self) -> str:
+        return self._overlay_mode
 
     def has_patch_overlay(self) -> bool:
         return bool(self._patch_overlay)
@@ -1139,15 +1161,20 @@ class TiffPreview(QWidget):
             y1 = round((rect.y() + rect.height()) * s + oy)
             w = max(2, x1 - x0)
             h = max(2, y1 - y0)
-            # Expected: upper-left triangle; measured: lower-right — the
-            # i1Profiler split, corner to corner, hard edge, no gap.
-            tri = _QP()
-            tri.moveTo(x0, y0)
-            tri.lineTo(x0 + w, y0)
-            tri.lineTo(x0, y0 + h)
-            tri.closeSubpath()
-            painter.fillRect(x0, y0, w, h, c_meas)
-            painter.fillPath(tri, c_exp)
+            if self._overlay_mode == "expected":
+                painter.fillRect(x0, y0, w, h, c_exp)
+            elif self._overlay_mode == "measured":
+                painter.fillRect(x0, y0, w, h, c_meas)
+            else:
+                # Expected: upper-left triangle; measured: lower-right — the
+                # i1Profiler split, corner to corner, hard edge, no gap.
+                tri = _QP()
+                tri.moveTo(x0, y0)
+                tri.lineTo(x0 + w, y0)
+                tri.lineTo(x0, y0 + h)
+                tri.closeSubpath()
+                painter.fillRect(x0, y0, w, h, c_meas)
+                painter.fillPath(tri, c_exp)
             if warn:
                 pen = QPen(QColor("#e0564b"))
                 pen.setWidthF(max(1.5, s * 2))
@@ -1164,10 +1191,14 @@ class TiffPreview(QWidget):
                              int(r.width() * s), int(r.height() * s))
 
         if items and self._pixmap is not None:
-            # Legend chip: "expected ◤ / measured ◢" — i1Profiler leaves the
-            # halves unlabelled; we don't. Anchored BOTTOM-RIGHT of the image
-            # so it never covers the strip indicators along the top (Basti).
-            txt = tr("expected ◤ · measured ◢ (screen colours approximate)")
+            # Legend chip — reflects the current view. Anchored BOTTOM-RIGHT of
+            # the image so it never covers the strip indicators (Basti).
+            if self._overlay_mode == "expected":
+                txt = tr("showing expected colours (screen colours approximate)")
+            elif self._overlay_mode == "measured":
+                txt = tr("showing measured colours (screen colours approximate)")
+            else:
+                txt = tr("expected ◤ · measured ◢ (screen colours approximate)")
             fm = painter.fontMetrics()
             tw = fm.horizontalAdvance(txt) + 16
             th = fm.height() + 8

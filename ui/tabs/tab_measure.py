@@ -1489,6 +1489,31 @@ class TabMeasure(QWidget):
             self._m_engine_row)
         self._m_engine_hint.setWordWrap(True)
         _eng_rl.addWidget(self._m_engine_hint, stretch=1)
+        # Expected / measured / both view toggle (Knut) — switchable any time.
+        _eng_rl.addWidget(QLabel(tr("Show:"), self._m_engine_row))
+        self._m_overlay_mode = NoScrollComboBox(self._m_engine_row)
+        self._m_overlay_mode.addItem(tr("Both (split)"), "both")
+        self._m_overlay_mode.addItem(tr("Expected"), "expected")
+        self._m_overlay_mode.addItem(tr("Measured"), "measured")
+        self._m_overlay_mode.currentIndexChanged.connect(
+            lambda _i: self._preview.set_overlay_mode(
+                self._m_overlay_mode.currentData()))
+        _eng_rl.addWidget(self._m_overlay_mode)
+        _eng_rl.addWidget(TooltipButton(
+            tr("Expected / measured view"),
+            tr("Choose what the coloured patches in the preview show:\n\n"
+            "  • Both (split) — each patch is split diagonally: the colour "
+            "the chart expected in the upper-left, what the instrument "
+            "actually measured in the lower-right. Differences jump out at "
+            "the seam.\n"
+            "  • Expected — every patch shows the colour the chart was "
+            "supposed to have.\n"
+            "  • Measured — every patch shows what your instrument read.\n\n"
+            "You can switch between these at any time, during a measurement "
+            "or after it's finished — it only changes the preview, never your "
+            "readings. (Screen colours are approximate; the numbers in your "
+            "file are exact.)"),
+            self._m_engine_row))
         _eng_rl.addWidget(TooltipButton(
             tr("Jumping between strips"),
             tr("With the ChromIQ chart-reading engine on, you don't have to "
