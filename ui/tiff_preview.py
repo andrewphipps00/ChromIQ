@@ -1191,21 +1191,34 @@ class TiffPreview(QWidget):
                              int(r.width() * s), int(r.height() * s))
 
         if items and self._pixmap is not None:
-            # Legend chip — reflects the current view. Anchored BOTTOM-RIGHT of
-            # the image so it never covers the strip indicators (Basti).
+            # Legend chip — text reflects the current view (Knut). No split
+            # wording unless the split is actually shown; in Measured view the
+            # not-yet-read patches still show their expected colour, so say so.
             if self._overlay_mode == "expected":
-                txt = tr("showing expected colours (screen colours approximate)")
+                txt = tr("Showing expected colours (screen colours approximate)")
             elif self._overlay_mode == "measured":
-                txt = tr("showing measured colours (screen colours approximate)")
+                txt = tr("Showing measured colours, unread patches show expected "
+                         "colours (screen colours approximate)")
             else:
                 txt = tr("expected ◤ · measured ◢ (screen colours approximate)")
             fm = painter.fontMetrics()
             tw = fm.horizontalAdvance(txt) + 16
             th = fm.height() + 8
+            img_l = ox
             img_r = ox + self._pixmap.width() * s
             img_b = oy + self._pixmap.height() * s
-            cx = int(img_r - tw - 6)
-            cy = int(img_b - th - 6)
+            # Sit in the bottom paper margin, below the lowest patch, so it
+            # never covers patches even on charts that reach near the edge
+            # (Knut). Fall back to just above the paper edge if the margin is
+            # tight.
+            patch_bottom = oy
+            for r in self._stripe_rects:
+                patch_bottom = max(patch_bottom, oy + (r.y() + r.height()) * s)
+            cx = int((img_l + img_r) / 2 - tw / 2)
+            # Keep the whole chip within the paper width so it never clips.
+            cx = max(int(img_l), min(cx, int(img_r - tw)))
+            cy = int(min(img_b - th - 4, patch_bottom + 6))
+            cy = max(cy, int(patch_bottom + 2))
             painter.fillRect(cx, cy, tw, th, QColor(20, 20, 20, 190))
             painter.setPen(QColor("#f4f2ef"))
             painter.drawText(cx + 8, cy + th - 6, txt)

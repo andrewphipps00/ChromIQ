@@ -765,6 +765,7 @@ class TabMeasure(QWidget):
         # carries the final .ti3 in every proceed-to-build case (normal, cal/
         # guided, and both averaging exits), so one connection covers them all.
         self.measure_finished.connect(self._maybe_build_scanner_target)
+        self.measure_finished.connect(self._maybe_save_measurement_report)
         self._manager.calibration_prompt.connect(self._on_calibration_prompt)
         self._manager.calibration_done.connect(self._on_calibration_done)
         self._manager.strip_error.connect(self._on_strip_error)
@@ -1571,6 +1572,33 @@ class TabMeasure(QWidget):
         ))
         self._m_refine_row.setVisible(False)
         mcg.addWidget(self._m_refine_row)
+
+        # Measurement report (Knut) — accuracy stats + drift-over-time for the
+        # current chart. Available for any measured chart (engine or not).
+        _report_row = QHBoxLayout()
+        _report_row.setContentsMargins(0, 0, 0, 0)
+        _report_row.setSpacing(6)
+        self._m_report_btn = QPushButton(tr("Measurement report…"), left)
+        self._m_report_btn.clicked.connect(self._open_measurement_report)
+        _report_row.addWidget(self._m_report_btn)
+        _report_row.addWidget(TooltipButton(
+            tr("Measurement report"),
+            tr("Opens a report on the chart you've measured: how close each "
+            "patch came to the colour the chart was designed to have — the "
+            "average, worst and spread of the colour difference (ΔE00), the "
+            "worst-offending patches with their colours side by side, and the "
+            "paper white and darkest black.\n\n"
+            "Its real strength is comparing over time: if you turn on "
+            "“Save a measurement report after each measurement” in "
+            "Settings, ChromIQ keeps a dated report beside every chart, and "
+            "this window shows how the latest one has changed from the last — "
+            "a rising colour difference or a shifting white/black points to "
+            "ageing inks, a drifting printer, or a drifting instrument.\n\n"
+            "Measure the chart first, then open this. Screen colours are "
+            "approximate; the numbers come from your measurement file."),
+            left))
+        _report_row.addStretch(1)
+        mcg.addLayout(_report_row)
 
         m_precond_row = QHBoxLayout()
         self._m_use_precond_cb = QCheckBox(
@@ -4887,6 +4915,40 @@ class TabMeasure(QWidget):
             _pg, li, _r = self._locate_strip(s.get("strip", "A"))
             read_map[li] = self._engine_read.get(s.get("strip", ""), False)
         self._preview.set_stripe_read_map(read_map)
+
+    def _maybe_save_measurement_report(self, ti3) -> None:
+        """When the Settings option is on, build + save a dated accuracy report
+        next to the chart after a measurement, so reports accrue for
+        over-time comparison (Knut). Best-effort — never blocks or errors the
+        measurement flow."""
+        if not bool(self._settings.get("save_measurement_report", False)):
+            return
+        try:
+            from workflow.measurement_report import build_report, save_report
+            from pathlib import Path as _P
+            ti3 = _P(ti3)
+            if ti3.suffix.lower() != ".ti3" or not ti3.exists():
+                return
+            report = build_report(ti3)
+            path = save_report(report, ti3.parent)
+            self._log.appendPlainText(
+                tr("[Report] Measurement report saved: {name}").format(
+                    name=path.name))
+        except Exception as exc:  # noqa: BLE001
+            log.warning("measurement report failed: %s", exc)
+
+    def _open_measurement_report(self) -> None:
+        """Open the measurement-report viewer for the current chart's .ti3."""
+        from ui.dialogs.measurement_report_dialog import MeasurementReportDialog
+        ti3 = self._ti1_path.with_suffix(".ti3") if self._ti1_path else None
+        if ti3 is None or not ti3.exists():
+            from PyQt6.QtWidgets import QMessageBox
+            QMessageBox.information(
+                self, tr("Measurement Report"),
+                tr("Measure this chart first — the report compares your "
+                   "measurement against the chart's design colours."))
+            return
+        MeasurementReportDialog(self._settings, self, initial_ti3=ti3).exec()
 
     def _set_autosave_banner(self, saved: int | None = None) -> None:
         """Show the autosave reassurance as a preview banner (the same amber

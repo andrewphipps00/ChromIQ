@@ -158,6 +158,11 @@ DEFAULTS: dict[str, Any] = {
     # strip jumps, live patch feedback). Falls back to "argyll" when the
     # helper binary isn't present.
     "chartread_engine":          "argyll",
+    # Measurement report (#126, Knut): when True, ChromIQ builds and saves a
+    # dated accuracy report (mean/worst ΔE, worst patches, white/black) to the
+    # run's reports/ folder after every measurement, so reports of the same
+    # chart accrue and can be compared over time (ink/printer/instrument drift).
+    "save_measurement_report":   False,
     # "Read again & average" — master switch. OFF (default) restores the classic
     # behaviour: a finished full read proceeds straight to Build Profile. ON adds
     # the post-read completion dialog offering measure-again / average.

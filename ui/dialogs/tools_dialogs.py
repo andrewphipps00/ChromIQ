@@ -2093,6 +2093,9 @@ def open_tool_dialog(
     elif key == "ti3_info":
         from ui.dialogs.ti3_info_dialog import Ti3InfoDialog
         dlg = Ti3InfoDialog(runner, settings, parent)
+    elif key == "measurement_report":
+        from ui.dialogs.measurement_report_dialog import MeasurementReportDialog
+        dlg = MeasurementReportDialog(settings, parent)
     elif key == "softproof":
         from ui.dialogs.softproof_dialog import SoftproofDialog
         dlg = SoftproofDialog(runner, settings, parent)

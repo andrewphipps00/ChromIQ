@@ -688,6 +688,31 @@ class SettingsDialog(QDialog):
         _cr_row.addStretch()
         _cr_row.addWidget(chartread_engine_tip)
         _beta.addLayout(_cr_row)
+
+        # Measurement report auto-save (#126, Knut).
+        self._save_report_check = QCheckBox(
+            tr("Save a measurement report after each measurement"), self)
+        _rep_row = QHBoxLayout()
+        _rep_row.addWidget(self._save_report_check)
+        _rep_row.addStretch()
+        _rep_row.addWidget(TooltipButton(
+            tr("Save a measurement report after each measurement"),
+            tr("When this is on, ChromIQ automatically writes a small dated "
+            "report next to each chart every time you finish measuring it "
+            "(in a “reports” folder beside the chart). Each report records how "
+            "close the measurement came to the chart's design colours — the "
+            "average, worst and spread of the colour difference, the worst "
+            "patches, and the paper white and black.\n\n"
+            "Why turn it on? Because the reports then build up over time, and "
+            "the Measurement report window (in the Measure tab) can show you "
+            "how a chart's measurement has changed since last time — a "
+            "gradual rise, or a shift in white or black, is a sign of ageing "
+            "inks, a drifting printer, or a drifting instrument.\n\n"
+            "It costs nothing noticeable and never changes your measurement "
+            "files. Leave it off if you don't need this history.\n\n"
+            "Default: off"),
+            self))
+        _beta.addLayout(_rep_row)
         _beta.addStretch()
 
         self._native_print_check = QCheckBox(tr("Use default macOS printer dialog"), self)
@@ -1739,6 +1764,8 @@ class SettingsDialog(QDialog):
             self._profile_engine_check.isChecked())
         self._chartread_engine_check.setChecked(
             str(s.get("chartread_engine", "argyll")) == "chromiq")
+        self._save_report_check.setChecked(
+            bool(s.get("save_measurement_report", False)))
         self._native_print_check.setChecked(bool(s.get("use_native_print_dialog", False)))
         self._pdf_fallback_check.setChecked(bool(s.get("pdf_print_fallback", False)))
         self._confirm_print_check.setChecked(bool(s.get("confirm_before_printing", True)))
@@ -2374,6 +2401,7 @@ class SettingsDialog(QDialog):
         s.set("gammap_mode",               self._gammap_mode_combo.currentData())
         s.set("chartread_engine",
               "chromiq" if self._chartread_engine_check.isChecked() else "argyll")
+        s.set("save_measurement_report", self._save_report_check.isChecked())
         s.set("use_native_print_dialog",   self._native_print_check.isChecked())
         s.set("pdf_print_fallback",        self._pdf_fallback_check.isChecked())
         s.set("confirm_before_printing",   self._confirm_print_check.isChecked())
