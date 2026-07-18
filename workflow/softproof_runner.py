@@ -93,21 +93,20 @@ def _decode_lab_tiff(path: Path) -> np.ndarray:
 # --- Source-space + image preparation ---------------------------------------
 
 def argyll_ref_dir(settings) -> Path | None:
-    """The Argyll ``ref`` directory (sibling of the configured ``bin``).
+    """The Argyll ``ref`` directory for the configured ``bin`` dir.
 
-    Tries both the literal ``bin`` path and its real location after resolving
-    symlinks — a Homebrew install points ``bin`` at ``/opt/homebrew/bin`` (a
-    symlink farm with no ``ref`` beside it), while the real ``ref`` lives next
-    to the actual binaries in the Cellar.
+    A Homebrew install points ``bin`` at ``/opt/homebrew/bin`` — a symlink
+    farm with no ``ref`` beside it, while the real ``ref`` lives next to the
+    actual binaries in the Cellar. :func:`core.argyll_detect.resolve_ref_dir`
+    follows the per-binary symlinks to find it (Knut). Note ``.resolve()`` on
+    the ``bin`` *directory* itself does NOT help — only the binaries inside
+    are symlinks.
     """
+    from core.argyll_detect import resolve_ref_dir
     bin_path = settings.get("argyll_bin_path", "/Applications/Argyll/bin")
     if not bin_path:
         return None
-    for base in (Path(bin_path), Path(bin_path).resolve()):
-        cand = base.parent / "ref"
-        if cand.exists():
-            return cand
-    return None
+    return resolve_ref_dir(bin_path)
 
 
 def _bundled_profiles_dir() -> Path | None:

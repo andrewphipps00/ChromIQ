@@ -18,24 +18,59 @@ def all_tools_present(bin_dir: Path) -> bool:
     return all((bin_dir / argyll_binary(t)).exists() for t in _REQUIRED)
 
 
+def resolve_ref_dir(bin_dir: Path | str) -> Path | None:
+    """Locate ArgyllCMS's ``ref/`` folder (ClayRGB1998.icm, standard target
+    ``.cht`` files, …) for a given ``bin`` directory.
+
+    ``ref/`` sits beside ``bin`` in a real Argyll install. Homebrew, though,
+    exposes only symlinks in ``/opt/homebrew/bin`` that point into the Cellar
+    (``…/argyll-cms/<ver>/bin``), where the real ``ref/`` lives — so a plain
+    ``bin/../ref`` misses it (Knut). We therefore try, in order: ``bin/../ref``
+    directly, then the ``../ref`` of the *resolved* location of each Argyll
+    binary in ``bin`` (following the Homebrew symlinks). Returns the first
+    existing ``ref/``, or None.
+    """
+    bin_dir = Path(bin_dir)
+    if not str(bin_dir):
+        return None
+    direct = bin_dir.parent / "ref"
+    if direct.is_dir():
+        return direct
+    for tool in _REQUIRED:
+        exe = bin_dir / argyll_binary(tool)
+        if exe.exists():
+            real_ref = exe.resolve().parent.parent / "ref"
+            if real_ref.is_dir():
+                return real_ref
+    return None
+
+
 def find_argyll_bin_path() -> Path | None:
     """Return the first directory that contains all required ArgyllCMS tools, or None."""
 
     # 1. Check the system PATH first. Resolve symlinks: Homebrew's
     # /opt/homebrew/bin holds only links into the Cellar — the REAL install
-    # dir is what ChromIQ needs, so ../ref (colour-space profiles, target
-    # references) is found next to the binaries (Knut, #108).
+    # dir (…/argyll-cms/<ver>/bin) is what ChromIQ needs, because ``ref/``
+    # (ClayRGB1998.icm, standard target .cht files) is a sibling of THAT bin,
+    # not of /opt/homebrew/bin (Knut, #108). Prefer whichever candidate dir
+    # actually has a resolvable ref/; only fall back to a ref-less dir if none
+    # does.
+    fallback: Path | None = None
     for tool in _REQUIRED:
         found = which(argyll_binary(tool))
-        if found:
-            real = Path(found).resolve()
-            for candidate in (real.parent, Path(found).parent):
-                if all_tools_present(candidate):
-                    if (candidate.parent / "ref").is_dir() or candidate == real.parent:
-                        log.info("ArgyllCMS found in PATH at %s", candidate)
-                        return candidate
-            if all_tools_present(Path(found).parent):
-                return Path(found).parent
+        if not found:
+            continue
+        real = Path(found).resolve()
+        for candidate in (real.parent, Path(found).parent):
+            if all_tools_present(candidate):
+                if resolve_ref_dir(candidate) is not None:
+                    log.info("ArgyllCMS found in PATH at %s (ref/ resolved)", candidate)
+                    return candidate
+                if fallback is None:
+                    fallback = candidate
+    if fallback is not None:
+        log.info("ArgyllCMS found in PATH at %s (no ref/ nearby)", fallback)
+        return fallback
 
     # 2. Fall back to platform-specific well-known locations
     for candidate in argyll_candidate_dirs():

@@ -140,13 +140,16 @@ def grouped_standard_targets(settings) -> list[StandardTarget]:
 
 
 def argyll_ref_dir(settings) -> Path | None:
-    """The ``ref/`` folder beside the configured Argyll ``bin`` dir, or None if
-    it doesn't exist."""
+    """The ArgyllCMS ``ref/`` folder for the configured ``bin`` dir, or None.
+
+    Uses :func:`core.argyll_detect.resolve_ref_dir`, which follows Homebrew's
+    symlinks so ``ref/`` is found even when ``bin`` is ``/opt/homebrew/bin``
+    (its links point into the Cellar, where ``ref/`` really lives — Knut)."""
+    from core.argyll_detect import resolve_ref_dir
     bin_path = settings.get("argyll_bin_path", "")
     if not bin_path:
         return None
-    ref = Path(bin_path).parent / "ref"
-    return ref if ref.is_dir() else None
+    return resolve_ref_dir(bin_path)
 
 
 def bundled_targets_dir() -> Path | None:
