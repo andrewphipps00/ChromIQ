@@ -88,6 +88,39 @@ def test_patch_overlay_accumulates_and_clears():
     pv._repaint_label()
 
 
+def test_hover_bounds_hug_patches_and_include_offset_overhang():
+    """The click-to-jump hover outline must wrap only a strip's patches — not
+    the label band above them, not the white paper beside them — and on a
+    ColorMunki 'offset every second strip' chart it must still include the
+    odd strip's last patch, which hangs below the strip rectangle (Basti)."""
+    pv = _make_preview()
+    # Two columns of 3 patches each (10 px wide, 10 px tall, gap 10).
+    # Column X=10: rows at y=100,110,120. Column X=40 is offset DOWN by 50 px:
+    # rows at y=150,160,170 — its last patch bottom (180) hangs below column 0.
+    boxes = [QRect(10, 100, 10, 10), QRect(10, 110, 10, 10), QRect(10, 120, 10, 10),
+             QRect(40, 150, 10, 10), QRect(40, 160, 10, 10), QRect(40, 170, 10, 10)]
+    pv.set_page_patch_boxes({0: boxes})
+    pv._current = 0
+
+    # Strip rects mimic the production 'grown' rect: top pulled UP to the label
+    # band (y=0), and — crucially — the OFFSET column's rect is too SHORT to
+    # cover its hanging last patch (bottom 175 < patch bottom 180).
+    normal = QRect(10, 0, 10, 130)          # covers column 0 fully
+    offset = QRect(40, 0, 10, 175)          # under-covers column 1's overhang
+
+    b0 = pv._hover_patch_bounds(normal)
+    assert b0 == QRect(10, 100, 10, 30)     # exactly the 3 patches, no label band
+    assert b0.top() == 100 and b0.top() > 0
+
+    b1 = pv._hover_patch_bounds(offset)
+    assert b1 == QRect(40, 150, 10, 30)     # includes the hanging last patch (→180)
+    assert b1.bottom() >= 179               # would be 174 if the overhang were clipped
+
+    # No geometry known ⇒ None ⇒ caller falls back to the full strip rect.
+    pv.set_page_patch_boxes({})
+    assert pv._hover_patch_bounds(normal) is None
+
+
 # ---------------------------------------------------------------------------
 # TabMeasure: engine handlers drive combo, read-map and overlay
 # ---------------------------------------------------------------------------

@@ -271,6 +271,12 @@ class TiffPreview(QWidget):
         self._hover_stripe: int = -1
         self._pan_dist: int = 0
         self._patch_overlay: dict[int, list] = {}
+        # Exact per-patch pixel boxes per page (#126, Basti): lets the hover
+        # outline hug only the patches of a strip — never the label band or the
+        # white paper around them — for every layout, including ColorMunki
+        # charts whose every-second strip is offset. Empty ⇒ hover falls back to
+        # the full strip rect.
+        self._page_patch_boxes: dict[int, list[QRect]] = {}
         # Split-patch display: "both" (diagonal split), "expected" or
         # "measured" (whole patch one side). Switchable any time (#126, Knut).
         self._overlay_mode: str = "both"
@@ -582,6 +588,39 @@ class TiffPreview(QWidget):
         self._patch_overlay = {}
         self._schedule_refresh()
 
+    def set_page_patch_boxes(self, mapping: "dict[int, list[QRect]]") -> None:
+        """Exact per-patch pixel boxes per page (#126, Basti).
+
+        Used to draw the click-to-jump hover outline tightly around a strip's
+        patches only — not the label band above them, not the white paper to
+        either side. Taken straight from the chart geometry (``strips.json`` /
+        ``channels.json``), so it's pixel-exact for every layout, including
+        ColorMunki charts whose every-second strip is offset. Pass ``{}`` to
+        clear (the hover then falls back to the full strip rectangle)."""
+        self._page_patch_boxes = dict(mapping or {})
+        self._schedule_refresh()
+
+    def _hover_patch_bounds(self, strip_rect: QRect) -> "QRect | None":
+        """Bounding box of just the patches of the strip at *strip_rect* on the
+        current page, or None when no per-patch geometry is known.
+
+        A strip is one vertical column of patches, so a patch belongs to it when
+        its centre-x falls in the strip's x-span. We deliberately do NOT bound by
+        y: on ColorMunki "offset every second strip" charts the odd strips are
+        shifted down, so their last patch hangs below the strip rect's bottom —
+        a y-test would clip it off (Basti). The resulting box therefore always
+        spans exactly the strip's patches, top patch to bottom patch, and never
+        the label band above or the white paper to either side."""
+        boxes = self._page_patch_boxes.get(self._current)
+        if not boxes:
+            return None
+        union: "QRect | None" = None
+        for b in boxes:
+            cx = b.x() + b.width() / 2
+            if strip_rect.left() <= cx <= strip_rect.right():
+                union = b if union is None else union.united(b)
+        return union
+
     def set_overlay_mode(self, mode: str) -> None:
         """How the split-patch overlay draws: "both" (expected ◤ / measured ◢
         diagonal split), "expected" (whole patch = expected colour) or
@@ -658,6 +697,7 @@ class TiffPreview(QWidget):
         self._bidirectional = False
         self._stripe_rects = []
         self._stripe_arrow_mode = "base"
+        self._page_patch_boxes = {}
         self._pixmap = None
         self._ink_channels = None
         self._img_label.setText(tr("No preview"))
@@ -1183,12 +1223,19 @@ class TiffPreview(QWidget):
 
         if self._stripe_click_enabled and self._hover_stripe >= 0 \
                 and self._hover_stripe < len(self._stripe_rects):
-            r = self._stripe_rects[self._hover_stripe]
+            # Hug only the patches of the hovered strip (never the label band or
+            # the white paper around them). Fall back to the full strip rect
+            # when the chart exposes no per-patch geometry (Basti, #126).
+            r = self._hover_patch_bounds(self._stripe_rects[self._hover_stripe]) \
+                or self._stripe_rects[self._hover_stripe]
             pen = QPen(QColor("#56d6a5"))
             pen.setWidthF(2.5)
             painter.setPen(pen)
-            painter.drawRect(int(r.x() * s + ox), int(r.y() * s + oy),
-                             int(r.width() * s), int(r.height() * s))
+            x0 = round(r.x() * s + ox)
+            y0 = round(r.y() * s + oy)
+            x1 = round((r.x() + r.width()) * s + ox)
+            y1 = round((r.y() + r.height()) * s + oy)
+            painter.drawRect(x0, y0, x1 - x0, y1 - y0)
 
         if items and self._pixmap is not None:
             # Legend chip — text reflects the current view (Knut). No split

@@ -2656,6 +2656,10 @@ class TabMeasure(QWidget):
         # how strip rects are found below.
         self._patch_boxes = patch_boxes_from_sidecar(
             self._ti1_path, len(self._tiff_pages))
+        # Hand the preview the exact per-patch boxes so the click-to-jump hover
+        # outline can hug just a strip's patches, on every page (Basti, #126).
+        self._preview.set_page_patch_boxes({
+            pg: list(d.values()) for pg, d in enumerate(self._patch_boxes)})
 
         engine = self._engine_stripe_rects()
         if engine is not None:

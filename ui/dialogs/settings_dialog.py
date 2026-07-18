@@ -2079,7 +2079,29 @@ class SettingsDialog(QDialog):
             "— including charts loaded from a saved preset."), self)
         intro.setWordWrap(True)
         intro.setStyleSheet("color: #909090; font-size: 11px;")
-        g.addWidget(intro, 0, 0, 1, 4)
+        g.addWidget(intro, 0, 0, 1, 3)
+        g.addWidget(TooltipButton(
+            tr("Strip indicator style"),
+            tr("These settings control the little letters printed above each "
+            "strip of patches (A, B, C…) so you always know which strip you're "
+            "measuring. They apply to every new chart, including charts loaded "
+            "from a saved preset.\n\n"
+            "  • Font & Size — the typeface and its size in points (12 pt is "
+            "about the size of body text; “auto” lets ChromIQ pick a size that "
+            "fits). Bold / Italic switch off automatically for fonts that don't "
+            "offer them.\n"
+            "  • Rotation — turn the label (0°, 90°, 180°, 270°); useful when a "
+            "strip is very narrow.\n"
+            "  • Alignment — left, centred or right over its strip.\n"
+            "  • Label offset — nudge the label up or down (mm) relative to its "
+            "strip.\n"
+            "  • Underline — draws a line under each label, so misreads are "
+            "easier to spot; the coloured options tint it, and Line thickness / "
+            "Line distance set how thick it is and how far below the text it "
+            "sits.\n\n"
+            "Changing these here updates all future charts; charts you've "
+            "already generated keep the style they were made with."),
+            self), 0, 3, Qt.AlignmentFlag.AlignRight)
 
         # Font + size + bold/italic.
         g.addWidget(QLabel(tr("Font:"), self), 1, 0)
@@ -2095,66 +2117,75 @@ class SettingsDialog(QDialog):
         self._isty_size.setSingleStep(1)
         self._isty_size.setSuffix(" pt")
         self._isty_size.setSpecialValueText(tr("auto"))
-        _size_wrap = QWidget(self)
-        _size_row = QHBoxLayout(_size_wrap)
-        _size_row.setContentsMargins(0, 0, 0, 0)
-        _size_row.setSpacing(6)
-        _size_row.addWidget(QLabel(tr("Size:"), self))
-        _size_row.addWidget(self._isty_size)
-        g.addWidget(_size_wrap, 1, 2)
-        sty_row = QHBoxLayout()
+        # Clean 4-column grid (label | control | label | control) with both
+        # control columns the same width, filling the frame (Knut). Every
+        # control expands so the boxes line up in two even columns.
+        g.addWidget(QLabel(tr("Size:"), self), 1, 2, Qt.AlignmentFlag.AlignRight)
+        g.addWidget(self._isty_size, 1, 3)
+
+        # Bold / Italic on their own row so they don't unbalance the columns.
         self._isty_bold = QCheckBox(tr("Bold"), self)
         self._isty_italic = QCheckBox(tr("Italic"), self)
+        sty_row = QHBoxLayout()
+        sty_row.setContentsMargins(0, 0, 0, 0)
         sty_row.addWidget(self._isty_bold)
         sty_row.addWidget(self._isty_italic)
         sty_row.addStretch()
         _styw = QWidget(self)
         _styw.setLayout(sty_row)
-        g.addWidget(_styw, 1, 3)
+        g.addWidget(QLabel(tr("Style:"), self), 2, 0, Qt.AlignmentFlag.AlignRight)
+        g.addWidget(_styw, 2, 1, 1, 3)
 
         # Rotation + alignment.
-        g.addWidget(QLabel(tr("Rotation:"), self), 2, 0)
+        g.addWidget(QLabel(tr("Rotation:"), self), 3, 0, Qt.AlignmentFlag.AlignRight)
         self._isty_rotation = NoScrollComboBox(self)
         for _deg in (0, 90, 180, 270):
             self._isty_rotation.addItem(f"{_deg}°", _deg)
-        g.addWidget(self._isty_rotation, 2, 1)
-        g.addWidget(QLabel(tr("Alignment:"), self), 2, 2)
+        g.addWidget(self._isty_rotation, 3, 1)
+        g.addWidget(QLabel(tr("Alignment:"), self), 3, 2, Qt.AlignmentFlag.AlignRight)
         self._isty_align = NoScrollComboBox(self)
         for _k, _lbl in (("left", tr("Left")), ("center", tr("Centered")),
                          ("right", tr("Right"))):
             self._isty_align.addItem(_lbl, _k)
-        g.addWidget(self._isty_align, 2, 3)
+        g.addWidget(self._isty_align, 3, 3)
 
         # Label offset.
-        g.addWidget(QLabel(tr("Label offset:"), self), 3, 0)
+        g.addWidget(QLabel(tr("Label offset:"), self), 4, 0, Qt.AlignmentFlag.AlignRight)
         self._isty_offset = NoScrollDoubleSpinBox(self)
         self._isty_offset.setRange(-50.0, 50.0)
         self._isty_offset.setDecimals(1)
         self._isty_offset.setSingleStep(0.5)
         self._isty_offset.setSuffix(" mm")
-        g.addWidget(self._isty_offset, 3, 1)
+        g.addWidget(self._isty_offset, 4, 1)
 
         # Underline mode + thickness + distance.
-        g.addWidget(QLabel(tr("Underline:"), self), 4, 0)
+        g.addWidget(QLabel(tr("Underline:"), self), 5, 0, Qt.AlignmentFlag.AlignRight)
         self._isty_underline = NoScrollComboBox(self)
         for _k, _lbl in self._UNDERLINE_MODES:
             self._isty_underline.addItem(tr(_lbl), _k)
-        g.addWidget(self._isty_underline, 4, 1)
-        g.addWidget(QLabel(tr("Line thickness:"), self), 4, 2)
+        g.addWidget(self._isty_underline, 5, 1)
+        g.addWidget(QLabel(tr("Line thickness:"), self), 5, 2, Qt.AlignmentFlag.AlignRight)
         self._isty_ul_thick = NoScrollDoubleSpinBox(self)
         self._isty_ul_thick.setRange(0.1, 5.0)
         self._isty_ul_thick.setDecimals(1)
         self._isty_ul_thick.setSingleStep(0.1)
         self._isty_ul_thick.setSuffix(" mm")
-        g.addWidget(self._isty_ul_thick, 4, 3)
-        g.addWidget(QLabel(tr("Line distance:"), self), 5, 2)
+        g.addWidget(self._isty_ul_thick, 5, 3)
+        g.addWidget(QLabel(tr("Line distance:"), self), 6, 2, Qt.AlignmentFlag.AlignRight)
         self._isty_ul_gap = NoScrollDoubleSpinBox(self)
         self._isty_ul_gap.setRange(0.0, 20.0)
         self._isty_ul_gap.setDecimals(1)
         self._isty_ul_gap.setSingleStep(0.5)
         self._isty_ul_gap.setSuffix(" mm")
-        g.addWidget(self._isty_ul_gap, 5, 3)
+        g.addWidget(self._isty_ul_gap, 6, 3)
+        # Both control columns equal width, filling the frame (Knut).
         g.setColumnStretch(1, 1)
+        g.setColumnStretch(3, 1)
+        for _w in (self._isty_font, self._isty_size, self._isty_rotation,
+                   self._isty_align, self._isty_offset, self._isty_underline,
+                   self._isty_ul_thick, self._isty_ul_gap):
+            _w.setSizePolicy(QSizePolicy.Policy.Expanding,
+                             _w.sizePolicy().verticalPolicy())
 
         # ---- load current values ----
         _fi = self._isty_font.findData(s.get("strip_indicator_font"))
