@@ -1,5 +1,76 @@
 # Changelog
 
+## v3.13.10
+
+The second feedback round on the multi-ink tools (issue #125), plus a wish
+list from the same tester: one crash fixed, two smaller bugs his logs
+exposed, a rework of how the clip border and the page margins interact,
+and a new folder guide. Nothing changes for charts you have already made.
+
+### Fixed: "y1 must be greater than or equal to y0" when applying a patch set
+
+On dense charts, at certain combinations of patch size, scale and
+resolution, rounding a patch position to whole pixels could produce a
+rectangle whose bottom edge landed one pixel above its top edge — and the
+whole page build aborted with this error. It was rare and looked random;
+retrying usually worked. The renderer now simply skips such zero-area
+rectangles (they cover no pixels, so nothing is lost) — the same guard the
+ink-separated TIFF output always had.
+
+Two more bugs surfaced by the same report's log files:
+
+- Charts whose ink set contains a **White ink** (or light yellow /
+  light-and-medium ink families) crashed the i1Profiler export with
+  `KeyError: 'W'`. All ink families are covered now.
+- After applying a multi-ink chart from the patch-set editor, the preview
+  showed a floating "Approximate colours" badge **on top of the Next
+  button**. The applied chart's sidecar now carries its ink list, so the
+  preview shows the proper per-ink inspector row instead — and if the
+  badge ever floats again, it anchors to the top of the preview, away
+  from the buttons.
+
+### The clip border and the margins — untangled
+
+Until now, raising "Clip border width" silently copied the value into the
+Left margin box — confusing, and wrong when the clip sits on the right.
+The two fields are now independent: on the clip's side of the page, the
+**larger** of the two (margin or clip-border width) is what gets reserved,
+and the field being overruled shows a **red outline** with a tooltip
+explaining which value wins and why. Turn the clip border off and both
+margins behave normally again. The help texts for Margins, Clip border
+width and Side each explain the interplay. (The printed geometry is
+unchanged — the layout engine always reserved the larger value
+internally; only the confusing display is gone.)
+
+### More from the wish list
+
+- **Clip-border text size** — the Clip-border content frame's Font row
+  gained a Size box (mm; "auto" fits the text to the strip as before).
+  Handy when the automatic text is larger than you want on a narrow
+  strip. Saved in presets and chart recipes. Sheet text already had the
+  same control (under its Font row, inside Expert Options).
+- **i1Pro margins for A4/Letter Landscape** — the Instrument Margins tab
+  now ships jig margins for i1Pro and i1Pro 3+ on A4 and Letter in
+  landscape too (the jig reads those sheets sideways just fine), same
+  values as portrait. If you customised those combos yourself, your
+  values are kept.
+- **Strip / patch pattern help** — both fields' help now shows four valid
+  example patterns each and explains, honestly, how a pattern is
+  interpreted (letters when it contains "A-Z", plain numbers otherwise)
+  and how the two combine into a location like A12.
+- **"Where are my files?"** — Tools → Help now opens a folder guide
+  listing every file a ChromIQ project can contain: which feature creates
+  it, when, and what it's for — ending with what's safe to tidy up. The
+  "Where are my files.txt" dropped into each project folder was updated
+  to match.
+- The chart-layout information panel now shows how many of a chart's
+  patches are paper-white **strip fill-up** ("… of those, fill-up"), and
+  the engine's build log spells the same thing out — so a chart growing
+  from, say, 896 designed patches to 910 printed is explained where the
+  numbers appear, not just in the release notes.
+
+Everything is translated in all 13 languages, as usual.
+
 ## v3.13.9
 
 A quick patch release for the first round of user feedback on the
