@@ -1644,11 +1644,14 @@ class WelcomeDialog(QDialog):
                 self._steps_layout.addWidget(self._make_glossary_row(
                     term, definition))
         elif wf.get("kind") in ("files", "richtext"):
-            # One flowing, word-wrapped text page — the body keeps its own
-            # section structure (blank lines + bullets). Used by the folder
-            # guide (#125) and the CMYK+N card (#126).
-            text = file_guide_body() if wf.get("kind") == "files" else wf["body"]
-            body = QLabel(text, self._steps_host)
+            # The folder guide (#125/#126) renders as an HTML table (Knut);
+            # the CMYK+N card is a flowing text page.
+            if wf.get("kind") == "files":
+                from ui.file_guide import file_guide_html
+                body = QLabel(file_guide_html(), self._steps_host)
+                body.setTextFormat(Qt.TextFormat.RichText)
+            else:
+                body = QLabel(wf["body"], self._steps_host)
             bf = QFont()
             bf.setPixelSize(13)
             body.setFont(bf)
