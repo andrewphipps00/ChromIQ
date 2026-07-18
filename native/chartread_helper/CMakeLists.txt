@@ -31,13 +31,20 @@ foreach(u ${INSTLIB_UNITS})
   list(APPEND INSTLIB_SOURCES "${INSTLIB}/${u}.c")
 endforeach()
 
-add_library(instlib STATIC ${INSTLIB_SOURCES})
-target_include_directories(instlib PUBLIC ${INSTLIB})
+# The non-macOS USB/HID backends need icmUTF16 / icmUTF16toUTF8 from Argyll's
+# icc library (macOS's IOKit backend doesn't). We supply them ourselves rather
+# than vendor 4600 lines of icc_util.c — see chromiq_utf_compat.[ch].
+add_library(instlib STATIC ${INSTLIB_SOURCES}
+  ${CMAKE_CURRENT_SOURCE_DIR}/chromiq_utf_compat.c)
+target_include_directories(instlib PUBLIC ${INSTLIB} ${CMAKE_CURRENT_SOURCE_DIR})
 # Makefile.SA CCDEFINES, verbatim.
 target_compile_definitions(instlib PUBLIC
   SALONEINSTLIB ALLINSTS ENABLE_SERIAL ENABLE_FAST_SERIAL ENABLE_USB)
 if(WIN32)
   target_compile_definitions(instlib PUBLIC NT)
+  # Force-include the UTF compat shim so usbio_w0/dk/hidio see icmUTF16.
+  target_compile_options(instlib PRIVATE
+    -include "${CMAKE_CURRENT_SOURCE_DIR}/chromiq_utf_compat.h")
 elseif(APPLE)
   target_compile_definitions(instlib PUBLIC UNIX)
   # -Wno-implicit-function-declaration: Argyll 3.5.0's SALONEINSTLIB mode
@@ -47,8 +54,10 @@ elseif(APPLE)
     -Wno-implicit-function-declaration)
 else()
   target_compile_definitions(instlib PUBLIC UNIX)
+  # Linux uses usbio_lx.c — same icmUTF16 need as Windows.
   target_compile_options(instlib PRIVATE -Wno-sign-compare
-    -Wno-implicit-function-declaration)
+    -Wno-implicit-function-declaration
+    -include "${CMAKE_CURRENT_SOURCE_DIR}/chromiq_utf_compat.h")
 endif()
 
 add_executable(chromiq-chartread
