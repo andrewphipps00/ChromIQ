@@ -1158,7 +1158,9 @@ def load_reveal_folder_icon(color: str, size: int = 22) -> QIcon:
 
 def set_reveal_folder_icon(btn: QPushButton, color: str) -> None:
     """Stamp the reveal-folder glyph (tab accent) and tag for theme refresh."""
+    from PyQt6.QtCore import QSize
     btn.setIcon(load_reveal_folder_icon(color))
+    btn.setIconSize(QSize(20, 20))
     btn.setProperty("themed_reveal_icon", color)
 
 

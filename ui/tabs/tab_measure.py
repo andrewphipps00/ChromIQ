@@ -964,7 +964,9 @@ class TabMeasure(QWidget):
         self._ti1_lbl.setStyleSheet("color: #909090; font-size: 11px;")
         file_row.addWidget(self._load_ti1_btn)
         file_row.addWidget(self._ti1_lbl, stretch=1)
-        self._reveal_btn = QPushButton(tr("Reveal folder"), file_outer)
+        self._reveal_btn = QPushButton(file_outer)   # icon-only (Sebastian)
+        self._reveal_btn.setObjectName("icon_btn")
+        self._reveal_btn.setFixedSize(36, 36)
         from ui.widgets import set_reveal_folder_icon
         set_reveal_folder_icon(self._reveal_btn, _TAB_COLOR)
         self._reveal_btn.setToolTip(tr(

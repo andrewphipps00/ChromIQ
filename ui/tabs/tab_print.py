@@ -280,7 +280,9 @@ class TabPrint(QWidget):
         _tl.setSpacing(6)
         _tl.addWidget(self._load_image_btn)
         _tl.addWidget(self._load_btn)
-        self._reveal_btn = QPushButton(tr("Reveal folder"), _trailing)
+        self._reveal_btn = QPushButton(_trailing)   # icon-only (Sebastian)
+        self._reveal_btn.setObjectName("icon_btn")
+        self._reveal_btn.setFixedSize(36, 36)
         from ui.widgets import set_reveal_folder_icon
         set_reveal_folder_icon(self._reveal_btn, SPEC_AMBER)
         self._reveal_btn.setToolTip(tr(

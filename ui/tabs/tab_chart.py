@@ -1295,9 +1295,9 @@ class TabChart(QWidget):
 
         # "Reveal folder" — the chart's files are written deep under the
         # working folder; put their location one click away (Knut).
-        self._reveal_folder_btn = QPushButton(tr("Reveal folder"), self)
-        self._reveal_folder_btn.setFixedHeight(36)
-        from ui.styles import SPEC_MAGENTA
+        self._reveal_folder_btn = QPushButton(self)   # icon-only (Sebastian)
+        self._reveal_folder_btn.setObjectName("icon_btn")
+        self._reveal_folder_btn.setFixedSize(36, 36)
         from ui.widgets import set_reveal_folder_icon
         set_reveal_folder_icon(self._reveal_folder_btn, SPEC_MAGENTA)
         self._reveal_folder_btn.setToolTip(tr(
