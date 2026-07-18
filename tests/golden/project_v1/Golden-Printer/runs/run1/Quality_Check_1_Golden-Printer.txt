@@ -1,0 +1,7 @@
+Assessment: good
+
+────────────────────────────────────────────────────────────
+
+Full profcheck output:
+
+profcheck raw log 1

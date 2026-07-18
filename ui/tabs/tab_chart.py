@@ -7622,14 +7622,19 @@ class TabChart(QWidget):
             # self-describing. Read straight from the just-written .ti2 so it's
             # correct for every creation path (normal / prebuilt / from-.ti1).
             self._stamp_chart_meta(ti2)
-            # Always leave the hand-off sidecars in the run folder — the colour
+            # Always leave the hand-off sidecars with the chart — the colour
             # list and the i1Profiler pair — so every generated chart is
             # self-contained for users who profile elsewhere, not only the i1iSis
-            # flow (Knut). The .cht comes from the build itself (engine emit_cht /
-            # printtarg). Best-effort; the colour list skips CMYK charts.
+            # flow (Knut). They go into the exports/ sub-folder (#127); works
+            # for run folders and cal/ alike since the folder is derived from
+            # wherever the chart was generated. The .cht comes from the build
+            # itself (engine emit_cht / printtarg). Best-effort; the colour
+            # list skips CMYK charts.
             try:
+                from core.file_manager import exports_subdir
                 from workflow.chart_exports import write_sidecars
-                extras = write_sidecars(ti2.with_suffix(".ti1"), ti2.parent, stem)
+                extras = write_sidecars(ti2.with_suffix(".ti1"),
+                                        exports_subdir(ti2.parent), stem)
                 for e in extras:
                     self._log.appendPlainText(f"wrote {e.name}")
             except Exception:  # noqa: BLE001 — never block on the sidecars

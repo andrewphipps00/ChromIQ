@@ -1,5 +1,55 @@
 # Changelog
 
+## v3.13.12-beta.4
+
+Tidier project folders (#127). A run folder used to collect up to 30+ files
+side by side; now everything you print, install or keep stays right at the
+top, and the paperwork lives in three self-explaining folders. **Your
+existing projects are tidied automatically the first time you open them** —
+nothing is deleted or renamed, your own files are never touched, and your
+measurements and profiles stay exactly where they were.
+
+### Cleaner run folders
+
+- New sub-folders in every run, with a fixed meaning:
+  - **reports/** — things ChromIQ tells you: quality-check reports, the
+    re-measure list, and the dated measurement reports (which already lived
+    here).
+  - **exports/** — files made for other programs: the i1Profiler patch set
+    and the plain colour list. Same name and meaning as the project-level
+    `exports/` folder (Knut's naming).
+  - **cache/** — temporary working files from the tools (scanner recognition
+    copies, diagnostic images). Always safe to delete; ChromIQ can recreate
+    everything in it (Knut's idea).
+- The calibration chart's hand-off files get the same treatment in
+  `cal/exports/`.
+- The chart pages, your measurement (`.ti3`) and your profile (`.icc`) stay
+  at the top of the run folder, exactly where they were — the measuring and
+  profile-building tools require it, and they're the files you actually want.
+
+### Automatic tidy-up of existing projects
+
+- Opening a project made by an older ChromIQ reorganises it in place: only
+  files ChromIQ itself wrote are moved (by exact name pattern), nothing is
+  overwritten, and an interrupted tidy-up simply finishes on the next open.
+- A project last used by a **newer** ChromIQ opens with a friendly "please
+  update" note instead of half-working.
+
+### The folder guide learned the new layout
+
+- The "Where are my files?" card (and the `Where are my files.txt` in every
+  project) is rebuilt folder-first: the three files that matter on top, then
+  what each folder means in one sentence, then every file in detail. The
+  text file is refreshed automatically when a project is tidied.
+- The guide now also covers the profile-verification files
+  (`.x3d.html` + `x3dom.*`), which were missing before.
+
+### Fixed
+
+- Renaming a project now also renames a calibration chart's export files
+  (`…-cal-colours.txt`, `…-cal-i1profiler.*`) — they silently kept the old
+  name before.
+
 ## v3.13.12-beta.3
 
 A small polish beta on top of beta.2 — the same opt-in chart-reading engine

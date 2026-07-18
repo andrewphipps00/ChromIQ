@@ -2481,13 +2481,17 @@ class ScannerProfileDialog(_ToolDialogBase):
         # does. (Standard targets never get prepared files written next to
         # the bundled .cht, so there is nothing to sweep there.)
         if not self._standard_mode():
+            from core.file_manager import cache_subdir
             for stale in (f"{orig_cht.stem}-sample.cht",
                           f"{orig_cht.stem}-patchbox.cht",
                           f"{orig_cht.stem}-patchbox-sample.cht"):
-                try:
-                    (orig_cht.parent / stale).unlink(missing_ok=True)
-                except OSError:
-                    pass
+                # Sweep both homes: cache/ (current, #127) and the chart's own
+                # folder (pre-v2 flat leftovers).
+                for folder in (cache_subdir(orig_cht.parent), orig_cht.parent):
+                    try:
+                        (folder / stale).unlink(missing_ok=True)
+                    except OSError:
+                        pass
         try:
             text = orig_cht.read_text(errors="ignore")
         except OSError:
@@ -2546,7 +2550,12 @@ class ScannerProfileDialog(_ToolDialogBase):
         new = cht_with_patchbox_fiducials(txt)
         if new == txt:
             return cht
-        dst = base.parent / f"{cht.stem}-patchbox.cht"
+        # Prepared working copies are cache material (#127): scanin reads them
+        # by explicit path, so they live in cache/ instead of cluttering the
+        # chart's folder. ensure_subdir falls back to the flat folder if the
+        # volume refuses a new directory (read-only scan location).
+        from core.file_manager import cache_subdir, ensure_subdir
+        dst = ensure_subdir(cache_subdir(base.parent)) / f"{cht.stem}-patchbox.cht"
         dst.write_text(new)
         return dst
 
@@ -2562,7 +2571,8 @@ class ScannerProfileDialog(_ToolDialogBase):
             new_text = cht_with_sample_area(cht.read_text(errors="ignore"), frac)
         except OSError:
             return cht
-        dst = base.parent / f"{cht.stem}-sample.cht"
+        from core.file_manager import cache_subdir, ensure_subdir
+        dst = ensure_subdir(cache_subdir(base.parent)) / f"{cht.stem}-sample.cht"
         dst.write_text(new_text)
         return dst
 
@@ -2613,7 +2623,11 @@ class ScannerProfileDialog(_ToolDialogBase):
                 # One diag per scan, named after the scan itself — with averaging
                 # you want to check EVERY shot's alignment, not just the first
                 # (#102). Distinct scan stems keep the files from colliding.
-                diag = (scan.with_name(scan.stem + "-diag.tif")
+                # Diags are cache material (#127) — kept until the next run,
+                # never the only copy of anything.
+                from core.file_manager import cache_subdir, ensure_subdir
+                diag = (ensure_subdir(cache_subdir(scan.parent))
+                        / f"{scan.stem}-diag.tif"
                         if self._diag.isChecked() else None)
                 if diag is not None:
                     self._run_diags.append(diag)
@@ -2748,8 +2762,11 @@ class ScannerProfileDialog(_ToolDialogBase):
             cht = self._prepare_scanin_cht(orig_cht, s["corners"], frac, base,
                                            f"printer-p{pg + 1}")
             # A diag per page scan (each page is its own image), not just the
-            # first — every page's alignment is worth checking (#102).
-            diag = (s["path"].with_name(s["path"].stem + "-diag.tif")
+            # first — every page's alignment is worth checking (#102). Cache
+            # material (#127), same as the profiling path above.
+            from core.file_manager import cache_subdir, ensure_subdir
+            diag = (ensure_subdir(cache_subdir(s["path"].parent))
+                    / f"{s['path'].stem}-diag.tif"
                     if self._diag.isChecked() else None)
             if diag is not None:
                 self._run_diags.append(diag)

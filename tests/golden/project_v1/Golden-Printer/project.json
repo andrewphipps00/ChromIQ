@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "created_at": "2026-07-18T22:09:39",
+  "target_name": "Golden-Printer",
+  "current_run": "run2",
+  "runs": [
+    "run1",
+    "run2"
+  ]
+}

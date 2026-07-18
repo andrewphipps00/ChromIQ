@@ -17,10 +17,13 @@ from typing import TYPE_CHECKING
 
 from ui.ti2_loader import _project_root_for, _resolve_working_dir
 from core.i18n import tr
+from core.logger import get_logger
 
 if TYPE_CHECKING:
     from PyQt6.QtWidgets import QWidget
     from core.settings import AppSettings
+
+log = get_logger(__name__)
 
 
 def resolve_txt(
@@ -120,6 +123,16 @@ def _handle_inside(
     dlg.exec()
 
     if choice[0] == "continue":
+        # Same load-time housekeeping as ti2_loader's continue branch (#127):
+        # README backfill + v1→v2 folder migration; best-effort.
+        root = _project_root_for(txt_path, working_dir)
+        if root is not None:
+            try:
+                from core.file_manager import Project
+                Project.load(root)
+            except Exception:  # noqa: BLE001
+                log.warning("in-place load: could not run project "
+                            "housekeeping for %s", root, exc_info=True)
         return txt_path, txt_path.stem
     if choice[0] == "new":
         result = _ask_profile_name(parent, txt_path, working_dir)

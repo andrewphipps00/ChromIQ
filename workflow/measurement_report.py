@@ -145,7 +145,8 @@ def ref_xyz(ref_labs, data, i):
 def save_report(report: dict, run_dir: str | Path) -> Path:
     """Write the report as timestamped JSON under ``<run_dir>/reports/`` and
     return the path. Timestamped so a printer's reports accrue for comparison."""
-    reports = Path(run_dir) / "reports"
+    from core.file_manager import reports_subdir
+    reports = reports_subdir(run_dir)
     reports.mkdir(parents=True, exist_ok=True)
     ts = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     path = reports / f"report_{ts}.json"
@@ -156,7 +157,8 @@ def save_report(report: dict, run_dir: str | Path) -> Path:
 
 def list_reports(run_dir: str | Path) -> list[Path]:
     """All saved reports for a run, oldest first."""
-    reports = Path(run_dir) / "reports"
+    from core.file_manager import reports_subdir
+    reports = reports_subdir(run_dir)
     if not reports.is_dir():
         return []
     return sorted(reports.glob("report_*.json"))

@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<cc:CxF xmlns:cc="http://colorexchangeformat.com/CxF3-core" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+	<cc:FileInformation>
+		<cc:Creator>ChromIQ</cc:Creator>
+		<cc:CreationDate>2026-07-18T22:09:39+02:00</cc:CreationDate>
+		<cc:Description>Golden-Printer</cc:Description>
+	</cc:FileInformation>
+	<cc:Resources>
+		<cc:ObjectCollection>
+			<cc:Object ObjectType="Target" Name="Target1" Id="c1">
+				<cc:CreationDate>2026-07-18T22:09:39+02:00</cc:CreationDate>
+				<cc:DeviceColorValues>
+					<cc:ColorRGB ColorSpecification="Unknown">
+						<cc:R>255</cc:R>
+						<cc:G>0</cc:G>
+						<cc:B>0</cc:B>
+					</cc:ColorRGB>
+				</cc:DeviceColorValues>
+			</cc:Object>
+			<cc:Object ObjectType="Target" Name="Target2" Id="c2">
+				<cc:CreationDate>2026-07-18T22:09:39+02:00</cc:CreationDate>
+				<cc:DeviceColorValues>
+					<cc:ColorRGB ColorSpecification="Unknown">
+						<cc:R>0</cc:R>
+						<cc:G>255</cc:G>
+						<cc:B>0</cc:B>
+					</cc:ColorRGB>
+				</cc:DeviceColorValues>
+			</cc:Object>
+		</cc:ObjectCollection>
+	</cc:Resources>
+	<cc:CustomResources>
+		<xrp:Prism xmlns:xrp="http://www.xrite.com/products/prism" release="2.0">
+  <xrp:CustomAttributes ColorSpace="RGB" MeasurementDevice="i1iSis" MeasurementScanningMode="Strip" NumberPatchPages="1" ScramblePatches="False" TestChartType="RGB Variable" TitleString="Golden-Printer" WriteProtected="True" numberCorePatches="2" numberImagePatches="0" numberSpotPatches="0"/>
+</xrp:Prism>
+
+	</cc:CustomResources>
+</cc:CxF>

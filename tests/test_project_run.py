@@ -29,8 +29,9 @@ from core.file_manager import (
 # ---------------------------------------------------------------------------
 
 def test_project_manifest_fresh_defaults() -> None:
+    from core.file_manager import SCHEMA_VERSION
     m = ProjectManifest.fresh("MyChart")
-    assert m.schema_version == 1
+    assert m.schema_version == SCHEMA_VERSION == 2
     assert m.target_name == "MyChart"
     assert m.current_run == "run1"
     assert m.runs == ["run1"]
@@ -85,11 +86,12 @@ def test_project_create_writes_user_readme(tmp_path: Path) -> None:
     text = readme.read_text(encoding="utf-8")
     # Concrete project name substituted into the example paths.
     assert "MyChart.icc" in text
-    assert "MyChart-cal.cal" in text
-    assert "MyChart-i1profiler.pxf" in text
-    # Both sections present.
-    assert "Where to find things you might want" in text
-    assert "Other files and folders you may see" in text
+    assert "MyChart-cal.ti3" in text
+    assert "MyChart-i1profiler" in text
+    assert "{name}" not in text
+    # The guide's folder-first sections (#127) are present.
+    assert "What the folders mean".upper() in text
+    assert "cache" in text and "reports" in text and "exports" in text
 
 
 def test_project_load_backfills_readme_when_missing(tmp_path: Path) -> None:
@@ -597,3 +599,49 @@ def test_file_manager_delete_refuses_non_project(tmp_path: Path) -> None:
     (tmp_path / "NotAProject").mkdir()
     fm.delete_project_folder("NotAProject")
     assert (tmp_path / "NotAProject").exists()
+
+
+# ---------------------------------------------------------------------------
+# v2 sub-folder API + rename across sub-folders (#127)
+# ---------------------------------------------------------------------------
+
+def test_run_v2_subdir_properties(tmp_path: Path) -> None:
+    proj = Project.create(tmp_path / "P", "P")
+    run = proj.current_run()
+    assert run.reports_dir == run.dir / "reports"
+    assert run.exports_dir == run.dir / "exports"
+    assert run.cache_dir == run.dir / "cache"
+    assert run.ensure_cache_dir().is_dir()
+    assert proj.calibration.exports_dir == proj.calibration.dir / "exports"
+
+
+def test_project_rename_covers_cal_sidecars_and_subfolders(tmp_path: Path) -> None:
+    """The #127 regex fix: a calibration chart's exports ("<stem>-cal-colours.txt")
+    are renamed too, and files inside reports/exports/cache follow the stem."""
+    import shutil as _sh
+    proj = Project.create(tmp_path / "Old", "Old")
+    run = proj.current_run()
+    run.ensure_exports_dir().joinpath("Old-colours.txt").write_text("x")
+    run.ensure_exports_dir().joinpath("Old-i1profiler.pxf").write_text("x")
+    run.ensure_reports_dir().joinpath("Refine_Strips_Old.txt").write_text("x")
+    cal = proj.calibration
+    cal.ensure_dir()
+    (cal.dir / "Old-cal.ti3").write_text("x")
+    from core.file_manager import ensure_subdir
+    ensure_subdir(cal.exports_dir).joinpath("Old-cal-colours.txt").write_text("x")
+    ensure_subdir(cal.exports_dir).joinpath("Old-cal-i1profiler.txt").write_text("x")
+    (run.dir / "Old-notes.txt").write_text("user file")     # must NOT rename
+
+    _sh.move(str(tmp_path / "Old"), str(tmp_path / "New"))
+    proj2 = Project.load(tmp_path / "New")
+    proj2.rename("New")
+
+    run2 = proj2.current_run()
+    assert (run2.exports_dir / "New-colours.txt").exists()
+    assert (run2.exports_dir / "New-i1profiler.pxf").exists()
+    assert (proj2.calibration.dir / "New-cal.ti3").exists()
+    assert (proj2.calibration.exports_dir / "New-cal-colours.txt").exists()
+    assert (proj2.calibration.exports_dir / "New-cal-i1profiler.txt").exists()
+    assert (run2.dir / "Old-notes.txt").exists()            # user file untouched
+    # Refine_Strips keeps its own (report) name — not a stem-carrying artefact
+    assert (run2.reports_dir / "Refine_Strips_Old.txt").exists()

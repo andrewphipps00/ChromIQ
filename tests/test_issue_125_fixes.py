@@ -230,9 +230,12 @@ def test_welcome_file_guide_card_opens_body(qapp):
     assert dlg._stack.currentIndex() == 1
 
 
-def test_project_readme_mentions_new_sidecars():
-    from core.file_manager import _PROJECT_README_TEMPLATE
-    s = _PROJECT_README_TEMPLATE.format(name="P")
+def test_project_readme_mentions_new_sidecars(qapp, tmp_path):
+    # The on-disk guide renders from ui.file_guide (one source with the help
+    # card, #127) with {name} resolved to the real project name.
+    from core.file_manager import Project
+    proj = Project.create(tmp_path / "P", "P")
+    s = proj.readme_path.read_text(encoding="utf-8")
     for needle in ("P.pdf", "P.ps", "P-colours.txt", "P-i1profiler.txt",
                    "P.cht", "Quality_Check_1_P.txt", "Refine_Strips_P.txt",
                    "Safe to tidy"):

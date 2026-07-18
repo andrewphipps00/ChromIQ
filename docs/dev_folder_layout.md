@@ -9,32 +9,52 @@ path construction are owned by `core/file_manager.py` via three classes:
 
 ```
 <target-name>/                       # = sanitised project name (spaces → hyphens)
-  project.json                       # manifest
+  project.json                       # manifest (schema_version 2 since #127)
+  Where are my files.txt             # folder guide (from ui.file_guide)
   cal/                               # optional; one calibration shared by all runs
     <target-name>-cal.ti1 / .ti2 / .cht / .ps
     <target-name>-cal_NN.tif
     <target-name>-cal.ti3            # calibration measurement
-    <target-name>-cal.cal            # printcal output
+    <target-name>-cal.cal            # printcal output (stem-coupled to -cal.ti3)
     <target-name>-cal.icc
     <target-name>-cal.channels.json
+    exports/                         # the cal chart's hand-off sidecars (#127)
     meta.json
-  exports/                           # external-tool exports
+  exports/                           # Tools-menu exports (project-wide)
     <target-name>-i1profiler.txt
     <target-name>-i1profiler.pxf
   runs/
     run1/                            # one folder per profile build
-      <target-name>.ti1 / .ti2 / .cht / .ps / .channels.json
+      <target-name>.ti1 / .ti2 / .cht / .cie / .ps / .pdf / .channels.json / .strips.json
       <target-name>_NN.tif           # NN = page index (a real ordinal, not state)
-      reads/                         # present only when averaging is used
-        read1.ti3 / read2.ti3 / …    # role-named (in subfolder)
       <target-name>.ti3              # the measurement (chartread output)
       <target-name>.icc              # the profile (colprof output)
       preconditioning.ti3 / .icc     # role-named; seeded from a parent run
       merged.ti3 / merged.icc        # role-named; build-time refinement merge
       calibrated.icc                 # role-named; applycal output
+      reads/                         # present only when averaging is used
+        read1.ti3 / read2.ti3 / …
+      reports/                       # #127: things ChromIQ tells the user
+        Quality_Check_N_<name>.txt / Refine_Strips_<name>.txt / report_*.json
+      exports/                       # #127: hand-off files for other programs
+        <name>-colours.txt / <name>-i1profiler.txt / .pxf
+      cache/                         # #127: tool intermediates — always safe to delete
+        *-patchbox.cht / *-sample.cht / *-diag.tif
       meta.json
     run2/ …
 ```
+
+**The v2 rule (#127):** everything a user prints, installs or measures stays
+at the run root (the Argyll tools are stem+cwd coupled there — chartread runs
+with `cwd = ti1.parent`, colprof with `cwd = ti3.parent`, printtarg writes next
+to the `.ti1`); the ChromIQ-only paperwork lives in three sub-folders with a
+fixed vocabulary: `reports/` (quality checks, refine lists, measurement
+reports), `exports/` (hand-off files, same name and meaning as the
+project-level folder), `cache/` (intermediates any tool can recreate —
+deleting never loses data). External folders (a browsed `.ti3`, a scan
+directory) get the same sub-folders via the module-level helpers
+`reports_subdir()` / `exports_subdir()` / `cache_subdir()` +
+`ensure_subdir()` (which falls back to the parent on read-only volumes).
 
 The **chart's own files** (`.ti1`/`.ti2`/`.ti3`/`.icc`/page TIFFs/`.cht`/`.ps`/
 `.channels.json`) carry the sanitised project name as their stem — so
@@ -123,25 +143,40 @@ should be wiped on chart regeneration, listing it in `reset_chart_artefacts`).
 
 ## Migration
 
-There is **no migration** from the old flat-folder layout — the redesign
-shipped on a clean break (small early user base). Projects created by older
-versions are simply not picked up by session restore (the `project.json`
-existence check bails); the user starts fresh.
+`project.json` carries a `schema_version`; the current format is **2**
+(`SCHEMA_VERSION` in `core/file_manager.py`).
+
+- **1 → 2** (#127): `Project.load` migrates in place — creates the
+  `reports/` / `exports/` / `cache/` sub-folders per run (and `cal/exports/`)
+  and moves only files matching the exact patterns ChromIQ itself writes
+  (`_MIG_REPORTS` / `_MIG_CACHE` + the exact sidecar names). User files are
+  never touched, nothing is renamed or deleted, the chart chain is explicitly
+  protected (even for project names ending in a pattern tail, e.g.
+  "X-sample"). Idempotent: a crash mid-migration is healed by loading again.
+  The README is regenerated (the one deliberate overwrite). In-place loads
+  from a `.ti2`/`.txt` also migrate — `_handle_inside`'s Continue branch runs
+  `Project.load`.
+- **Too-new schema**: the project opens normally with
+  `Project.schema_too_new = True` (valuables sit in the same place in every
+  format), and the main window shows a "please update ChromIQ" note at
+  session restore. Never downgrade `schema_version`.
+- **Pre-project-json folders** (the pre-redesign flat layout): still no
+  migration — session restore skips them (the `project.json` existence check
+  bails); the user starts fresh.
+
+The full migration matrix is tested in `tests/test_folder_layout_v2.py`
+against the frozen schema-1 fixture in `tests/golden/project_v1/` (generated
+by `make_v1_fixture.py` against the pre-#127 code — do not regenerate it with
+current code). The golden folder-manifest tests in
+`tests/test_folder_layout_e2e.py` pin the complete v2 tree per workflow
+stage.
 
 ## Known edge cases (deferred, not bugs yet)
 
-Two small gaps in the import / in-place-load flow that aren't worth fixing
-today but are worth knowing about if they ever surface:
-
-1. **README backfill doesn't run on in-place loads.** `Project.load`
-   backfills `Where are my files.txt` when it's missing, but the
-   "Continue" branch of `_handle_inside` (in `ui/ti2_loader.py` and
-   `ui/txt_loader.py`) returns the file path without calling
-   `Project.load` on the discovered project root. Purely hypothetical
-   today — no projects exist that have `project.json` but no README. Worth
-   wiring in if the README is ever revised and old projects need to catch
-   up; the fix is one line (call `Project.load(_project_root_for(path,
-   working_dir))` before returning the in-place path).
+1. ~~README backfill doesn't run on in-place loads.~~ **Fixed in #127** —
+   the "Continue" branch of `_handle_inside` (both loaders) now calls
+   `Project.load` on the discovered root, which also runs the v1→v2
+   migration for in-place loads.
 
 2. **`.txt` saved into a project's `exports/` folder.** If a user saves
    an i1Profiler measurement `.txt` directly into `<project>/exports/`

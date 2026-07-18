@@ -1,0 +1,120 @@
+ChromIQ project: Golden-Printer
+
+Where to find things you might want:
+
+  runs/run1/Golden-Printer.icc              ← your built ICC profile
+                                      (install this, share this)
+
+  runs/run1/Golden-Printer_01.tif           ← the printable chart, page 1
+  runs/run1/Golden-Printer_02.tif           ← page 2 (if multi-page)
+
+  runs/run1/Golden-Printer.ti2              ← chart layout (for re-measuring)
+  runs/run1/Golden-Printer.ti3              ← measurements (chartread output)
+
+  cal/Golden-Printer-cal.cal                ← calibration curves (if you made one)
+  exports/Golden-Printer-i1profiler.pxf     ← for i1Profiler (if you exported)
+
+
+Other files and folders you may see, and why:
+
+  project.json                      ChromIQ's project manifest. Read on start-up
+                                    to find out which run is current.
+
+  runs/runN/                        One folder per profile build. Each is
+                                    self-contained; the highest N is the
+                                    "current" one.
+
+  runs/runN/meta.json               Per-run info (created_at, parent run,
+                                    averaging method, etc.).
+
+  runs/runN/Golden-Printer.ti1              Chart definition (targen output), fed to
+                                    printtarg. You don't normally touch it.
+
+  runs/runN/Golden-Printer.channels.json    Ink-channel sidecar — lets ChromIQ identify
+                                    inks when re-opening a chart later (engine
+                                    charts also keep their exact layout and
+                                    creation recipe in here).
+
+  runs/runN/Golden-Printer.pdf              The chart as a vector PDF — only written
+                                    when "Also export PDF" is ticked in the
+                                    layout options.
+
+  runs/runN/Golden-Printer.ps               PostScript copy created for printing (sent
+                                    to the printer bypassing colour
+                                    management).
+
+  runs/runN/Golden-Printer-colours.txt      The chart's colours as a plain hex list
+                                    (RGB charts only) — can be pasted back
+                                    into the New-chart dialog.
+
+  runs/runN/Golden-Printer-i1profiler.txt   The patch set in i1Profiler's formats, so
+  runs/runN/Golden-Printer-i1profiler.pxf   the chart can be measured in i1Profiler.
+
+  runs/runN/Golden-Printer.cht / .cie       Recognition template + reference values
+                                    for scanner/camera measurement (made by
+                                    the "Create scanner or camera target"
+                                    tool once a measurement exists).
+
+  runs/runN/reads/readN.ti3         Per-read measurements when you use
+                                    "Read again & average". They get averaged
+                                    back into Golden-Printer.ti3 when you finish.
+
+  runs/runN/preconditioning.ti3     Copies of the parent run's measurement and
+  runs/runN/preconditioning.icc     profile, created when you click "Use as
+                                    pre-conditioning profile" on a finished
+                                    build. ChromIQ uses them to refine the
+                                    next chart.
+
+  runs/runN/merged.ti3              Build-time merge of Golden-Printer.ti3 +
+  runs/runN/merged.icc              preconditioning.ti3 (ChromIQ-style
+                                    refinement). colprof builds from
+                                    merged.ti3; on install you still get the
+                                    clean Golden-Printer.icc name.
+
+  runs/runN/calibrated.icc          applycal output — the run's profile with
+                                    the calibration .cal baked in.
+
+  runs/runN/Quality_Check_1_Golden-Printer.txt
+  runs/runN/Quality_Check_2_Golden-Printer.txt
+                                    Readable reports from "Check profile
+                                    quality" (Check & Refine tab): the
+                                    quality grade, an explanation, the
+                                    strips with the highest error and the
+                                    full check output. Numbered so repeated
+                                    checks keep a little history of how the
+                                    profile improved; safe to delete.
+
+  runs/runN/Refine_Strips_Golden-Printer.txt
+                                    The strips flagged for re-measurement
+                                    when a quality check finds weak strips.
+                                    Guided refinement reads it back so the
+                                    Measure tab knows which strips to redo;
+                                    replaced on each new check.
+
+  cal/                              Calibration target (optional; shared by
+                                    every run in this project).
+
+  cal/Golden-Printer-cal.ti1 / .ti2 / _NN.tif    The calibration chart (same shape as
+                                         a run's chart, with the "-cal" marker
+                                         so a printed sheet is distinguishable
+                                         from the profiling chart).
+
+  cal/Golden-Printer-cal.ti3                The calibration measurement.
+
+  cal/Golden-Printer-cal.cal                Calibration curves (printcal output) — the
+                                    file applycal bakes into your profile.
+
+  exports/                          External-tool exports.
+
+  exports/Golden-Printer-i1profiler.txt     For i1Profiler (RGB / CMYK only).
+  exports/Golden-Printer-i1profiler.pxf     For i1Profiler (always written).
+
+  Where are my files.txt            This file. Informational only — ChromIQ
+                                    does not read or update it after creating
+                                    it. Edit or delete it freely.
+
+
+Safe to tidy: everything can in principle be recreated except your
+measurements (Golden-Printer.ti3, reads/, cal/Golden-Printer-cal.ti3) — those represent
+real ink on real paper and are worth keeping. The quickest tidy-up is
+deleting old runN folders you no longer need.

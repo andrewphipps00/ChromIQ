@@ -1,0 +1,4 @@
+# CHROMIQ_REFINE_STRIPS_V1
+# Strip	MaxDE
+A	3.21
+F	2.75

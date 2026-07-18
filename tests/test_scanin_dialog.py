@@ -286,10 +286,13 @@ def test_standard_mode_execute_uses_chosen_cht_and_reference(_app, tmp_path):
         assert jobs[0]["kind"] == "scanin"
         p = jobs[0]["params"]
         # At the default 60% sample area the dialog hands scanin a sample-adjusted
-        # sibling .cht (BOX_SHRINK rewritten) — never the read-only bundled file —
+        # working copy (BOX_SHRINK rewritten) — never the read-only bundled file —
         # while the reference and scan are untouched. With "Use fiducial marks" off
-        # the F line is first rewritten to the patch bbox (…-patchbox…).
-        assert p.cht.parent == scan.parent and p.cht.name.endswith("-sample.cht")
+        # the F line is first rewritten to the patch bbox (…-patchbox…). Prepared
+        # copies are cache material since #127: they live in cache/ next to the scan.
+        from core.file_manager import cache_subdir
+        assert (p.cht.parent == cache_subdir(scan.parent)
+                and p.cht.name.endswith("-sample.cht"))
         assert p.cht.is_file() and "BOX_SHRINK" in p.cht.read_text()
         assert re.search(r"(?m)^\s*F .*$", p.cht.read_text())   # patch-bbox F line
         assert p.cie == ref and p.scan_tif == scan

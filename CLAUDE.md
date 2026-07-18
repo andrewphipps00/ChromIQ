@@ -72,20 +72,28 @@ Every project is a folder under `~/ChromIQ/<target-name>/` owned by the
 
 ```
 <target-name>/             # = sanitised project name (spaces → hyphens)
-  project.json             # manifest: schema_version, current_run, runs[]
+  project.json             # manifest: schema_version (2), current_run, runs[]
   cal/                     # optional, shared across runs
     <target-name>-cal.*    # cal.ti1/.ti2/.ti3/.cal/.icc/_NN.tif
-  exports/                 # i1Profiler exports (<target-name>-i1profiler.txt/.pxf)
+    exports/               # the cal chart's hand-off sidecars
+  exports/                 # Tools-menu i1Profiler exports (project-wide)
   runs/run1/, run2/, …     # one folder per profile build
     <target-name>.*        # chart.ti1/.ti2/.cht/.ps/.channels.json + _NN.tif
     <target-name>.ti3      # the measurement (chartread output; averaged result reuses this stem)
     <target-name>.icc      # the profile (colprof output)
     reads/readN.ti3        # role-named, only when averaging is used
+    reports/               # #127: Quality_Check_N/Refine_Strips + report_*.json
+    exports/               # #127: -colours.txt + -i1profiler.txt/.pxf sidecars
+    cache/                 # #127: tool intermediates (scanin working copies, diags) — always safe to delete
     preconditioning.ti3/.icc   # role-named, seeded by Project.new_run when refining
     merged.ti3/.icc        # role-named, build-time refinement-merge outputs
     calibrated.icc         # role-named, applycal output
     meta.json
 ```
+
+Projects written before #127 (schema_version 1, everything flat in the run
+folder) are migrated in place by `Project.load` — see the Migration section
+of `docs/dev_folder_layout.md`.
 
 **The chart's own files carry the sanitised project name as their stem**
 (so printtarg stamps it on the printed sheet, the ICC is self-identifying,

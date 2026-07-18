@@ -63,3 +63,6 @@ assets/app_icon.ico
 /native/chromiq-gammap
 /native/chromiq-gammap.exe
 .bench/
+
+# Frozen schema-1 test fixture (#127) — must override the binary ignores above
+!tests/golden/project_v1/**

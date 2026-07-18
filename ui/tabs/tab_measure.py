@@ -1223,8 +1223,8 @@ class TabMeasure(QWidget):
         refine_rl.addWidget(self._refine_cb, stretch=1)
         refine_rl.addWidget(TooltipButton(
             tr("Refinement Strips File"),
-            tr("Available when a Refine_Strips_<name>.txt file exists next\n"
-            "to your .ti2 file.\n\n"
+            tr("Available when a Refine_Strips_<name>.txt file exists in\n"
+            "the reports folder next to your chart.\n\n"
             "That file is created automatically by the Check && Refine\n"
             "tab after a quality check. It lists the strips with the\n"
             "highest colour errors, sorted worst-first.\n\n"
@@ -1547,8 +1547,8 @@ class TabMeasure(QWidget):
         m_refine_rl.addWidget(self._m_refine_cb, stretch=1)
         m_refine_rl.addWidget(TooltipButton(
             tr("Refinement Strips File"),
-            tr("Available when a Refine_Strips_<name>.txt file exists next\n"
-            "to your .ti2 file.\n\n"
+            tr("Available when a Refine_Strips_<name>.txt file exists in\n"
+            "the reports folder next to your chart.\n\n"
             "That file is created automatically by the Check && Refine\n"
             "tab after a quality check. It lists the strips with the\n"
             "highest colour errors, sorted worst-first.\n\n"
@@ -2537,8 +2537,14 @@ class TabMeasure(QWidget):
             tip.setVisible(has_ti3)
             if not has_ti3:
                 cb.setChecked(False)
-        # Auto-detect Refine_Strips file
-        refine_file = self._ti1_path.parent / f"Refine_Strips_{self._ti1_path.stem}.txt"
+        # Auto-detect Refine_Strips file — reports/ since #127, with a
+        # fallback to the flat pre-v2 location (an external chart folder that
+        # never went through project migration may still hold one there).
+        from core.file_manager import reports_subdir
+        _name = f"Refine_Strips_{self._ti1_path.stem}.txt"
+        refine_file = reports_subdir(self._ti1_path.parent) / _name
+        if not refine_file.exists():
+            refine_file = self._ti1_path.parent / _name
         if refine_file.exists():
             self._refine_strips_path = refine_file
             self._load_refine_strips(refine_file)

@@ -1295,7 +1295,11 @@ class TabCheckRefine(QWidget):
         if self._ti3_path:
             try:
                 stem = self._ti3_path.stem
-                folder = self._ti3_path.parent
+                # Quality reports + refine lists live in reports/ next to the
+                # measurement (#127) — works for run folders and for a browsed
+                # external .ti3 alike.
+                from core.file_manager import ensure_subdir, reports_subdir
+                folder = ensure_subdir(reports_subdir(self._ti3_path.parent))
                 grade = quality_grade(result.avg_de, result.peak_de)
                 explanation = quality_explanation(result.avg_de, result.peak_de)
                 summary_text = tr("Profile Quality Assessment: {grade}").format(
@@ -1315,11 +1319,13 @@ class TabCheckRefine(QWidget):
                     )
 
                 report_path = write_quality_report(folder, stem, summary_text, result.raw_log)
-                self._log.appendPlainText(f"\n[OK] Quality report saved: {report_path.name}")
+                self._log.appendPlainText(
+                    f"\n[OK] Quality report saved: {folder.name}/{report_path.name}")
 
                 if refine_strips and not recommend_start_over:
                     strips_file = write_refine_strips(folder, stem, refine_strips)
-                    self._log.appendPlainText(f"[OK] Refinement strips file saved: {strips_file.name}")
+                    self._log.appendPlainText(
+                        f"[OK] Refinement strips file saved: {folder.name}/{strips_file.name}")
             except Exception as exc:
                 log.warning("Could not write quality report: %s", exc)
                 self._log.appendPlainText(f"[WARNING] Could not write output files: {exc}")

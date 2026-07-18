@@ -1,37 +1,39 @@
 """Working-folder management for ChromIQ sessions.
 
-The folder layout owned by this module:
+The folder layout owned by this module (v2, #127):
 
     work_dir/                          # one per project (target name)
       project.json                     # manifest (schema_version, current_run, runs[])
+      Where are my files.txt           # the folder guide (from ui.file_guide)
       cal/                             # optional, shared across runs
-        calibration.cal
-        calibration.ti1 / .ti2 / .ti3 / .icc
-        calibration_NN.tif             # NN = page index
-        calibration.cht / .ps
+        <name>-cal.ti1/.ti2/.ti3/.cal/.icc/.cht/.ps/_NN.tif
+        exports/                       # the cal chart's hand-off sidecars
         meta.json
-      exports/                         # external-tool exports (i1Profiler etc.)
-        i1profiler.txt
-        i1profiler.pxf
+      exports/                         # Tools-menu exports (project-wide)
       runs/
         run1/                          # one folder per profile build
-          chart.ti1 / .ti2 / .cht / .ps / .channels.json
-          chart_NN.tif
-          reads/                       # only when averaging used
-            read1.ti3 / read2.ti3 ...
-          measurement.ti3              # canonical measurement (single or averaged)
+          <name>.ti1/.ti2/.cht/.cie/.ps/.pdf/.channels.json/.strips.json
+          <name>_NN.tif                # NN = page index
+          <name>.ti3                   # the measurement (chartread output)
+          <name>.icc                   # the profile (colprof output)
           preconditioning.ti3 / .icc   # only when run was promoted from a parent
-          merged.ti3                   # only when ti3_merge runs (refinement on)
-          profile.icc
+          merged.ti3 / merged.icc      # only when ti3_merge runs (refinement on)
+          calibrated.icc               # applycal output
+          reads/                       # only when averaging used
+          reports/                     # quality checks, refine lists, measurement reports
+          exports/                     # hand-off sidecars (-colours / -i1profiler)
+          cache/                       # tool intermediates — always safe to delete
           meta.json
         run2/ ...
 
-The role of every file is encoded in its filename within a single folder; the
-folder names disambiguate between runs and between session-level vs. run-level
-artefacts. There are no prefix/suffix conventions left to remember.
+Everything a user prints, installs or measures stays at the run root (the
+Argyll tools are stem+cwd coupled there); the ChromIQ-only paperwork lives in
+reports/ / exports/ / cache/. Projects written before #127 (schema_version 1,
+everything flat) are migrated in place by ``Project.load``.
 
 All path construction in the app must go through ``Project`` / ``Run`` /
-``Calibration``. String-concatenating paths anywhere else is a code smell.
+``Calibration`` (or the ``*_subdir`` helpers for explicit external folders).
+String-concatenating paths anywhere else is a code smell.
 """
 from __future__ import annotations
 
@@ -67,6 +69,57 @@ _WORKFILE_EXTS = frozenset({
 # Inside a Run.reads_dir, files are read1.ti3, read2.ti3, …
 _NEW_READ_RE = re.compile(r"^read(\d+)$")
 
+# ---------------------------------------------------------------------------
+# The v2 sub-folder vocabulary (#127, names settled with Knut):
+#   reports/ — things ChromIQ tells the user (quality checks, refine lists,
+#              measurement reports)
+#   exports/ — files made for use outside ChromIQ (same name and meaning as
+#              the project-level exports/ folder)
+#   cache/   — intermediates any tool can recreate; deleting never loses data
+# The Argyll-coupled chain (.ti1→.ti2→.tif/.ps→.ti3→.icc) and its adjacency
+# sidecars (channels/strips.json, .cht/.cie) stay flat at the run root.
+# ---------------------------------------------------------------------------
+REPORTS_DIRNAME = "reports"
+EXPORTS_DIRNAME = "exports"
+CACHE_DIRNAME   = "cache"
+
+#: Current on-disk project format. 1 = flat run folders (pre-#127),
+#: 2 = reports/exports/cache sub-folders. ``Project.load`` migrates 1 → 2
+#: in place; formats newer than this open read-normally with a warning flag
+#: (see ``Project.schema_too_new``) — the valuable files sit in the same
+#: place in every format, so opening can't damage anything.
+SCHEMA_VERSION = 2
+
+
+def reports_subdir(folder: Path | str) -> Path:
+    """``<folder>/reports`` — for callers working on an explicit directory
+    (e.g. a browsed external ``.ti3``) where threading a ``Run`` through is
+    not worth it. Keeps the folder name defined in exactly one place."""
+    return Path(folder) / REPORTS_DIRNAME
+
+
+def exports_subdir(folder: Path | str) -> Path:
+    """``<folder>/exports`` — see :func:`reports_subdir`."""
+    return Path(folder) / EXPORTS_DIRNAME
+
+
+def cache_subdir(folder: Path | str) -> Path:
+    """``<folder>/cache`` — see :func:`reports_subdir`."""
+    return Path(folder) / CACHE_DIRNAME
+
+
+def ensure_subdir(path: Path) -> Path:
+    """mkdir -p for a sub-folder; falls back to the parent when the volume
+    refuses (e.g. a read-only scan folder) so writers always get a usable
+    directory instead of an exception."""
+    try:
+        path.mkdir(parents=True, exist_ok=True)
+        return path
+    except OSError as exc:
+        log.warning("Could not create %s (%s) — falling back to %s",
+                    path, exc, path.parent)
+        return path.parent
+
 
 # ---------------------------------------------------------------------------
 # Manifest dataclasses
@@ -75,7 +128,7 @@ _NEW_READ_RE = re.compile(r"^read(\d+)$")
 @dataclass
 class ProjectManifest:
     """The contents of ``project.json``."""
-    schema_version: int = 1
+    schema_version: int = 1          # projects written before #127 carry 1
     created_at: str = ""
     target_name: str = ""
     current_run: str = "run1"
@@ -84,7 +137,7 @@ class ProjectManifest:
     @classmethod
     def fresh(cls, target_name: str) -> "ProjectManifest":
         return cls(
-            schema_version=1,
+            schema_version=SCHEMA_VERSION,
             created_at=datetime.now().isoformat(timespec="seconds"),
             target_name=target_name,
             current_run="run1",
@@ -186,6 +239,13 @@ class Calibration:
     def channels_json(self) -> Path:          return self.dir / f"{self.stem}.channels.json"
     @property
     def meta_path(self) -> Path:              return self.dir / "meta.json"
+
+    # ---- v2 sub-folders (#127)
+    @property
+    def exports_dir(self) -> Path:            return self.dir / EXPORTS_DIRNAME
+
+    def ensure_exports_dir(self) -> Path:
+        return ensure_subdir(self.exports_dir)
 
     def chart_tiffs(self) -> list[Path]:
         # `<stem>*.tif` matches both single-page <stem>.tif and multi-page
@@ -382,6 +442,21 @@ class Run:
     @property
     def calibrated_icc(self) -> Path:         return self.dir / "calibrated.icc"
 
+    # ---- v2 sub-folders (#127)
+    # reports/ — quality checks, refine lists, measurement reports.
+    # exports/ — the chart's hand-off files for other programs.
+    # cache/   — tool intermediates; always safe to delete.
+    @property
+    def reports_dir(self) -> Path:            return self.dir / REPORTS_DIRNAME
+    @property
+    def exports_dir(self) -> Path:            return self.dir / EXPORTS_DIRNAME
+    @property
+    def cache_dir(self) -> Path:              return self.dir / CACHE_DIRNAME
+
+    def ensure_reports_dir(self) -> Path:     return ensure_subdir(self.reports_dir)
+    def ensure_exports_dir(self) -> Path:     return ensure_subdir(self.exports_dir)
+    def ensure_cache_dir(self) -> Path:       return ensure_subdir(self.cache_dir)
+
     # ---- meta
     @property
     def meta_path(self) -> Path:              return self.dir / "meta.json"
@@ -404,8 +479,17 @@ class Run:
         """Wipe chart files + reads + measurement + merged + profile.
 
         Preserves ``preconditioning.*`` and ``meta.json`` so the run's identity
-        and pre-conditioning seed survive a chart re-generation.
+        and pre-conditioning seed survive a chart re-generation, and
+        ``reports/`` — past quality checks document history the way ``reads/``
+        would if it weren't tied to the chart being wiped. ``exports/`` and
+        ``cache/`` belong to the old chart and go with it.
         """
+        for sub in (self.exports_dir, self.cache_dir):
+            if sub.exists():
+                try:
+                    shutil.rmtree(sub)
+                except OSError as exc:
+                    log.warning("Could not delete %s: %s", sub, exc)
         s = self.stem
         for name in (
             f"{s}.ti1", f"{s}.ti2", f"{s}.cht", f"{s}.ps",
@@ -433,128 +517,25 @@ class Run:
 # Project — the work_dir root
 # ---------------------------------------------------------------------------
 
-_PROJECT_README_TEMPLATE = """\
+# Emergency fallback only — the real guide comes from ui.file_guide (one
+# source for the Welcome/Help card and this file); see Project.write_readme.
+_PROJECT_README_FALLBACK = """\
 ChromIQ project: {name}
 
-Where to find things you might want:
+  runs/runN/{name}_01.tif        <- the printable chart pages
+  runs/runN/{name}.ti3           <- your measurements (keep!)
+  runs/runN/{name}.icc           <- your finished ICC profile
+  runs/runN/reports/             <- quality checks & measurement reports
+  runs/runN/exports/             <- files for other programs (i1Profiler ...)
+  runs/runN/cache/               <- temporary tool files, always safe to delete
+  runs/runN/reads/               <- individual readings when averaging
+  cal/                           <- optional printer calibration (shared)
+  exports/                       <- Tools-menu exports (project-wide)
 
-  runs/run1/{name}.icc              ← your built ICC profile
-                                      (install this, share this)
-
-  runs/run1/{name}_01.tif           ← the printable chart, page 1
-  runs/run1/{name}_02.tif           ← page 2 (if multi-page)
-
-  runs/run1/{name}.ti2              ← chart layout (for re-measuring)
-  runs/run1/{name}.ti3              ← measurements (chartread output)
-
-  cal/{name}-cal.cal                ← calibration curves (if you made one)
-  exports/{name}-i1profiler.pxf     ← for i1Profiler (if you exported)
-
-
-Other files and folders you may see, and why:
-
-  project.json                      ChromIQ's project manifest. Read on start-up
-                                    to find out which run is current.
-
-  runs/runN/                        One folder per profile build. Each is
-                                    self-contained; the highest N is the
-                                    "current" one.
-
-  runs/runN/meta.json               Per-run info (created_at, parent run,
-                                    averaging method, etc.).
-
-  runs/runN/{name}.ti1              Chart definition (targen output), fed to
-                                    printtarg. You don't normally touch it.
-
-  runs/runN/{name}.channels.json    Ink-channel sidecar — lets ChromIQ identify
-                                    inks when re-opening a chart later (engine
-                                    charts also keep their exact layout and
-                                    creation recipe in here).
-
-  runs/runN/{name}.pdf              The chart as a vector PDF — only written
-                                    when "Also export PDF" is ticked in the
-                                    layout options.
-
-  runs/runN/{name}.ps               PostScript copy created for printing (sent
-                                    to the printer bypassing colour
-                                    management).
-
-  runs/runN/{name}-colours.txt      The chart's colours as a plain hex list
-                                    (RGB charts only) — can be pasted back
-                                    into the New-chart dialog.
-
-  runs/runN/{name}-i1profiler.txt   The patch set in i1Profiler's formats, so
-  runs/runN/{name}-i1profiler.pxf   the chart can be measured in i1Profiler.
-
-  runs/runN/{name}.cht / .cie       Recognition template + reference values
-                                    for scanner/camera measurement (made by
-                                    the "Create scanner or camera target"
-                                    tool once a measurement exists).
-
-  runs/runN/reads/readN.ti3         Per-read measurements when you use
-                                    "Read again & average". They get averaged
-                                    back into {name}.ti3 when you finish.
-
-  runs/runN/preconditioning.ti3     Copies of the parent run's measurement and
-  runs/runN/preconditioning.icc     profile, created when you click "Use as
-                                    pre-conditioning profile" on a finished
-                                    build. ChromIQ uses them to refine the
-                                    next chart.
-
-  runs/runN/merged.ti3              Build-time merge of {name}.ti3 +
-  runs/runN/merged.icc              preconditioning.ti3 (ChromIQ-style
-                                    refinement). colprof builds from
-                                    merged.ti3; on install you still get the
-                                    clean {name}.icc name.
-
-  runs/runN/calibrated.icc          applycal output — the run's profile with
-                                    the calibration .cal baked in.
-
-  runs/runN/Quality_Check_1_{name}.txt
-  runs/runN/Quality_Check_2_{name}.txt
-                                    Readable reports from "Check profile
-                                    quality" (Check & Refine tab): the
-                                    quality grade, an explanation, the
-                                    strips with the highest error and the
-                                    full check output. Numbered so repeated
-                                    checks keep a little history of how the
-                                    profile improved; safe to delete.
-
-  runs/runN/Refine_Strips_{name}.txt
-                                    The strips flagged for re-measurement
-                                    when a quality check finds weak strips.
-                                    Guided refinement reads it back so the
-                                    Measure tab knows which strips to redo;
-                                    replaced on each new check.
-
-  cal/                              Calibration target (optional; shared by
-                                    every run in this project).
-
-  cal/{name}-cal.ti1 / .ti2 / _NN.tif    The calibration chart (same shape as
-                                         a run's chart, with the "-cal" marker
-                                         so a printed sheet is distinguishable
-                                         from the profiling chart).
-
-  cal/{name}-cal.ti3                The calibration measurement.
-
-  cal/{name}-cal.cal                Calibration curves (printcal output) — the
-                                    file applycal bakes into your profile.
-
-  exports/                          External-tool exports.
-
-  exports/{name}-i1profiler.txt     For i1Profiler (RGB / CMYK only).
-  exports/{name}-i1profiler.pxf     For i1Profiler (always written).
-
-  Where are my files.txt            This file. Informational only — ChromIQ
-                                    does not read or update it after creating
-                                    it. Edit or delete it freely.
-
-
-Safe to tidy: everything can in principle be recreated except your
-measurements ({name}.ti3, reads/, cal/{name}-cal.ti3) — those represent
-real ink on real paper and are worth keeping. The quickest tidy-up is
-deleting old runN folders you no longer need.
+Keep your measurements ({name}.ti3, reads/, cal/{name}-cal.ti3) — they are
+real ink on real paper. Everything in cache/ is always safe to delete.
 """
+
 
 
 class Project:
@@ -566,6 +547,10 @@ class Project:
     def __init__(self, root: Path, manifest: ProjectManifest) -> None:
         self._root = root
         self._manifest = manifest
+        #: True when project.json carries a schema newer than this build knows.
+        #: The project still opens (no format ever moves the valuable files),
+        #: but the UI should tell the user to update ChromIQ (#127).
+        self.schema_too_new: bool = manifest.schema_version > SCHEMA_VERSION
 
     # ---- identity
     @property
@@ -606,12 +591,20 @@ class Project:
             raise FileNotFoundError(f"No project manifest at {mp}")
         data = json.loads(mp.read_text(encoding="utf-8"))
         proj = cls(root, ProjectManifest.from_dict(data))
+        if proj.schema_too_new:
+            log.warning(
+                "Project %s has schema_version %s (this build knows %s) — "
+                "opening without migration; update ChromIQ.",
+                root, proj._manifest.schema_version, SCHEMA_VERSION)
+        elif proj._manifest.schema_version < SCHEMA_VERSION:
+            proj._migrate_v1_to_v2()
         # Backfill the README for projects created before it shipped — and
         # rewrite a 0-byte file, which is exactly the artefact a pre-fix Windows
         # build left behind: write_readme crashed mid-write (UnicodeEncodeError
         # encoding the template's arrows under the cp1252 default), leaving the
         # file created but empty. Never touch a non-empty file — the user is
-        # free to edit theirs.
+        # free to edit theirs (the v1→v2 migration is the one deliberate
+        # exception: it regenerates the guide so it describes the new layout).
         rp = proj.readme_path
         if not rp.exists() or rp.stat().st_size == 0:
             proj.write_readme()
@@ -623,6 +616,101 @@ class Project:
             return cls.load(root)
         return cls.create(root, target_name)
 
+    # ---- v1 → v2 migration (#127)
+    #
+    # v1 kept everything flat in each run folder; v2 groups the ChromIQ-only
+    # files into reports/ (quality checks, refine lists), exports/ (hand-off
+    # sidecars) and cache/ (tool intermediates). Only files matching the exact
+    # patterns ChromIQ itself writes are moved — user files are never touched,
+    # nothing is renamed or deleted, and the Argyll-coupled chain stays put.
+    # Idempotent: a re-run (e.g. after a crash mid-migration) finds nothing
+    # left to move and simply bumps the schema again.
+
+    # Quality_Check_<n>_<stem>.txt / Refine_Strips_<stem>.txt → reports/
+    _MIG_REPORTS = (
+        re.compile(r"^Quality_Check_\d+_.+\.txt$"),
+        re.compile(r"^Refine_Strips_.+\.txt$"),
+    )
+    # scanner-tool intermediates (current and legacy naming) → cache/
+    _MIG_CACHE = (
+        re.compile(r"^.+-patchbox\.cht$"),
+        re.compile(r"^.+-patchbox-sample\.cht$"),
+        re.compile(r"^.+-sample\.cht$"),
+        re.compile(r"^.+-aligned\.cht$"),
+        re.compile(r"^.+-aligned-patchbox.*\.cht$"),
+        re.compile(r"^.+-diag\.tif$", re.IGNORECASE),
+    )
+
+    @staticmethod
+    def _migrate_move(src: Path, dst_dir: Path) -> None:
+        """Move one file into ``dst_dir``; skip (with a warning) on conflict,
+        never raise — a single stubborn file must not abort the migration."""
+        try:
+            dst_dir.mkdir(parents=True, exist_ok=True)
+            dst = dst_dir / src.name
+            if dst.exists():
+                log.warning("migration: %s already exists, leaving %s in place",
+                            dst, src)
+                return
+            shutil.move(str(src), str(dst))
+            log.info("migration: %s -> %s/", src.name, dst_dir.name)
+        except OSError as exc:
+            log.warning("migration: could not move %s: %s", src, exc)
+
+    def _migrate_v1_to_v2(self) -> None:
+        """Tidy a flat (schema 1) project into the v2 sub-folder layout."""
+        log.info("Migrating project %s to folder-layout v2", self._root)
+        stem = self._root.name
+
+        # every run folder — the manifest list plus a defensive glob, so a
+        # run folder missing from a hand-edited manifest is still tidied
+        run_dirs = {self.runs_root / rid for rid in self._manifest.runs}
+        if self.runs_root.exists():
+            run_dirs.update(d for d in self.runs_root.glob("run*") if d.is_dir())
+
+        # The chart chain itself (<stem>.ext / <stem>_NN.ext) must never move,
+        # even when the project NAME happens to end in a pattern tail (a
+        # project called "X-sample" owns a chart "X-sample.cht" that would
+        # otherwise match the cache pattern).
+        def _protected(name: str, chain_stem: str) -> bool:
+            return re.fullmatch(
+                rf"{re.escape(chain_stem)}(_\d+)?\.[\w.]+", name) is not None
+
+        for rd in sorted(run_dirs):
+            if not rd.is_dir():
+                continue
+            for f in sorted(rd.iterdir()):
+                if not f.is_file() or _protected(f.name, stem):
+                    continue
+                if any(rx.match(f.name) for rx in self._MIG_REPORTS):
+                    self._migrate_move(f, rd / REPORTS_DIRNAME)
+                elif f.name in (f"{stem}-colours.txt",
+                                f"{stem}-i1profiler.txt",
+                                f"{stem}-i1profiler.pxf"):
+                    self._migrate_move(f, rd / EXPORTS_DIRNAME)
+                elif any(rx.match(f.name) for rx in self._MIG_CACHE):
+                    self._migrate_move(f, rd / CACHE_DIRNAME)
+
+        cal_dir = self.calibration.dir
+        cal_stem = self.calibration.stem
+        if cal_dir.is_dir():
+            for f in sorted(cal_dir.iterdir()):
+                if not f.is_file() or _protected(f.name, cal_stem):
+                    continue
+                if f.name in (f"{cal_stem}-colours.txt",
+                              f"{cal_stem}-i1profiler.txt",
+                              f"{cal_stem}-i1profiler.pxf"):
+                    self._migrate_move(f, cal_dir / EXPORTS_DIRNAME)
+                elif any(rx.match(f.name) for rx in self._MIG_CACHE):
+                    self._migrate_move(f, cal_dir / CACHE_DIRNAME)
+
+        self._manifest.schema_version = SCHEMA_VERSION
+        self.save_manifest()
+        # Regenerate the folder guide so it describes the layout the user now
+        # actually has — the one deliberate overwrite of this file.
+        self.write_readme()
+        log.info("Migration to v2 complete: %s", self._root)
+
     def save_manifest(self) -> None:
         self._root.mkdir(parents=True, exist_ok=True)
         self.manifest_path.write_text(json.dumps(asdict(self._manifest), indent=2), encoding="utf-8")
@@ -630,15 +718,23 @@ class Project:
     def write_readme(self) -> None:
         """Write a user-facing "Where are my files.txt" at the project root.
 
-        Written by ``create`` for new projects and backfilled by ``load`` if
-        absent. Never overwrites an existing file — the user is free to edit
-        or delete it.
+        Written by ``create`` for new projects, backfilled by ``load`` if
+        absent, and regenerated by the v1→v2 migration. The content is the
+        same folder guide the Welcome/Help card shows (``ui.file_guide`` —
+        one source, no drift), with the ``{name}`` placeholder resolved to
+        the real project name. ``ui.file_guide`` is Qt-free (it imports only
+        ``core.i18n``), so the lazy import is safe in headless contexts; the
+        static template remains as a fallback should it ever fail.
         """
         self._root.mkdir(parents=True, exist_ok=True)
-        self.readme_path.write_text(
-            _PROJECT_README_TEMPLATE.format(name=self.target_name),
-            encoding="utf-8",
-        )
+        try:
+            from ui.file_guide import file_guide_body
+            body = file_guide_body().replace("{name}", self.target_name)
+        except Exception:  # noqa: BLE001 — the guide must never block a project
+            log.warning("file_guide unavailable — falling back to the static "
+                        "README template", exc_info=True)
+            body = _PROJECT_README_FALLBACK.format(name=self.target_name)
+        self.readme_path.write_text(body, encoding="utf-8")
 
     def rename(self, new_stem: str) -> None:
         """Relabel an in-place project from its current stem to ``new_stem``.
@@ -660,12 +756,15 @@ class Project:
             return
 
         # Only rename files shaped like a ChromIQ artefact for this stem:
-        #   <stem>[-cal|-i1profiler|-colours][_NN].<ext...>
+        #   <stem>[-cal][-i1profiler|-colours][_NN].<ext...>
         # so a user's own "<stem>-notes.txt" is left untouched, and structural
         # files (project.json, meta.json, the README) never match. The bare
         # extensions (.ti1/.ti2/.cht/.cie/…) match via the trailing \.[\w.]+$.
+        # -cal may combine with a sidecar marker: a calibration chart's
+        # exports are "<stem>-cal-colours.txt" etc. (#127 — the old
+        # single-marker pattern silently skipped those on rename).
         protected = {self.MANIFEST, self.README, "meta.json"}
-        tail_re = re.compile(r"(-cal|-i1profiler|-colours)?(_\d+)?\.[\w.]+$")
+        tail_re = re.compile(r"(-cal)?(-i1profiler|-colours)?(_\d+)?\.[\w.]+$")
 
         for f in sorted(self._root.rglob("*")):
             if not f.is_file() or f.name in protected:

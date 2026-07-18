@@ -940,6 +940,23 @@ class MainWindow(QMainWindow):
         proj = self._file_mgr.project()
         run = proj.current_run()
 
+        if proj.schema_too_new:
+            # A newer ChromIQ organised this project's folders in a way this
+            # build doesn't know. Opening is safe (profiles/measurements sit
+            # in the same place in every format) but some files may not be
+            # found where this build expects them — tell the user plainly
+            # instead of half-working (#127).
+            from PyQt6.QtWidgets import QMessageBox
+            QMessageBox.information(
+                self, tr("Project from a newer ChromIQ"),
+                tr("The project “{name}” was last used with a newer "
+                   "version of ChromIQ, which organises the project folder "
+                   "differently.\n\n"
+                   "Your profiles and measurements are safe, but some files "
+                   "may not be found where this version expects them. Please "
+                   "update ChromIQ to keep working with this project."
+                   ).format(name=proj.target_name))
+
         if run.chart_ti1.exists():
             self._tab_measure.set_ti1_path(run.chart_ti1)
 

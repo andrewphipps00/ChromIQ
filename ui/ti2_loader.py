@@ -6,10 +6,13 @@ import shutil
 from pathlib import Path
 from typing import TYPE_CHECKING
 from core.i18n import tr
+from core.logger import get_logger
 
 if TYPE_CHECKING:
     from PyQt6.QtWidgets import QWidget
     from core.settings import AppSettings
+
+log = get_logger(__name__)
 
 
 # Matches:  TARGET_INSTRUMENT "GretagMacbeth i1 Pro"
@@ -335,6 +338,18 @@ def _handle_inside(
     dlg.exec()
 
     if choice[0] == "continue":
+        # Run the project through Project.load so an in-place load benefits
+        # from the load-time housekeeping (README backfill, v1→v2 folder
+        # migration, #127) exactly like a session restore. Best-effort — a
+        # corrupt manifest must not block using the chart files as-is.
+        root = _project_root_for(ti2_path, working_dir)
+        if root is not None:
+            try:
+                from core.file_manager import Project
+                Project.load(root)
+            except Exception:  # noqa: BLE001
+                log.warning("in-place load: could not run project "
+                            "housekeeping for %s", root, exc_info=True)
         _, tiffs = _related_files(ti2_path)
         return ti2_path, tiffs
     if choice[0] == "new":
