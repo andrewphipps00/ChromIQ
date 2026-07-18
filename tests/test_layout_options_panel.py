@@ -377,6 +377,35 @@ def test_clip_conflict_flags_locked_side_margin(app):
         assert p.margins[k].isEnabled()
 
 
+def test_instrument_margins_refresh_inch_and_enable_state(app):
+    """Filling the margins from instrument limits must refresh the inch readout
+    next to each box — it fills with signals blocked, so the readout would
+    otherwise keep the previous value (Sebastian). Toggling the option back off
+    must re-enable every margin box, and the clip-border width is never disabled
+    by this option."""
+    from PyQt6.QtWidgets import QLabel
+    from ui.dialogs.layout_options_panel import LayoutOptionsPanel
+    p = LayoutOptionsPanel(with_selectors=True)
+    p.set_threshold_lookup(lambda inst, paper: {"L": 26, "R": 9, "T": 38, "B": 10})
+
+    def inch_text(spin):
+        labels = spin.parentWidget().findChildren(QLabel)
+        return labels[0].text() if labels else ""
+
+    p.use_instr_margins.setChecked(True)
+    assert p.margins["l"].value() == 26
+    assert inch_text(p.margins["l"]) == f"{26 / 25.4:.3f}″"   # 1.024″, not stale
+    assert inch_text(p.margins["r"]) == f"{9 / 25.4:.3f}″"
+    assert inch_text(p.margins["t"]) == f"{38 / 25.4:.3f}″"
+    assert not p.margins["l"].isEnabled()          # locked while ticked
+    assert p.clip_width.isEnabled()                # clip width never locked
+
+    p.use_instr_margins.setChecked(False)
+    for k in ("t", "r", "b", "l"):
+        assert p.margins[k].isEnabled()            # editable again
+    assert p.clip_width.isEnabled()                # still not locked
+
+
 def test_use_instrument_margins_fills_and_locks(app):
     """Ticking "Use instrument margins" fills the four margins from the wired
     threshold lookup and locks them read-only (#93, Knut)."""

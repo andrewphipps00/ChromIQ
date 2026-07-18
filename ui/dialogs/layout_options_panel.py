@@ -306,6 +306,11 @@ class LayoutOptionsPanel(QWidget):
                     inch.setText(f"{v / 25.4:.3f}″")
             spin.valueChanged.connect(_upd)
             _upd()
+            # Expose the updater so callers that fill the value with signals
+            # blocked (e.g. filling instrument margins) can refresh the inch
+            # readout by hand — otherwise it would show the previous value
+            # (Sebastian). Harmless no-op for spinboxes without an inch column.
+            spin._refresh_inch = _upd
             box = QHBoxLayout(); box.setContentsMargins(0, 0, 0, 0); box.setSpacing(6)
             box.addWidget(spin); box.addWidget(inch); box.addStretch()
             wrap = QWidget(self); wrap.setLayout(box)
@@ -1608,6 +1613,12 @@ class LayoutOptionsPanel(QWidget):
             self.margins[k].blockSignals(True)
             self.margins[k].setValue(float(v))
             self.margins[k].blockSignals(False)
+            # Signals were blocked (so we don't fire _emit for every edge), so
+            # the inch readout wouldn't refresh on its own — do it by hand, or
+            # it would keep showing the previous value (Sebastian).
+            refresh = getattr(self.margins[k], "_refresh_inch", None)
+            if refresh is not None:
+                refresh()
 
         if on:
             # Remember the user's typed margins the first time it's ticked, so
