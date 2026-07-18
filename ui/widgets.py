@@ -1410,8 +1410,9 @@ class RevealFolderButton(QToolButton):
         head = side * 0.22
         p.drawLine(QPointF(cx, ax_top), QPointF(cx - head, ax_top + head))
         p.drawLine(QPointF(cx, ax_top), QPointF(cx + head, ax_top + head))
-        # Open-top tray (lower third): ⊔ shape.
-        tw = side * 0.66
+        # Open-top tray (lower third): ⊔ shape, a touch wider than the arrow
+        # for a grounded "reveal" look (Sebastian).
+        tw = side * 0.84
         ty = y0 + side * 0.66
         tb = y0 + side
         lip = side * 0.16
