@@ -136,6 +136,18 @@ def test_unread_confirm_suppressed_during_save_partial_flow():
     assert mgr._save_partial_state is None
 
 
+def test_save_partial_in_progress_tracks_the_prompt_chain():
+    mgr, runner, sigs = _make_manager()
+    assert not mgr.save_partial_in_progress
+    mgr.send_save_partial_and_quit()
+    assert mgr.save_partial_in_progress          # waiting for the strip menu
+    _feed(mgr, "Ready to read strip pass A")
+    assert mgr.save_partial_in_progress          # 'd' sent, waiting for confirm
+    _feed(mgr, "Are you sure [y/n]: ")
+    assert not mgr.save_partial_in_progress      # 'y' sent, chain complete
+    assert runner.writes == ["\r", "d", "y"]
+
+
 def test_generic_ierror_fires_with_friendly_and_technical():
     mgr, _, sigs = _make_manager()
     _feed(mgr, "Got 'Communication error' (USB read timeout) error.")

@@ -3185,6 +3185,17 @@ class TabMeasure(QWidget):
     def _on_instrument_disconnected(self) -> None:
         if self._instrument_disconnected:
             return
+        # The readings live only in chartread's memory until 'd' writes the
+        # .ti3 — killing the process during the Save-Partial chain would
+        # discard them. Let the chain run; if chartread dies anyway,
+        # _on_measure_done reports the failure.
+        if self._manager.save_partial_in_progress:
+            self._log.appendPlainText(
+                "\n" + tr("[WARN] Instrument connection lost — still trying "
+                          "to save the partial measurement…")
+            )
+            self._log.ensureCursorVisible()
+            return
         self._instrument_disconnected = True
         self._log.appendPlainText(
             "\n[ERROR] Instrument disconnected — stopping measurement."
@@ -3211,7 +3222,12 @@ class TabMeasure(QWidget):
                 "<b>The instrument lost communication with the computer.</b><br><br>"
                 "Check that the instrument's cable is firmly connected (try a "
                 "different USB port or cable), make sure no other application is "
-                "using the device, then reconnect it before retrying.") + "<br><br>"
+                "using the device, then reconnect it before retrying.") + "<br><br>" + tr(
+                "<b>Note:</b> saving needs one last response from the instrument. "
+                "Unplug the USB cable and plug it back in — directly into the "
+                "computer if possible, not through a hub — and only then click "
+                "<i>Save Partial &amp; Quit</i>. If the instrument stays silent, "
+                "the readings from this session cannot be saved.") + "<br><br>"
         else:
             advice = tr(
                 "<b>The stripe could not be read:</b> {reason}<br><br>"

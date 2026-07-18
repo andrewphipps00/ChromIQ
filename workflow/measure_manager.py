@@ -216,6 +216,11 @@ class MeasureManager(QObject):
         self._save_partial_state = "wait_strip_menu"
         self._runner.write_stdin("\r")
 
+    @property
+    def save_partial_in_progress(self) -> bool:
+        """True while the Save-Partial-&-Quit prompt chain is still running."""
+        return self._save_partial_state is not None
+
     def abort(self) -> None:
         self._runner.abort()
 
