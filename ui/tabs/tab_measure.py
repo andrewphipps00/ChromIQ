@@ -1480,26 +1480,52 @@ class TabMeasure(QWidget):
         # the chart preview, and guided refinement does the same under the
         # hood. This row is just the reassuring autosave note + how-to.
         self._m_engine_row = QWidget(left)
-        _eng_rl = QHBoxLayout(self._m_engine_row)
-        _eng_rl.setContentsMargins(0, 0, 0, 0)
-        _eng_rl.setSpacing(6)
+        _eng_vl = QVBoxLayout(self._m_engine_row)
+        _eng_vl.setContentsMargins(0, 0, 0, 0)
+        _eng_vl.setSpacing(6)
+        _hint_row = QHBoxLayout()
+        _hint_row.setContentsMargins(0, 0, 0, 0)
+        _hint_row.setSpacing(6)
         self._m_engine_hint = QLabel(
             tr("Tip: click any strip in the chart preview to jump straight "
                "to it — for example to measure a strip again."),
             self._m_engine_row)
         self._m_engine_hint.setWordWrap(True)
-        _eng_rl.addWidget(self._m_engine_hint, stretch=1)
-        # Expected / measured / both view toggle (Knut) — switchable any time.
-        _eng_rl.addWidget(QLabel(tr("Show:"), self._m_engine_row))
+        _hint_row.addWidget(self._m_engine_hint, stretch=1)
+        _hint_row.addWidget(TooltipButton(
+            tr("Jumping between strips"),
+            tr("With the ChromIQ chart-reading engine on, you don't have to "
+            "step through the strips one by one.\n\n"
+            "Simply click a strip directly in the chart preview on the "
+            "right — while a measurement is running, every strip under your "
+            "mouse shows a hand cursor. Clicking takes you straight there.\n\n"
+            "Strips you have already read are marked with a check mark; "
+            "clicking one lets you measure it again — handy after a smudge, "
+            "a misread, or when Check && Refine has flagged strips worth a "
+            "second pass. Guided refinement uses the very same jump "
+            "automatically.\n\n"
+            "This tip appears because the ChromIQ chart-reading engine is "
+            "enabled in Settings → Beta features."),
+            self._m_engine_row))
+        _eng_vl.addLayout(_hint_row)
+        # Expected / measured / both view toggle (Knut) — its own line, with a
+        # compact combo like the other Measure-tab selectors and the help icon
+        # on the same line.
+        _show_row = QHBoxLayout()
+        _show_row.setContentsMargins(0, 0, 0, 0)
+        _show_row.setSpacing(6)
+        _show_row.addWidget(QLabel(tr("Show:"), self._m_engine_row))
         self._m_overlay_mode = NoScrollComboBox(self._m_engine_row)
         self._m_overlay_mode.addItem(tr("Both (split)"), "both")
         self._m_overlay_mode.addItem(tr("Expected"), "expected")
         self._m_overlay_mode.addItem(tr("Measured"), "measured")
+        self._m_overlay_mode.setSizeAdjustPolicy(
+            NoScrollComboBox.SizeAdjustPolicy.AdjustToContents)
         self._m_overlay_mode.currentIndexChanged.connect(
             lambda _i: self._preview.set_overlay_mode(
                 self._m_overlay_mode.currentData()))
-        _eng_rl.addWidget(self._m_overlay_mode)
-        _eng_rl.addWidget(TooltipButton(
+        _show_row.addWidget(self._m_overlay_mode)
+        _show_row.addWidget(TooltipButton(
             tr("Expected / measured view"),
             tr("Choose what the coloured patches in the preview show:\n\n"
             "  • Both (split) — each patch is split diagonally: the colour "
@@ -1514,22 +1540,8 @@ class TabMeasure(QWidget):
             "readings. (Screen colours are approximate; the numbers in your "
             "file are exact.)"),
             self._m_engine_row))
-        _eng_rl.addWidget(TooltipButton(
-            tr("Jumping between strips"),
-            tr("With the ChromIQ chart-reading engine on, you don't have to "
-            "step through the strips one by one.\n\n"
-            "Simply click a strip directly in the chart preview on the "
-            "right — while a measurement is running, every strip under your "
-            "mouse shows a hand cursor. Clicking takes you straight there.\n\n"
-            "Strips you have already read are marked with a check mark; "
-            "clicking one lets you measure it again — handy after a smudge, "
-            "a misread, or when Check && Refine has flagged strips worth a "
-            "second pass. Guided refinement uses the very same jump "
-            "automatically.\n\n"
-            "This tip appears because the ChromIQ chart-reading engine is "
-            "enabled in Settings → Beta features."),
-            self._m_engine_row,
-        ))
+        _show_row.addStretch(1)
+        _eng_vl.addLayout(_show_row)
         mcg.addWidget(self._m_engine_row)
         self._m_engine_row.setVisible(False)
         # The autosave reassurance lives on the preview itself (as a banner
