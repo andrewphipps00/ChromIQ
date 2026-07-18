@@ -132,6 +132,28 @@ def supported() -> list[str]:
     return ["i1", "p3", "CM", "41", "51", "SS"]
 
 
+def default_ruler_mm(key: str) -> float:
+    """The instrument's built-in strip-length limit (ruler / jig), in mm, or
+    0.0 when it has none (ColorMunki and SpectroScan read without a ruler).
+
+    Derived from the engine's own geometry so the Settings display can never
+    drift from what the layout actually enforces (Knut). ``key`` is a device
+    key (``i1``/``p3``/``CM``/``SS``/…) or a friendly Settings label.
+    """
+    key = _MARGIN_LABEL_TO_KEY.get(key, key)
+    try:
+        g = build(key)
+    except Exception:
+        return 0.0
+    return round(float(getattr(g, "ruler_mm", 0.0) or 0.0), 0)
+
+
+# Friendly Settings labels → device keys.
+_MARGIN_LABEL_TO_KEY = {
+    "i1Pro": "i1", "i1Pro 3+": "p3", "ColorMunki": "CM", "SpectroScan": "SS",
+}
+
+
 def build(
     key: str,
     *,

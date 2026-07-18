@@ -1564,11 +1564,23 @@ class SettingsDialog(QDialog):
         ruler_row.addWidget(self._margin_ruler)
         ruler_row.addWidget(TooltipButton(
             tr("Strip length limit"),
-            tr("The longest a single strip of patches may be (mm) before the "
-               "Create Chart preview warns it won't fit your instrument's ruler / "
-               "jig. Set per instrument, paper and orientation. Leave at "
-               "“instrument default” to use the device's built-in ruler length "
-               "(e.g. ~240 mm for the i1Pro)."), self))
+            tr("The longest a single strip of patches may be (in mm) before "
+               "the Create Chart preview warns that it won't fit your "
+               "instrument's ruler or jig.\n\n"
+               "The box starts out showing your instrument's own built-in "
+               "limit, which is different for each device:\n"
+               "  • i1Pro — 240 mm\n"
+               "  • i1Pro 3+ — 220 mm\n"
+               "  • ColorMunki — None (it reads strips without a ruler, so "
+               "there is no fixed limit)\n"
+               "  • SpectroScan — None (a flatbed table; it positions each "
+               "patch itself, so strip length doesn't apply)\n\n"
+               "You normally don't need to change this — it is here only if "
+               "you use a non-standard ruler or jig and want ChromIQ to warn "
+               "you against a different length. Type a value to set your own "
+               "limit for the selected instrument, paper and orientation; set "
+               "it back to the built-in number (or, where there is none, to "
+               "“None”) to go back to the default."), self))
         ruler_row.addStretch(1)
         v.addLayout(ruler_row)
 
@@ -1626,10 +1638,20 @@ class SettingsDialog(QDialog):
                 sb.setValue(round(float(entry.get(key, 0)), 1))
             except (TypeError, ValueError):
                 sb.setValue(0.0)
+        # Strip-length limit: show the EFFECTIVE value — the user's override
+        # if set, otherwise the instrument's own built-in ruler (240 mm i1Pro,
+        # 220 mm i1Pro 3+, None for ColorMunki / SpectroScan). No hidden
+        # hardcoded "instrument default" any more (Knut).
+        from workflow.layout_engine.instruments import default_ruler_mm
+        instr = self._margin_instr.currentText()
+        default_ruler = default_ruler_mm(instr)
         try:
-            self._margin_ruler.setValue(round(float(entry.get("ruler", 0) or 0), 0))
+            override = round(float(entry.get("ruler", 0) or 0), 0)
         except (TypeError, ValueError):
-            self._margin_ruler.setValue(0.0)
+            override = 0.0
+        # "None" is shown at value 0 for instruments that have no ruler.
+        self._margin_ruler.setSpecialValueText(tr("None"))
+        self._margin_ruler.setValue(override if override > 0 else default_ruler)
         self._loading_margin_combo = False
 
     def _restore_default_margin_thresholds(self) -> None:
@@ -1657,7 +1679,14 @@ class SettingsDialog(QDialog):
         key = self._current_margin_key()
         vals = {k: sb.value() for k, sb in self._margin_fields.items()}
         desc = self._margin_desc.text().strip()
-        ruler = self._margin_ruler.value() if getattr(self, "_margin_ruler", None) else 0
+        # The box shows the instrument's built-in ruler when unchanged; only a
+        # value that DIFFERS from that default is stored as a real override, so
+        # the box keeps tracking the built-in limit (and future default bumps)
+        # unless the user deliberately changes it (Knut).
+        from workflow.layout_engine.instruments import default_ruler_mm
+        default_ruler = default_ruler_mm(self._margin_instr.currentText())
+        box_ruler = self._margin_ruler.value() if getattr(self, "_margin_ruler", None) else 0
+        ruler = 0 if round(box_ruler, 0) == round(default_ruler, 0) else box_ruler
         if not any(vals.values()) and not desc and not ruler:
             self._margin_table.pop(key, None)
             return
