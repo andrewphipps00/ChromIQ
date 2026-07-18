@@ -344,6 +344,39 @@ def test_clip_width_margin_conflict_flagging(app):
     assert _has_conflict(p.margins["r"]) and not _has_conflict(p.margins["l"])
 
 
+def test_clip_conflict_flags_locked_side_margin(app):
+    """When "Use instrument margins" locks (disables) the margins, the clip-SIDE
+    margin box must STILL light up red whenever the clip-border width and that
+    side's margin disagree — never the clip-width box (Sebastian). The direction
+    (clip wider or narrower) only changes the tooltip, not which box lights up."""
+    from ui.dialogs.layout_options_panel import LayoutOptionsPanel
+    p = LayoutOptionsPanel(with_selectors=True)
+    p.show()
+    p.instr.setCurrentIndex(p.instr.findData("i1"))    # clip on, side left
+    p.set_threshold_lookup(lambda inst, paper: {"L": 26, "R": 9, "T": 38, "B": 10})
+    p.use_instr_margins.setChecked(True)
+    assert not p.margins["l"].isEnabled()              # locked
+    # clip WIDER than the locked left margin → LEFT box flagged, clip_width clean
+    p.clip_width.setValue(40.0)
+    assert _has_conflict(p.margins["l"]) and not _has_conflict(p.clip_width)
+    assert p.clip_width.toolTip()                       # the why rides on clip_width
+    # clip NARROWER than the left margin → STILL the LEFT box, not clip_width
+    p.clip_width.setValue(15.0)
+    assert _has_conflict(p.margins["l"]) and not _has_conflict(p.clip_width)
+    # equal → nothing flagged
+    p.clip_width.setValue(26.0)
+    assert not _has_conflict(p.margins["l"]) and not _has_conflict(p.clip_width)
+    # right-side clip flags the RIGHT (locked) margin box
+    p.clip_side.setCurrentIndex(p.clip_side.findData("right"))
+    p.clip_width.setValue(20.0)                         # != right margin (9)
+    assert _has_conflict(p.margins["r"])
+    assert not _has_conflict(p.margins["l"]) and not _has_conflict(p.clip_width)
+    # Unticking re-enables every margin AND clears the flag (bug: L/R stayed grey).
+    p.use_instr_margins.setChecked(False)
+    for k in ("t", "r", "b", "l"):
+        assert p.margins[k].isEnabled()
+
+
 def test_use_instrument_margins_fills_and_locks(app):
     """Ticking "Use instrument margins" fills the four margins from the wired
     threshold lookup and locks them read-only (#93, Knut)."""

@@ -1675,6 +1675,21 @@ class LayoutOptionsPanel(QWidget):
                 widget.setToolTip(self._field_conflict_orig.pop(wid))
             widget.setStyleSheet("")
 
+    def _set_field_hint(self, widget, message: "str | None") -> None:
+        """Set an explanatory tooltip on a field **without** a red outline (and
+        restore the original when ``message`` is None). Used to explain a
+        clip↔margin conflict on the always-editable clip-width box while the red
+        outline itself sits on the locked (disabled) margin box, which can't pop
+        a tooltip of its own (Sebastian)."""
+        if not hasattr(self, "_field_hint_orig"):
+            self._field_hint_orig: dict[int, str] = {}
+        wid = id(widget)
+        if message:
+            self._field_hint_orig.setdefault(wid, widget.toolTip())
+            widget.setToolTip(message)
+        elif wid in self._field_hint_orig:
+            widget.setToolTip(self._field_hint_orig.pop(wid))
+
     def _update_clip_margin_conflict(self, *_a) -> None:
         """Clip-border width and the clip-side page margin are **independent**
         inputs; the LARGER of the two is what the engine reserves on that edge
@@ -1696,9 +1711,11 @@ class LayoutOptionsPanel(QWidget):
         m_l, m_r = self.margins.get("l"), self.margins.get("r")
         if m_l is None or m_r is None:
             return
-        # Always start from a clean slate.
+        # Always start from a clean slate (both the red-outline flags and any
+        # tooltip-only hint we parked on the clip-width box).
         for w in (m_l, m_r, self.clip_width):
             self._set_field_conflict(w, None)
+        self._set_field_hint(self.clip_width, None)
         # The conflict highlight stays active even when "Use instrument
         # margins" locks the page margins (Knut): the clip-border width is
         # still yours to change, so knowing which value wins matters. Only the
@@ -1712,24 +1729,47 @@ class LayoutOptionsPanel(QWidget):
         side_name = tr("right") if side == "right" else tr("left")
         cw = self.clip_width.value()
         mv = side_margin.value()
-        if cw > mv + 1e-9:
-            # The clip width wins. Normally we flag the (too-small) margin box,
-            # but when margins are locked that box is disabled and can't show a
-            # tooltip — so flag the clip-width box, which is always editable.
-            if locked:
-                self._set_field_conflict(self.clip_width, tr(
-                    "The clip-border width ({cw:.1f} mm) is wider than the "
-                    "instrument's {side} margin ({mv:.1f} mm), so the "
-                    "clip-border width is what gets reserved on the {side} "
-                    "edge.").format(cw=cw, mv=mv, side=side_name))
+        if abs(cw - mv) <= 1e-9:
+            return                         # equal → nothing to flag
+        clip_wins = cw > mv
+        if locked:
+            # Margins come from the instrument and are locked (disabled), but the
+            # clip-side margin box must STILL light up red whenever the
+            # clip-border width and that side's margin disagree — so you can see
+            # at a glance that the clip zone and the instrument margin don't
+            # match on the {side} edge (Sebastian). The disabled box can't pop
+            # its own tooltip, so the explanation rides on the always-editable
+            # clip-width box.
+            if clip_wins:
+                msg = tr(
+                    "The clip-border width ({cw:.1f} mm) is wider than your "
+                    "instrument's {side} margin ({mv:.1f} mm). On the {side} edge "
+                    "the wider of the two is what gets reserved, so here the "
+                    "clip-border width wins and this margin is effectively "
+                    "overridden. That's fine — the clip border simply sets the "
+                    "spacing on this edge. Lower the clip-border width below "
+                    "{mv:.1f} mm if you want the instrument margin to take over."
+                ).format(cw=cw, mv=mv, side=side_name)
             else:
-                self._set_field_conflict(side_margin, tr(
-                    "The clip-border width ({cw:.1f} mm) is wider than this {side} "
-                    "margin, so the clip-border width is what gets reserved on the "
-                    "{side} edge. Raise this margin above the clip-border width if "
-                    "you want to push the patches further in.").format(
-                        cw=cw, side=side_name))
-        elif mv > cw + 1e-9:
+                msg = tr(
+                    "The clip-border width ({cw:.1f} mm) is narrower than your "
+                    "instrument's {side} margin ({mv:.1f} mm). On the {side} edge "
+                    "the wider of the two is what gets reserved, so here the "
+                    "instrument margin wins and the clip border sits inside it. "
+                    "Raise the clip-border width above {mv:.1f} mm if you want the "
+                    "clip zone to reach past the margin."
+                ).format(cw=cw, mv=mv, side=side_name)
+            self._set_field_conflict(side_margin, msg)
+            self._set_field_hint(self.clip_width, msg)
+        elif clip_wins:
+            # Editable margins: flag the (too-small) margin box you can raise.
+            self._set_field_conflict(side_margin, tr(
+                "The clip-border width ({cw:.1f} mm) is wider than this {side} "
+                "margin, so the clip-border width is what gets reserved on the "
+                "{side} edge. Raise this margin above the clip-border width if "
+                "you want to push the patches further in.").format(
+                    cw=cw, side=side_name))
+        else:
             self._set_field_conflict(self.clip_width, tr(
                 "The {side} margin ({mv:.1f} mm) is wider than the clip-border "
                 "width, so the {side} margin is what gets reserved and this "

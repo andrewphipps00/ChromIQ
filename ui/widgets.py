@@ -1228,6 +1228,74 @@ class PatchGridButton(QToolButton):
         p.end()
 
 
+class StripReadButton(QToolButton):
+    """A single strip (column) of patches with a scan arrow above it, painted in
+    a given accent colour — "read a strip". The Measure-tab sibling of
+    :class:`PatchGridButton`: same flat 40×40 / ``#tooltip_btn`` styling (just
+    the glyph at rest, a faint highlight on hover), so the load buttons across
+    tabs read as one family. Used for "load a chart (.ti2) to measure"
+    (Sebastian)."""
+
+    FRAC = 0.64
+    N_PATCHES = 4
+
+    def __init__(self, color: str, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._color = color
+        self.setObjectName("tooltip_btn")
+        self.setFixedSize(QSize(40, 40))
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._hover = False
+
+    def set_appearance(self, mode: str) -> None:
+        pass  # accent colour is theme-independent
+
+    def enterEvent(self, event) -> None:  # noqa: N802
+        self._hover = True
+        self.update()
+        super().enterEvent(event)
+
+    def leaveEvent(self, event) -> None:  # noqa: N802
+        self._hover = False
+        self.update()
+        super().leaveEvent(event)
+
+    def paintEvent(self, ev) -> None:  # noqa: N802
+        super().paintEvent(ev)  # QSS background (incl. :hover) under the glyph
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        side = min(self.width(), self.height()) * self.FRAC
+        cx = self.width() / 2.0
+        y0 = (self.height() - side) / 2.0
+        color = QColor(self._color)
+        if not self._hover:
+            color.setAlpha(230)
+        # Column of patches (lower ~70%).
+        cw = side * 0.30
+        ch = side * 0.14
+        gap = side * 0.045
+        top = y0 + side * 0.30
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(color)
+        rad = cw * 0.22
+        for i in range(self.N_PATCHES):
+            p.drawRoundedRect(QRectF(cx - cw / 2, top + i * (ch + gap), cw, ch),
+                              rad, rad)
+        # Scan arrow above, pointing down into the strip.
+        pen = QPen(color)
+        pen.setWidthF(1.9)
+        pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        p.setPen(pen)
+        a_top = y0 + side * 0.02
+        a_bot = top - side * 0.05
+        p.drawLine(QPointF(cx, a_top), QPointF(cx, a_bot))
+        head = side * 0.11
+        p.drawLine(QPointF(cx, a_bot), QPointF(cx - head, a_bot - head))
+        p.drawLine(QPointF(cx, a_bot), QPointF(cx + head, a_bot - head))
+        p.end()
+
+
 class MeasuredChartButton(QToolButton):
     """A grid-of-patches glyph with a checkmark, painted in a given accent
     colour — the "measured chart" sibling of :class:`PatchGridButton`.
@@ -1432,12 +1500,13 @@ def replace_log_line(
 @dataclass
 
 class RevealFolderButton(QToolButton):
-    """A small painted "reveal in the file manager" glyph — an up-arrow rising
-    out of an open-top tray — in a given accent colour. Same flat style as
-    :class:`ImageFileButton` / :class:`PatchGridButton` so a row of icon
-    buttons reads as one set (Sebastian)."""
+    """A small painted "reveal in the file manager" glyph — an **open folder**
+    (front flap tilted forward) in a given accent colour. Sebastian: an open
+    folder reads more naturally as "open this folder" than the old tray+arrow.
+    Same flat 40×40 / ``#tooltip_btn`` styling as :class:`PatchGridButton` /
+    :class:`StripReadButton` so a row of icon buttons reads as one set."""
 
-    FRAC = 0.58
+    FRAC = 0.64
 
     def __init__(self, color: str, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -1465,38 +1534,39 @@ class RevealFolderButton(QToolButton):
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         side = min(self.width(), self.height()) * self.FRAC
-        cx = self.width() / 2.0
+        x0 = (self.width() - side) / 2.0
         y0 = (self.height() - side) / 2.0
+
+        def U(u, v):
+            return QPointF(x0 + u * side, y0 + v * side)
+
+        def path(pts, close):
+            pp = QPainterPath()
+            pp.moveTo(pts[0])
+            for q in pts[1:]:
+                pp.lineTo(q)
+            if close:
+                pp.closeSubpath()
+            return pp
+
         color = QColor(self._color)
         if not self._hover:
             color.setAlpha(230)
         pen = QPen(color)
-        pen.setWidthF(1.7)
+        pen.setWidthF(1.6)
         pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
         pen.setCapStyle(Qt.PenCapStyle.RoundCap)
         p.setPen(pen)
+        # Back of the folder, with a tab (outline only).
         p.setBrush(Qt.BrushStyle.NoBrush)
-        # Up-arrow (upper two-thirds).
-        ax_top = y0 + side * 0.04
-        ax_bot = y0 + side * 0.60
-        p.drawLine(QPointF(cx, ax_bot), QPointF(cx, ax_top))
-        head = side * 0.22
-        p.drawLine(QPointF(cx, ax_top), QPointF(cx - head, ax_top + head))
-        p.drawLine(QPointF(cx, ax_top), QPointF(cx + head, ax_top + head))
-        # Open-top tray (lower third): ⊔ shape, a touch wider than the arrow
-        # for a grounded "reveal" look (Sebastian).
-        tw = side * 0.84
-        ty = y0 + side * 0.66
-        tb = y0 + side
-        lip = side * 0.16
-        tray = QPainterPath()
-        tray.moveTo(cx - tw / 2, ty)
-        tray.lineTo(cx - tw / 2, tb - lip)
-        tray.quadTo(cx - tw / 2, tb, cx - tw / 2 + lip, tb)
-        tray.lineTo(cx + tw / 2 - lip, tb)
-        tray.quadTo(cx + tw / 2, tb, cx + tw / 2, tb - lip)
-        tray.lineTo(cx + tw / 2, ty)
-        p.drawPath(tray)
+        p.drawPath(path([U(0.12, 0.34), U(0.40, 0.34), U(0.47, 0.24),
+                         U(0.86, 0.24), U(0.86, 0.44), U(0.12, 0.44)], False))
+        # Front flap, tilted forward (filled) — the "open" of the open folder.
+        fill = QColor(color)
+        fill.setAlpha(235 if self._hover else 205)
+        p.setBrush(fill)
+        p.drawPath(path([U(0.04, 0.50), U(0.72, 0.50), U(0.86, 0.80),
+                         U(0.18, 0.80)], True))
         p.end()
 
 

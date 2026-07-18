@@ -49,12 +49,12 @@ class _Settings:
         self._d[k] = v
 
 
-def test_measure_load_button_is_icon_only_grid(_app):
+def test_measure_load_button_is_icon_only_strip(_app):
     from core.argyll_runner import ArgyllRunner
     from ui.tabs.tab_measure import TabMeasure
-    from ui.widgets import PatchGridButton
+    from ui.widgets import StripReadButton
     tab = TabMeasure(ArgyllRunner(_Settings()), _Settings())
-    assert isinstance(tab._load_ti1_btn, PatchGridButton)
+    assert isinstance(tab._load_ti1_btn, StripReadButton)   # strip+arrow glyph
     assert tab._load_ti1_btn.text() == ""         # no label, just the glyph
     assert tab._load_ti1_btn.toolTip()            # but a helpful tooltip
 
