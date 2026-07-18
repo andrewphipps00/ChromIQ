@@ -403,8 +403,14 @@ class TabProfile(QWidget):
 
         self._file_grp = file_grp = QGroupBox(tr("Measurement Data (.ti3 / i1Profiler .txt)"), colprof_container)
         fg = QHBoxLayout(file_grp)
-        self._load_btn = QPushButton(tr("Load .ti3 or .txt…"), file_grp)
-        set_folder_icon(self._load_btn, "folder_build")
+        from ui.widgets import MeasuredChartButton
+        self._load_btn = MeasuredChartButton(SPEC_CYAN, file_grp)
+        self._load_btn.setToolTip(tr(
+            "Load your measurement data (.ti3, or an i1Profiler .txt export).\n\n"
+            "This is the file the Measure tab saved after reading your printed "
+            "chart — the patch colours your instrument actually measured. "
+            "ChromIQ builds the ICC profile from it. If a matching chart (.ti2) "
+            "sits next to it, ChromIQ picks it up automatically."))
         self._load_btn.clicked.connect(self._on_load_ti3)
         self._file_lbl = QLabel(tr("No file selected"), file_grp)
         self._file_lbl.setStyleSheet("color: #909090; font-size: 11px;")
@@ -758,8 +764,13 @@ class TabProfile(QWidget):
         ti3_g = QVBoxLayout(grp_ti3)
         ti3_g.setSpacing(8)
         in_row = QHBoxLayout()
-        self._pc_load_btn = QPushButton(tr("Load cal_*.ti3…"), grp_ti3)
-        set_folder_icon(self._pc_load_btn, "folder_build")
+        from ui.widgets import MeasuredChartButton
+        self._pc_load_btn = MeasuredChartButton(SPEC_CYAN, grp_ti3)
+        self._pc_load_btn.setToolTip(tr(
+            "Load the calibration measurement (cal_*.ti3).\n\n"
+            "This is the .ti3 from measuring your calibration chart. ChromIQ "
+            "uses it to compute the printer calibration curves before building "
+            "the profile."))
         self._pc_load_btn.clicked.connect(self._pc_browse_ti3)
         self._pc_ti3_lbl = QLabel(tr("No file selected — measure a calibration chart first."), grp_ti3)
         self._pc_ti3_lbl.setStyleSheet("color: #909090; font-size: 11px;")

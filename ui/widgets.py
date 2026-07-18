@@ -1228,6 +1228,79 @@ class PatchGridButton(QToolButton):
         p.end()
 
 
+class MeasuredChartButton(QToolButton):
+    """A grid-of-patches glyph with a checkmark, painted in a given accent
+    colour — the "measured chart" sibling of :class:`PatchGridButton`.
+
+    The plain grid means "a chart"; the tick means "…that has been measured",
+    so it reads as a measurement file (.ti3 / i1Profiler .txt). Used for the
+    "load measurement data" buttons on the Build Profile tab (cyan), matching
+    the icon-only load buttons on Create Chart / Print / Measure (Sebastian).
+    Same flat 40×40 / ``#tooltip_btn`` styling as its siblings: nothing but the
+    glyph at rest, a faint highlight on hover."""
+
+    GRID_FRAC = 0.56   # a touch smaller than PatchGridButton to leave room
+    GRID_N    = 3
+
+    def __init__(self, color: str, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._color = color
+        self.setObjectName("tooltip_btn")
+        self.setFixedSize(QSize(40, 40))
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._hover = False
+
+    def set_appearance(self, mode: str) -> None:
+        pass  # accent colour is theme-independent
+
+    def enterEvent(self, event) -> None:  # noqa: N802
+        self._hover = True
+        self.update()
+        super().enterEvent(event)
+
+    def leaveEvent(self, event) -> None:  # noqa: N802
+        self._hover = False
+        self.update()
+        super().leaveEvent(event)
+
+    def paintEvent(self, ev) -> None:  # noqa: N802
+        super().paintEvent(ev)  # QSS background (incl. :hover) under the glyph
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        side = min(self.width(), self.height()) * self.GRID_FRAC
+        gap  = side * 0.16
+        cell = (side - (self.GRID_N - 1) * gap) / self.GRID_N
+        # Nudge the grid up-left so the tick sits in the freed bottom-right.
+        x0 = (self.width() - side) / 2.0 - self.width() * 0.05
+        y0 = (self.height() - side) / 2.0 - self.height() * 0.05
+        color = QColor(self._color)
+        if not self._hover:
+            color.setAlpha(230)
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(color)
+        rad = cell * 0.22
+        for r in range(self.GRID_N):
+            for c in range(self.GRID_N):
+                x = x0 + c * (cell + gap)
+                y = y0 + r * (cell + gap)
+                p.drawRoundedRect(QRectF(x, y, cell, cell), rad, rad)
+        # Checkmark, bottom-right, over the grid.
+        w = self.width()
+        h = self.height()
+        pen = QPen(color)
+        pen.setWidthF(2.2)
+        pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        p.setPen(pen)
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        tick = QPainterPath()
+        tick.moveTo(w * 0.55, h * 0.64)
+        tick.lineTo(w * 0.66, h * 0.77)
+        tick.lineTo(w * 0.86, h * 0.48)
+        p.drawPath(tick)
+        p.end()
+
+
 def set_folder_icon(btn: QPushButton, name: str) -> None:
     """Set a folder-glyph icon on `btn` and tag it for live theme refresh."""
     btn.setIcon(load_folder_icon(name))

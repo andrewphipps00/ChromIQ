@@ -957,8 +957,14 @@ class TabMeasure(QWidget):
         fg = QVBoxLayout(file_grp)
         fg.setContentsMargins(8, 6, 8, 8)
         file_row = QHBoxLayout()
-        self._load_ti1_btn = QPushButton(tr("Load .ti2 file…"), file_outer)
-        set_folder_icon(self._load_ti1_btn, "folder_measure")
+        from ui.widgets import PatchGridButton
+        self._load_ti1_btn = PatchGridButton(_TAB_COLOR, file_outer)
+        self._load_ti1_btn.setToolTip(tr(
+            "Load a chart file (.ti2) to measure.\n\n"
+            "This is the laid-out chart ChromIQ made for you in Create Chart — "
+            "the same one you printed. Pick it here and the preview shows the "
+            "page(s) so you can read them strip by strip. The finished "
+            "measurements are saved as a .ti3 file for building the profile."))
         self._load_ti1_btn.clicked.connect(self._on_load_ti2)
         self._ti1_lbl = ElidingLabel(tr("No file selected"), file_outer)
         self._ti1_lbl.setStyleSheet("color: #909090; font-size: 11px;")
