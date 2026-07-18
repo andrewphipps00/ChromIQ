@@ -185,9 +185,10 @@ def test_clip_text_size_recipe_roundtrip():
 # ---------------------------------------------------------------------------
 
 def test_file_guide_covers_every_file_family(qapp):
-    from ui.file_guide import file_guide_body, file_guide_title
+    from ui.file_guide import (file_guide_body, file_guide_card_subtitle,
+                               file_guide_card_title)
     body = file_guide_body()
-    assert file_guide_title()
+    assert file_guide_card_title() and file_guide_card_subtitle()
     for needle in (".icc", "_01.tif", ".ti3", ".ti1", ".ti2", "channels.json",
                    ".pdf", ".ps", "-colours.txt", "-i1profiler", ".cht", ".cie",
                    "reads/", "preconditioning", "merged", "calibrated.icc",
@@ -196,10 +197,34 @@ def test_file_guide_covers_every_file_family(qapp):
         assert needle in body, f"guide lost its {needle!r} entry"
 
 
-def test_tools_popup_has_file_guide_entry(qapp):
+def test_welcome_window_has_file_guide_card(qapp):
+    # The guide lives in the Welcome/Help window as its OWN card (Basti) —
+    # not in the Tools popup.
+    from ui.dialogs.welcome_dialog import WORKFLOWS
+    card = next(w for w in WORKFLOWS if w["key"] == "file_guide")
+    assert card["kind"] == "files" and card["title"] and card["subtitle"]
     from ui.tools_popup import _GROUPS
     keys = [e.key for _hdr, entries in _GROUPS for e in entries]
-    assert "file_guide" in keys
+    assert "file_guide" not in keys
+
+
+def test_welcome_file_guide_card_opens_body(qapp):
+    from ui.dialogs.welcome_dialog import WelcomeDialog
+    from ui.file_guide import file_guide_body
+
+    class _S:
+        def get(self, k, d=None):
+            return d
+
+        def set(self, k, v):
+            pass
+
+    dlg = WelcomeDialog(_S())
+    dlg._on_card_clicked("file_guide")
+    from PyQt6.QtWidgets import QLabel
+    texts = [w.text() for w in dlg.findChildren(QLabel)]
+    assert any(t == file_guide_body() for t in texts)
+    assert dlg._stack.currentIndex() == 1
 
 
 def test_project_readme_mentions_new_sidecars():

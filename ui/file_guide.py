@@ -1,9 +1,10 @@
 """The "Where are my files?" folder guide (#125, Knut).
 
 One place that explains every file ChromIQ writes into a project folder: which
-feature creates it, when, and what it's for. Shown as a help card from the
-Tools popup; the same information (in English) is also dropped into each
-project folder as ``Where are my files.txt`` (see ``core.file_manager``).
+feature creates it, when, and what it's for. Shown as its own card in the
+Welcome/Help window (Basti: the help lives there, not in the Tools popup); the
+same information (in English) is also dropped into each project folder as
+``Where are my files.txt`` (see ``core.file_manager``).
 
 The text lives here as a single ``tr()`` catalog key so it is translated like
 every other help text.
@@ -13,8 +14,14 @@ from __future__ import annotations
 from core.i18n import tr
 
 
-def file_guide_title() -> str:
-    return tr("Where are my files? — the ChromIQ folder guide")
+def file_guide_card_title() -> str:
+    """Tile title in the Welcome/Help window's card grid."""
+    return tr("Where are my files? (folder guide)")
+
+
+def file_guide_card_subtitle() -> str:
+    return tr("Every file a ChromIQ project folder can contain — what "
+              "created it, when, and what it's for.")
 
 
 def file_guide_body() -> str:

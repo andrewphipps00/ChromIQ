@@ -58,11 +58,11 @@ internally; only the confusing display is gone.)
   example patterns each and explains, honestly, how a pattern is
   interpreted (letters when it contains "A-Z", plain numbers otherwise)
   and how the two combine into a location like A12.
-- **"Where are my files?"** — Tools → Help now opens a folder guide
-  listing every file a ChromIQ project can contain: which feature creates
-  it, when, and what it's for — ending with what's safe to tidy up. The
-  "Where are my files.txt" dropped into each project folder was updated
-  to match.
+- **"Where are my files?"** — the Welcome/Help window (the "?" button)
+  has a new card: a folder guide listing every file a ChromIQ project can
+  contain — which feature creates it, when, and what it's for — ending
+  with what's safe to tidy up. The "Where are my files.txt" dropped into
+  each project folder was updated to match.
 - The chart-layout information panel now shows how many of a chart's
   patches are paper-white **strip fill-up** ("… of those, fill-up"), and
   the engine's build log spells the same thing out — so a chart growing

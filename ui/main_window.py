@@ -527,13 +527,6 @@ class MainWindow(QMainWindow):
         if key == "patch_cube":
             self._show_patch_cube()
             return
-        if key == "file_guide":
-            # "Where are my files?" — the folder guide help card (#125, Knut).
-            from ui.file_guide import file_guide_body, file_guide_title
-            from ui.tooltip_button import InfoDialog
-            InfoDialog(file_guide_title(), file_guide_body(), self,
-                       min_width=640).exec()
-            return
         from ui.dialogs.tools_dialogs import open_tool_dialog
         # The TI2 layout editor's "Save & apply" hands its chart folder back to
         # the Create Chart tab through this callback.
