@@ -1,0 +1,337 @@
+/* Replay instrument for chromiq-chartread — a fake `inst` object that
+ * feeds scripted readings through the REAL read_strips code path, so the
+ * whole decision logic (recognition, warnings, autosave, F7-R) is
+ * exercised without hardware.
+ *
+ * Replay script format (one directive per line, '#' comments):
+ *   PATCHES <steps-per-pass>
+ *   STRIP <pass-label>            begins a strip block
+ *   <X> <Y> <Z>                   one patch reading (D50 XYZ, 0..100)
+ *
+ * All *faults* and *wrong swipes* are injected live via the JSON command
+ * channel (see chromiq_json.c): {"cmd":"swipe"} triggers reading the armed
+ * strip; optional fields "as":"<label>" (values of another strip),
+ * "reversed":true, "fault":"misread|coms|needs_cal|wrong_config".
+ *
+ * AGPL-3.0 — see ../instlib/License.txt. Part of ChromIQ issue #126. */
+
+#ifdef SALONEINSTLIB
+#include "sa_config.h"
+#else
+#include "aconfig.h"
+#endif
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include "numsup.h"
+#include "cgats.h"
+#include "xspect.h"
+#include "conv.h"
+#include "insttypes.h"
+#include "icoms.h"
+#include "inst.h"
+
+#include "chromiq_ext.h"
+
+const char *cq_replay_path = NULL;
+
+int cq_replay_active(void) {
+	return cq_replay_path != NULL;
+}
+
+/* ---------------- script storage ---------------- */
+
+#define CQ_MAX_STRIPS 512
+#define CQ_MAX_STEPS  64
+
+typedef struct {
+	char   label[8];
+	int    n;
+	double xyz[CQ_MAX_STEPS][3];
+} cq_strip;
+
+static cq_strip cq_strips[CQ_MAX_STRIPS];
+static int      cq_nstrips = 0;
+static int      cq_stipa = 0;
+
+int cq_replay_load(const char *path) {
+	FILE *fp;
+	char line[256];
+	cq_strip *cur = NULL;
+
+	if ((fp = fopen(path, "r")) == NULL) {
+		a1logw(g_log, "chromiq replay: can't open '%s'\n", path);
+		return 1;
+	}
+	while (fgets(line, sizeof(line), fp) != NULL) {
+		char lab[8];
+		double x, y, z;
+		if (line[0] == '#' || line[0] == '\n' || line[0] == '\r')
+			continue;
+		if (sscanf(line, "PATCHES %d", &cq_stipa) == 1)
+			continue;
+		if (sscanf(line, "STRIP %7s", lab) == 1) {
+			if (cq_nstrips >= CQ_MAX_STRIPS) {
+				fclose(fp);
+				return 1;
+			}
+			cur = &cq_strips[cq_nstrips++];
+			memset(cur, 0, sizeof(*cur));
+			strncpy(cur->label, lab, sizeof(cur->label) - 1);
+			continue;
+		}
+		if (cur != NULL && sscanf(line, "%lf %lf %lf", &x, &y, &z) == 3
+		 && cur->n < CQ_MAX_STEPS) {
+			cur->xyz[cur->n][0] = x;
+			cur->xyz[cur->n][1] = y;
+			cur->xyz[cur->n][2] = z;
+			cur->n++;
+		}
+	}
+	fclose(fp);
+	a1logd(g_log, 1, "chromiq replay: %d strips of %d patches from '%s'\n",
+	       cq_nstrips, cq_stipa, path);
+	return cq_nstrips == 0;
+}
+
+static cq_strip *cq_find(const char *label) {
+	int i;
+	for (i = 0; i < cq_nstrips; i++)
+		if (strcmp(cq_strips[i].label, label) == 0)
+			return &cq_strips[i];
+	return NULL;
+}
+
+/* ---------------- fake inst object ---------------- */
+
+typedef struct _cq_inst {
+	INST_OBJ_BASE
+} cq_inst;
+
+static inst_code cq_init_coms(inst *p, baud_rate br, flow_control fc, double tout) {
+	(void)br; (void)fc; (void)tout;
+	p->gotcoms = 1;
+	return inst_ok;
+}
+
+static inst_code cq_init_inst(inst *p) {
+	p->inited = 1;
+	return inst_ok;
+}
+
+static instType cq_get_itype(inst *p) {
+	(void)p;
+	return instI1Pro;		/* reads like an i1Pro strip reader */
+}
+
+static char *cq_get_serial_no(inst *p) {
+	(void)p;
+	return "";
+}
+
+static inst_code cq_get_set_opt(inst *p, inst_opt_type m, ...) {
+	(void)p; (void)m;
+	return inst_ok;
+}
+
+static void cq_capabilities(inst *p, inst_mode *cap1,
+	inst2_capability *cap2, inst3_capability *cap3) {
+	(void)p;
+	if (cap1 != NULL)
+		*cap1 = inst_mode_ref_strip | inst_mode_ref_spot | inst_mode_reflection
+		      | inst_mode_colorimeter;
+	if (cap2 != NULL)
+		*cap2 = inst2_user_trig | inst2_user_switch_trig | inst2_bidi_scan;
+	if (cap3 != NULL)
+		*cap3 = inst3_none;
+}
+
+static inst_code cq_meas_config(inst *p, inst_mode *mmodes,
+	inst_cal_cond *cconds, int *conf_ix) {
+	(void)p; (void)mmodes; (void)cconds; (void)conf_ix;
+	return inst_unsupported;
+}
+
+static inst_code cq_check_mode(inst *p, inst_mode m) {
+	(void)p;
+	if (IMODETST(m, inst_mode_ref_strip) || IMODETST(m, inst_mode_ref_spot))
+		return inst_ok;
+	return inst_unsupported;
+}
+
+static inst_code cq_set_mode(inst *p, inst_mode m) {
+	(void)p; (void)m;
+	return inst_ok;
+}
+
+static inst_cal_type cq_needs_calibration(inst *p) {
+	(void)p;
+	return inst_calt_none;		/* never needs calibration */
+}
+
+static inst_code cq_get_n_a_cals(inst *p, inst_cal_type *needed,
+	inst_cal_type *available) {
+	(void)p;
+	if (needed != NULL)
+		*needed = inst_calt_none;
+	if (available != NULL)
+		*available = inst_calt_none;
+	return inst_ok;
+}
+
+static inst_code cq_calibrate(inst *p, inst_cal_type *calt, inst_cal_cond *calc,
+	inst_calc_id_type *idtype, char id[CALIDLEN]) {
+	(void)p; (void)calc; (void)idtype; (void)id;
+	if (calt != NULL)
+		*calt = inst_calt_none;
+	return inst_ok;
+}
+
+static void cq_set_uicallback(inst *p,
+	inst_code (*uicallback)(void *cntx, inst_ui_purp purp), void *cntx) {
+	p->uicallback = uicallback;
+	p->uic_cntx = cntx;
+}
+
+static void cq_set_event_callback(inst *p,
+	void (*eventcallback)(void *cntx, inst_event_type event), void *cntx) {
+	p->eventcallback = eventcallback;
+	p->event_cntx = cntx;
+}
+
+static char *cq_inst_interp_error(inst *p, inst_code ec) {
+	(void)p;
+	switch (ec & inst_mask) {
+		case inst_misread:      return "Measurement misread (replay)";
+		case inst_coms_fail:    return "Communications failure (replay)";
+		case inst_needs_cal:    return "Instrument needs calibration (replay)";
+		case inst_wrong_config: return "Sensor in wrong position (replay)";
+		default:                return "Replay instrument error";
+	}
+}
+
+static char *cq_interp_error(inst *p, int ec) {
+	(void)p; (void)ec;
+	return "replay";
+}
+
+static int cq_last_scomerr(inst *p) {
+	(void)p;
+	return 0;
+}
+
+static void cq_del(inst *p) {
+	if (p != NULL) {
+		if (p->log != NULL)
+			del_a1log(p->log);
+		free(p);
+	}
+}
+
+/* The heart: block until the ui-callback reports a key/trigger, or the
+ * command thread posts a swipe; then either return the user event exactly
+ * like a real driver, or fill vals[] from the replay script. */
+static inst_code cq_read_strip(inst *p, char *name, int npatch, char *pname,
+	int sguide, double pwid, double gwid, double twid, ipatch *vals) {
+	cq_inst *cq = (cq_inst *)p;
+	cq_strip *st;
+	int i;
+
+	(void)name; (void)sguide; (void)pwid; (void)gwid; (void)twid;
+
+	for (;;) {
+		/* Give the registered uicallback a chance — console keys and JSON
+		 * nav commands surface here as inst_user_abort/inst_user_trig,
+		 * exactly like a real driver polling during its wait. */
+		if (cq->uicallback != NULL) {
+			inst_code uev = cq->uicallback(cq->uic_cntx, inst_armed);
+			if (uev == inst_user_abort)
+				return inst_user_abort;
+			/* inst_user_trig means "read now": treat as swipe of the
+			 * armed strip with no overrides. */
+			if (uev == inst_user_trig) {
+				cq_swipe_as[0] = '\0';
+				cq_swipe_reversed = 0;
+				cq_swipe_fault[0] = '\0';
+				cq_swipe_pending = 1;
+			}
+		}
+
+		if (cq_swipe_pending) {
+			char fault[16];
+			cq_swipe_pending = 0;
+			strncpy(fault, cq_swipe_fault, sizeof(fault) - 1);
+			fault[sizeof(fault) - 1] = '\0';
+
+			if (fault[0] != '\0') {
+				if (strcmp(fault, "misread") == 0)
+					return inst_misread;
+				if (strcmp(fault, "coms") == 0)
+					return inst_coms_fail;
+				if (strcmp(fault, "needs_cal") == 0)
+					return inst_needs_cal;
+				if (strcmp(fault, "wrong_config") == 0)
+					return inst_wrong_config;
+				return inst_misread;
+			}
+
+			st = cq_find(cq_swipe_as[0] != '\0' ? cq_swipe_as : pname);
+			if (st == NULL || st->n < npatch)
+				return inst_misread;	/* script gap reads as misread */
+
+			for (i = 0; i < npatch; i++) {
+				int six = cq_swipe_reversed ? npatch - 1 - i : i;
+				memset(&vals[i], 0, sizeof(ipatch));
+				vals[i].XYZ[0] = st->xyz[six][0];
+				vals[i].XYZ[1] = st->xyz[six][1];
+				vals[i].XYZ[2] = st->xyz[six][2];
+				vals[i].XYZ_v = 1;
+				vals[i].mtype = inst_mrt_reflective;
+				vals[i].sp.spec_n = 0;
+			}
+			return inst_ok;
+		}
+
+		msec_sleep(20);
+	}
+}
+
+/* Members read_strips touches but never exercises on the strip path. */
+static inst_code cq_unsupported(void) {
+	return inst_unsupported;
+}
+
+inst *cq_new_replay_inst(a1log *log,
+	inst_code (*uicallback)(void *cntx, inst_ui_purp purp), void *cntx) {
+	cq_inst *p;
+
+	if ((p = (cq_inst *)calloc(1, sizeof(cq_inst))) == NULL)
+		return NULL;
+
+	p->log = new_a1log_d(log);
+	p->init_coms          = cq_init_coms;
+	p->init_inst          = cq_init_inst;
+	p->get_itype          = cq_get_itype;
+	p->get_serial_no      = cq_get_serial_no;
+	p->get_set_opt        = cq_get_set_opt;
+	p->capabilities       = cq_capabilities;
+	p->meas_config        = cq_meas_config;
+	p->check_mode         = cq_check_mode;
+	p->set_mode           = cq_set_mode;
+	p->needs_calibration  = cq_needs_calibration;
+	p->get_n_a_cals       = cq_get_n_a_cals;
+	p->calibrate          = cq_calibrate;
+	p->set_uicallback     = cq_set_uicallback;
+	p->set_event_callback = cq_set_event_callback;
+	p->inst_interp_error  = cq_inst_interp_error;
+	p->interp_error       = cq_interp_error;
+	p->read_strip         = cq_read_strip;
+	p->last_scomerr       = cq_last_scomerr;
+	p->del                = cq_del;
+	p->dtype              = instI1Pro;
+	p->icom               = NULL;
+	p->uicallback         = uicallback;
+	p->uic_cntx           = cntx;
+
+	return (inst *)p;
+}
