@@ -95,6 +95,33 @@ def test_coord_readout_maps_pointer_to_paper_mm():
     assert pv._coord_readout is False
 
 
+def test_coord_readout_uses_label_space_overlay():
+    """#29 fix: the cross-hair is drawn by a dedicated overlay covering the image
+    label (not baked into the centred canvas), so it lands at the pointer with no
+    offset. The overlay shares the label's coordinates — the tracked position is
+    exactly what it draws."""
+    from PyQt6.QtGui import QMouseEvent
+    from PyQt6.QtCore import QEvent, QPointF
+    pv = _make_preview()
+    pv.set_coord_readout(True, dpi=200.0)
+    assert pv._cursor_overlay is not None and not pv._cursor_overlay.isHidden()
+    # The overlay covers the whole image label (so its coords == label coords).
+    assert pv._cursor_overlay.size() == pv._img_label.size()
+
+    s, ox, oy = pv._paint_geom
+    self_pt = pv._img_label.mapTo(pv, QPoint(int(ox + 60 * s), int(oy + 40 * s)))
+    ev = QMouseEvent(QEvent.Type.MouseMove, QPointF(self_pt), QPointF(self_pt),
+                     Qt.MouseButton.NoButton, Qt.MouseButton.NoButton,
+                     Qt.KeyboardModifier.NoModifier)
+    pv.mouseMoveEvent(ev)
+    # The overlay draws at exactly the tracked label position — no canvas shift.
+    assert pv._cursor_overlay._pos == pv._coord_pos
+    assert pv._cursor_overlay._mm is not None
+    # Leaving clears it.
+    pv.leaveEvent(QEvent(QEvent.Type.Leave))
+    assert pv._cursor_overlay._pos is None
+
+
 def test_patch_overlay_accumulates_and_clears():
     pv = _make_preview()
     items = [(QRect(10, 10, 20, 20), QColor("red"), QColor("blue"), False)]

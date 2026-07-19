@@ -244,6 +244,62 @@ def load_tiff_as_rgb(
     return TiffPreview._load_frame(path, frame, ink_channels)
 
 
+class _CursorOverlay(QWidget):
+    """A transparent overlay that draws the #29 coordinate cross-hair + readout
+    box right at the pointer. It sits on top of the image label and shares its
+    coordinates, so it needs no centring maths, and it repaints itself alone —
+    no chart re-render — so the cross tracks the mouse smoothly and instantly.
+    Transparent to mouse events, so hovering/clicking still reaches the preview."""
+
+    def __init__(self, parent: QWidget) -> None:
+        super().__init__(parent)
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+        self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, True)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+        self._pos: "QPoint | None" = None
+        self._mm: "tuple[float, float] | None" = None
+
+    def show_cursor(self, pos: "QPoint | None", mm: "tuple[float, float] | None") -> None:
+        self._pos, self._mm = pos, mm
+        self.update()
+
+    def paintEvent(self, _ev) -> None:  # noqa: N802
+        if self._pos is None or self._mm is None:
+            return
+        from PyQt6.QtGui import QPen, QFontMetrics
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing, False)
+        cx, cy = self._pos.x(), self._pos.y()
+        arm = 8
+        for pen_col, w in ((QColor(255, 255, 255, 235), 2.4),
+                           (QColor(20, 20, 20), 0.8)):
+            pen = QPen(pen_col); pen.setWidthF(w); p.setPen(pen)
+            p.drawLine(cx - arm, cy, cx + arm, cy)
+            p.drawLine(cx, cy - arm, cx, cy + arm)
+
+        x_mm, y_mm = self._mm
+        line_mm = tr("X {x:.1f}   Y {y:.1f} mm").format(x=x_mm, y=y_mm)
+        line_in = tr("X {x:.3f}   Y {y:.3f} in").format(x=x_mm / 25.4, y=y_mm / 25.4)
+        font = QFont("Menlo"); font.setPixelSize(11); p.setFont(font)
+        fm = QFontMetrics(font)
+        pad = 4
+        bw = max(fm.horizontalAdvance(line_mm), fm.horizontalAdvance(line_in)) + 2 * pad
+        bh = 2 * fm.height() + 2 * pad
+        bx = cx + arm + 4
+        by = cy - bh / 2
+        if bx + bw > self.width():
+            bx = cx - arm - 4 - bw
+        bx = max(2.0, min(bx, self.width() - bw - 2))
+        by = max(2.0, min(by, self.height() - bh - 2))
+        p.setPen(Qt.PenStyle.NoPen); p.setBrush(QColor(0, 0, 0, 175))
+        p.drawRoundedRect(int(bx), int(by), int(bw), int(bh), 3, 3)
+        p.setBrush(Qt.BrushStyle.NoBrush); p.setPen(QColor(255, 255, 255))
+        ty = by + pad + fm.ascent()
+        p.drawText(int(bx + pad), int(ty), line_mm)
+        p.drawText(int(bx + pad), int(ty + fm.height()), line_in)
+        p.end()
+
+
 # ---------------------------------------------------------------------------
 # Widget
 # ---------------------------------------------------------------------------
@@ -308,6 +364,7 @@ class TiffPreview(QWidget):
         self._coord_readout: bool = False
         self._coord_dpi: float = 300.0
         self._coord_pos: "QPoint | None" = None   # label-space cursor position
+        self._cursor_overlay: "_CursorOverlay | None" = None
         self._mode: str = "dark"
         self._refresh_timer = QTimer(self)
         self._refresh_timer.setSingleShot(True)
@@ -472,8 +529,22 @@ class TiffPreview(QWidget):
         self.setMouseTracking(True)
         if self._img_label is not None and not sip.isdeleted(self._img_label):
             self._img_label.setMouseTracking(True)
-        if self._pixmap:
-            self._repaint_label()
+            if self._coord_readout and self._cursor_overlay is None:
+                self._cursor_overlay = _CursorOverlay(self._img_label)
+            if self._cursor_overlay is not None:
+                self._sync_cursor_overlay_geometry()
+                self._cursor_overlay.setVisible(self._coord_readout)
+                if not self._coord_readout:
+                    self._cursor_overlay.show_cursor(None, None)
+
+    def _sync_cursor_overlay_geometry(self) -> None:
+        """Keep the cursor overlay covering the whole image label, so its
+        coordinates equal the label's (no offset) and it sits over the chart."""
+        ov = self._cursor_overlay
+        if ov is None or self._img_label is None or sip.isdeleted(self._img_label):
+            return
+        ov.setGeometry(0, 0, self._img_label.width(), self._img_label.height())
+        ov.raise_()
 
     def _coord_mm_at(self, label_pos) -> "tuple[float, float] | None":
         """Paper (x, y) in mm at a label-space position, from the paper's
@@ -1230,11 +1301,12 @@ class TiffPreview(QWidget):
                               (scaled.width() / dpr) / max(1, self._pixmap.width()),
                               B, B)
 
-        if self._coord_readout:
-            self._draw_coord_readout(painter)
-
         painter.end()
         self._img_label.setPixmap(canvas)
+        # The coordinate cross-hair lives in its own overlay (drawn on mouse
+        # move, not baked into the canvas) — keep it covering the label (#29).
+        if self._cursor_overlay is not None and self._coord_readout:
+            self._sync_cursor_overlay_geometry()
 
     def _draw_cq_overlay(self, painter: QPainter,
                          s: float, ox: float, oy: float) -> None:
@@ -1526,57 +1598,6 @@ class TiffPreview(QWidget):
 
         painter.setPen(Qt.PenStyle.SolidLine)
 
-    def _draw_coord_readout(self, painter: QPainter) -> None:
-        """Cross-hair at the pointer + its paper (x, y) in mm and inch (#29).
-
-        A thin hairline cross marks the exact spot; the position — measured
-        from the paper's top-left corner — is drawn just to its right in a small
-        legible box (mm on top with one decimal, inch below with three), so it
-        never hides behind the pointer or under a patch colour."""
-        from PyQt6.QtGui import QPen, QFont, QFontMetrics
-        if self._coord_pos is None:
-            return
-        mm = self._coord_mm_at(self._coord_pos)
-        if mm is None:
-            return
-        cx, cy = self._coord_pos.x(), self._coord_pos.y()
-        arm = 8               # cross arm length (logical px)
-        # White halo then a dark hairline, so the cross reads on any colour.
-        for pen_col, w in ((QColor(255, 255, 255, 230), 2.4),
-                           (QColor(20, 20, 20), 0.8)):
-            pen = QPen(pen_col); pen.setWidthF(w); painter.setPen(pen)
-            painter.drawLine(int(cx - arm), int(cy), int(cx + arm), int(cy))
-            painter.drawLine(int(cx), int(cy - arm), int(cx), int(cy + arm))
-
-        x_mm, y_mm = mm
-        line_mm = tr("X {x:.1f}   Y {y:.1f} mm").format(x=x_mm, y=y_mm)
-        line_in = tr("X {x:.3f}   Y {y:.3f} in").format(
-            x=x_mm / 25.4, y=y_mm / 25.4)
-        font = QFont("Menlo"); font.setPixelSize(11)
-        painter.setFont(font)
-        fm = QFontMetrics(font)
-        tw = max(fm.horizontalAdvance(line_mm), fm.horizontalAdvance(line_in))
-        pad = 4
-        bw = tw + 2 * pad
-        bh = 2 * fm.height() + 2 * pad
-        # Default to the pointer's right; flip left / up near the widget edge.
-        bx = cx + arm + 4
-        by = cy - bh / 2
-        lbl_w = self._img_label.width() if self._img_label is not None else bx + bw
-        lbl_h = self._img_label.height() if self._img_label is not None else by + bh
-        if bx + bw > lbl_w:
-            bx = cx - arm - 4 - bw            # flip to the pointer's left
-        bx = max(2.0, min(bx, lbl_w - bw - 2))
-        by = max(2.0, min(by, lbl_h - bh - 2))
-        painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(QColor(0, 0, 0, 165))
-        painter.drawRoundedRect(int(bx), int(by), int(bw), int(bh), 3, 3)
-        painter.setBrush(Qt.BrushStyle.NoBrush)
-        painter.setPen(QColor(255, 255, 255))
-        ty = by + pad + fm.ascent()
-        painter.drawText(int(bx + pad), int(ty), line_mm)
-        painter.drawText(int(bx + pad), int(ty + fm.height()), line_in)
-
     def _repaint_interactive(self) -> None:
         """Fit-to-window at zoom 1, then scale + pan within the viewport. The
         canvas fills the whole viewport (so the margin shows around a zoomed
@@ -1619,10 +1640,10 @@ class TiffPreview(QWidget):
         # #126 engine overlays (split patches, hover outline, legend)
         self._draw_cq_overlay(painter, scale, x, y)
         self._paint_geom = (scale, x, y)   # for the cursor→image mapping (#72)
-        if self._coord_readout:
-            self._draw_coord_readout(painter)
         painter.end()
         self._img_label.setPixmap(canvas)
+        if self._cursor_overlay is not None and self._coord_readout:
+            self._sync_cursor_overlay_geometry()
 
     def wheelEvent(self, event) -> None:  # type: ignore[override]
         if not (self._interactive and self._pixmap):
@@ -1678,13 +1699,19 @@ class TiffPreview(QWidget):
         if self._coord_readout and self._pixmap is not None:
             self._coord_pos = self._img_label.mapFrom(
                 self, event.position().toPoint())
-            self._schedule_refresh()
+            # Draw straight into the lightweight overlay — no chart re-render —
+            # so the cross-hair tracks the pointer instantly (#29).
+            if self._cursor_overlay is not None:
+                self._sync_cursor_overlay_geometry()
+                self._cursor_overlay.show_cursor(
+                    self._coord_pos, self._coord_mm_at(self._coord_pos))
         super().mouseMoveEvent(event)
 
     def leaveEvent(self, event) -> None:  # type: ignore[override]
         if self._coord_readout and self._coord_pos is not None:
             self._coord_pos = None
-            self._schedule_refresh()
+            if self._cursor_overlay is not None:
+                self._cursor_overlay.show_cursor(None, None)
         super().leaveEvent(event)
 
     def mouseReleaseEvent(self, event) -> None:  # type: ignore[override]
