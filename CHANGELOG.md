@@ -19,6 +19,7 @@ Measure-tab chart-reading-engine polish (Knut/Basti).
   to it now follows the pointer without delay, and its mint frame includes the
   strip's edge spacers (detected from the chart's own geometry) so it matches
   the whole swiped strip.
+- **Click a strip to jump to it in Guided mode too**, not just Manual.
 
 ## v3.13.12-beta.11
 
