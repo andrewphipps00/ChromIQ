@@ -3800,6 +3800,13 @@ class TabMeasure(QWidget):
         _dim_style = f"color: {_dim_text}; background: transparent; border: none;"
         _plain_style = "background: transparent; border: none;"
 
+        # Instrument-specific "how to scan a strip" wording, shared by all three
+        # variants below (standard / guided / resume) so the physical steps match
+        # the chart's instrument (ColorMunki dial, i1Pro base-and-slide, …).
+        from ui.ti2_loader import instrument_family, measurement_instructions_html
+        _fam = instrument_family(self._detected_instrument)
+        _how = measurement_instructions_html(_fam)
+
         if self._guided_refinement_active and self._strip_list:
             first = self._strip_list[0]
             n = len(self._strip_list)
@@ -3831,9 +3838,11 @@ class TabMeasure(QWidget):
             layout.addWidget(hint_frame)
 
             first_lbl = QLabel(
-                tr("<b>First strip: {first}</b> — place your instrument there and scan when ready.").format(first=first),
+                tr("<b>First strip: {first}.</b> When it's highlighted, scan it "
+                   "like this:<br><br>{how}").format(first=first, how=_how),
                 dlg,
             )
+            first_lbl.setTextFormat(Qt.TextFormat.RichText)
             first_lbl.setWordWrap(True)
             layout.addWidget(first_lbl)
 
@@ -3867,7 +3876,7 @@ class TabMeasure(QWidget):
             sfl.setColumnStretch(1, 1)
             steps = [
                 ("1.", tr("Press <b>f</b> (forward) or <b>b</b> (back) until chartread shows the strip you want.")),
-                ("2.", tr("Place your instrument on that strip and scan it.")),
+                ("2.", _how),
                 ("3.", tr("Repeat for each strip you want to update, then press <b>d</b> to finish and save.")),
             ]
             for row, (num, text) in enumerate(steps):
@@ -3892,14 +3901,10 @@ class TabMeasure(QWidget):
         else:
             dlg.setWindowTitle(tr("Calibration Complete — How to Measure"))
 
-            from ui.ti2_loader import (instrument_family,
-                                       measurement_instructions_html)
-            _fam = instrument_family(self._detected_instrument)
             msg = QLabel(
                 tr("<b>Calibration complete. You are ready to start measuring."
                    "</b><br><br>{how}<br><br>Then proceed stripe by stripe until "
-                   "all are done.").format(
-                    how=measurement_instructions_html(_fam)),
+                   "all are done.").format(how=_how),
                 dlg,
             )
             msg.setTextFormat(Qt.TextFormat.RichText)
