@@ -9,7 +9,7 @@ from typing import Optional
 
 from PIL import Image
 from PyQt6 import sip
-from PyQt6.QtCore import QPoint, QPointF, QRect, QSize, Qt, QTimer, pyqtSignal
+from PyQt6.QtCore import QPoint, QPointF, QRect, QRectF, QSize, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QColor, QFont, QPainter, QPainterPath, QPixmap
 from PyQt6.QtWidgets import (
     QHBoxLayout,
@@ -1216,10 +1216,34 @@ class TiffPreview(QWidget):
                 painter.fillRect(x0, y0, w, h, c_meas)
                 painter.fillPath(tri, c_exp)
             if warn:
-                pen = QPen(QColor("#e0564b"))
-                pen.setWidthF(max(1.5, s * 2))
-                painter.setPen(pen)
-                painter.drawRect(x0, y0, w, h)
+                # A bright red outline over a white halo (the same trick the
+                # margin guides use) so a likely misread is unmistakable on ANY
+                # patch colour — a muted red-on-red border was easy to miss
+                # (Sebastian). The stroke widths are constant across the page
+                # (from the zoom `s`, NOT the per-patch size) and the frame is a
+                # float QRectF inset by exactly half the halo width, so its outer
+                # edge lands precisely on the fill box (x0..x1, y0..y1) on every
+                # patch — no per-patch rounding drift (Sebastian: "off by a
+                # little" on some patches).
+                rw = max(1.8, s * 2.2)
+                hw = rw + 2.6
+                inset = hw / 2.0
+                if w - 2 * inset >= 1 and h - 2 * inset >= 1:
+                    wr = QRectF(x0 + inset, y0 + inset,
+                                w - 2 * inset, h - 2 * inset)
+                else:                       # tiny patch: hug the box itself
+                    wr = QRectF(x0 + 0.5, y0 + 0.5, w - 1, h - 1)
+                painter.setBrush(Qt.BrushStyle.NoBrush)
+                halo = QPen(QColor(255, 255, 255, 235))
+                halo.setWidthF(hw)
+                halo.setJoinStyle(Qt.PenJoinStyle.MiterJoin)
+                painter.setPen(halo)
+                painter.drawRect(wr)
+                red = QPen(QColor("#ff2b2b"))
+                red.setWidthF(rw)
+                red.setJoinStyle(Qt.PenJoinStyle.MiterJoin)
+                painter.setPen(red)
+                painter.drawRect(wr)
 
         if self._stripe_click_enabled and self._hover_stripe >= 0 \
                 and self._hover_stripe < len(self._stripe_rects):
