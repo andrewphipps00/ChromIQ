@@ -18,6 +18,7 @@ extern "C" {
 /* ---- mode flags (set once during argument parsing) -------------------- */
 extern int cq_json;      /* 1 = emit JSON events, accept JSON commands     */
 extern int cq_autosave;  /* 1 = write .ti3 after every accepted strip      */
+extern int cq_safenet;   /* 1 = misalignment safety net (opt-in, #50)      */
 
 /* ---- JSON event emission (no-ops when cq_json == 0) ------------------- */
 void cq_emit_raw(const char *fmt, ...);   /* fmt is a complete JSON object */

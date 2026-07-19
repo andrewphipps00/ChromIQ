@@ -858,6 +858,7 @@ class TabMeasure(QWidget):
         self._manager.no_instrument.connect(self._on_no_instrument)
         self._manager.wrong_strip.connect(self._on_wrong_strip)
         self._manager.unexpected_response.connect(self._on_unexpected_response)
+        self._manager.strip_misaligned.connect(self._on_strip_misaligned)
         self._manager.sensor_wrong_position.connect(self._on_sensor_wrong_position)
         self._manager.usb_claimed_by_vm.connect(self._on_usb_claimed_by_vm)
         # A. Mid-measurement recovery dialogs
@@ -3118,6 +3119,71 @@ class TabMeasure(QWidget):
             duration_ms=8000,
         )
 
+    def _on_strip_misaligned(self, strip: str, offset: int,
+                             base_de: str, best_de: str) -> None:
+        """Opt-in safety net (#50): a strip fit dramatically better shifted by a
+        patch — a likely one-off misread. Offer to re-measure it. This fires
+        AFTER the strip is already saved, so we don't answer a chartread prompt;
+        we just inform and, on request, jump back to re-read the strip."""
+        from PyQt6.QtWidgets import (
+            QDialog, QHBoxLayout, QLabel, QPushButton, QVBoxLayout,
+        )
+        n = abs(int(offset))
+        patches = (tr("one patch") if n == 1
+                   else tr("{n} patches").format(n=n))
+        dlg = QDialog(self)
+        dlg.setWindowTitle(tr("Strip may be misaligned"))
+        dlg.setMinimumWidth(540)
+        layout = QVBoxLayout(dlg)
+        layout.setSpacing(16)
+        layout.setContentsMargins(24, 20, 24, 20)
+        msg = QLabel(tr(
+            "<b>Strip {strip} may have been read slightly out of alignment.</b>"
+            "<br><br>Its colours came out much closer to the chart's design when "
+            "shifted by {patches} — the average colour error drops from {base} to "
+            "{best} ΔE. That usually means the reader locked onto the row one "
+            "patch off (for example it started on the blank paper before the "
+            "first patch), so every patch is filed one position out and the last "
+            "one reads the empty paper.<br><br>Nothing else is affected — your "
+            "other strips and everything read so far are saved. It is only this "
+            "one strip.<br><br>&nbsp;&nbsp;<b>Re-measure this strip</b> — jump "
+            "back to strip {strip} and scan it again (recommended).<br><br>"
+            "&nbsp;&nbsp;<b>Keep it</b> — accept this reading as it is.<br><br>"
+            "&nbsp;&nbsp;<b>Stop</b> — stop measuring for now."
+        ).format(strip=strip, patches=patches, base=base_de, best=best_de), dlg)
+        msg.setWordWrap(True)
+        layout.addWidget(msg)
+
+        choice = ["keep"]
+        remeasure_btn = QPushButton(tr("Re-measure this strip"), dlg)
+        keep_btn = QPushButton(tr("Keep it"), dlg)
+        stop_btn = QPushButton(tr("Stop"), dlg)
+        remeasure_btn.setObjectName("primary")
+        for b in (remeasure_btn, keep_btn, stop_btn):
+            b.setFixedHeight(32)
+
+        def _pick(v):
+            choice[0] = v
+            dlg.accept()
+        remeasure_btn.clicked.connect(lambda: _pick("remeasure"))
+        keep_btn.clicked.connect(lambda: _pick("keep"))
+        stop_btn.clicked.connect(lambda: _pick("stop"))
+
+        row = QHBoxLayout()
+        row.setSpacing(8)
+        row.addWidget(remeasure_btn)
+        row.addWidget(keep_btn)
+        row.addStretch()
+        row.addWidget(stop_btn)
+        layout.addLayout(row)
+
+        tint_dialog_primary(dlg, _TAB_COLOR)
+        dlg.exec()
+        if choice[0] == "remeasure":
+            self._manager.goto_strip(strip)     # re-read this strip next
+        elif choice[0] == "stop":
+            self._on_stop()
+
     def _flash_status(self, text: str, duration_ms: int = 8000) -> None:
         self._status_bar_lbl.setText(text)
         self._status_bar_lbl.setVisible(True)
@@ -5259,6 +5325,7 @@ class TabMeasure(QWidget):
                    "available on this system — using regular chartread. "
                    "Everything works as before."))
             return p
+        p.engine_safenet = bool(self._settings.get("misalign_safenet", False))
         import os as _os
         replay = _os.environ.get("CHROMIQ_REPLAY")
         if replay:

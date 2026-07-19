@@ -109,6 +109,9 @@ class MeasureParams:
     engine_helper: Path | None = None
     # Dev/testing: replay script path — no instrument needed.
     engine_replay: Path | None = None
+    # Opt-in misalignment safety net (#50): pass --safenet to the helper so it
+    # warns when a strip would fit dramatically better shifted by a patch.
+    engine_safenet: bool = False
 
 
 class MeasureManager(QObject):
@@ -122,6 +125,8 @@ class MeasureManager(QObject):
     no_instrument           = pyqtSignal()     # emitted when no instrument is detected at startup
     wrong_strip             = pyqtSignal(str, str)  # (read_strip, expected_strip)
     unexpected_response     = pyqtSignal(str)       # carries the DeltaE value string
+    # #50 safety net: (strip, offset, base_de_str, best_de_str)
+    strip_misaligned        = pyqtSignal(str, int, str, str)
     sensor_wrong_position   = pyqtSignal()          # emitted when instrument is in calibration position during scan
     usb_claimed_by_vm       = pyqtSignal()          # emitted when USB device is held exclusively by a VM
 
@@ -197,6 +202,8 @@ class MeasureManager(QObject):
 
         if self._engine_active:
             eargs = ["--json"]
+            if params.engine_safenet:
+                eargs += ["--safenet"]
             if params.engine_replay is not None:
                 eargs += ["--replay", str(params.engine_replay)]
             eargs += args
@@ -368,6 +375,13 @@ class MeasureManager(QObject):
                                       str(ev.get("expected", "?")).upper())
             else:
                 self.unexpected_response.emit(f"{ev.get('worst_de', 0):.2f}")
+
+        elif kind == "strip_misaligned":            # #50 safety net (opt-in)
+            self.strip_misaligned.emit(
+                str(ev.get("strip", "?")).upper(),
+                int(ev.get("offset", 0)),
+                f"{ev.get('base_de', 0):.1f}",
+                f"{ev.get('best_de', 0):.1f}")
 
         elif kind == "error":
             ekind = ev.get("kind", "")

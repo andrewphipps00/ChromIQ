@@ -555,6 +555,79 @@ static void cq_emit_strip_read(chcol **scb, int stipa, const char *label,
 	fflush(stdout);
 }
 
+/* CHROMIQ_EXT: misalignment safety net (opt-in, #50). After a strip is read,
+ * if it fits its expected colours badly, probe small ±offsets to see whether a
+ * shift gives a dramatically better match — the signature of the reader locking
+ * the patch grid one square off. Detection only: a real one-patch misread loses
+ * a patch (it read the paper gap), which re-indexing can't restore, so we only
+ * REPORT the offset and let the GUI offer a re-measure. Conservative by
+ * construction — probes only strips that fit badly, and accepts a shift only
+ * when it is BOTH absolutely good AND far better than the current alignment, so
+ * a legitimately vivid strip (high dE at every offset) never trips it. */
+#define CQ_MIS_TRIGGER_DE 12.0   /* probe only if base mean dE >= this   */
+#define CQ_MIS_GOOD_DE     6.0   /* a shift must reach at least this fit  */
+#define CQ_MIS_RATIO       0.5   /* ...and be <= this fraction of base    */
+#define CQ_MIS_MAX_OFF     2
+
+/* Mean dE of assigning scb[i] <- vals[i+skipp+boff+off] (mirrored when bdir),
+ * over the in-range patches only; *n_valid returns the overlap count. */
+static double cq_strip_mean_de_at(ipatch *vals, int navail, chcol **scb,
+                                  int stipa, int skipp, int boff, int off,
+                                  int bdir, int *n_valid) {
+	double sum = 0.0;
+	int i, j, cnt = 0;
+
+	for (i = 0; i < stipa; i++) {
+		double labm[3], labe[3], xyz[3], de;
+		int ix = i + skipp + boff + off;
+		if (bdir != 0)
+			ix = stipa - 1 - ix;              /* mirror as the transfer does */
+		if (ix < 0 || ix >= navail || vals[ix].XYZ_v == 0)
+			continue;                          /* out of range / unread -> skip */
+		for (j = 0; j < 3; j++)
+			xyz[j] = vals[ix].XYZ[j] / 100.0;
+		icmXYZ2Lab(&icmD50, labm, xyz);
+		for (j = 0; j < 3; j++)
+			xyz[j] = scb[i]->eXYZ[j] / 100.0;
+		icmXYZ2Lab(&icmD50, labe, xyz);
+		de = icmLabDE(labm, labe);
+		sum += de;
+		cnt++;
+	}
+	if (n_valid != NULL)
+		*n_valid = cnt;
+	return cnt > 0 ? sum / (double)cnt : 1e9;
+}
+
+/* Returns the detected shift (0 = looks aligned) and fills the base/best mean. */
+static int cq_detect_misalign(ipatch *vals, int navail, chcol **scb, int stipa,
+                              int skipp, int boff, int bdir,
+                              double *base_mean, double *best_mean) {
+	int off, nv, best_off = 0;
+	double m0, m;
+
+	m0 = cq_strip_mean_de_at(vals, navail, scb, stipa, skipp, boff, 0, bdir, &nv);
+	*base_mean = *best_mean = m0;
+	if (m0 < CQ_MIS_TRIGGER_DE)               /* good enough -> nothing to do */
+		return 0;
+	for (off = -CQ_MIS_MAX_OFF; off <= CQ_MIS_MAX_OFF; off++) {
+		if (off == 0)
+			continue;
+		m = cq_strip_mean_de_at(vals, navail, scb, stipa, skipp, boff, off, bdir, &nv);
+		if (nv < stipa - CQ_MIS_MAX_OFF - 1)  /* need real overlap, no fluke win */
+			continue;
+		if (m < *best_mean) {
+			*best_mean = m;
+			best_off = off;
+		}
+	}
+	if (best_off != 0
+	 && *best_mean <= CQ_MIS_GOOD_DE
+	 && *best_mean <= m0 * CQ_MIS_RATIO)
+		return best_off;
+	return 0;
+}
+
 /* JSON-mode replacement for the blocking error/confirm prompts: identical
  * key semantics, but the answer arrives as a command, never from the
  * console (stdin belongs to the command channel in JSON mode). */
@@ -2314,6 +2387,23 @@ a1log *log			/* verb, debug & error log */
 				if (snn != NULL)
 					free(snn);
 			}
+			/* CHROMIQ_EXT (#50): opt-in misalignment safety net. Warn the GUI
+			 * when a small shift would fit this strip dramatically better — a
+			 * likely one-off misread (the reader locked the grid a patch off).
+			 * Off unless --safenet, so default behaviour never changes. */
+			if (cq_safenet) {
+				double base_de, best_de;
+				int mis = cq_detect_misalign(vals, stipa + nextrap, scb, stipa,
+				                             skipp, boff, bdir, &base_de, &best_de);
+				if (mis != 0) {
+					char *snm = paix->aix(paix, oroi);
+					cq_emit_raw("{\"event\":\"strip_misaligned\",\"strip\":\"%s\","
+					            "\"offset\":%d,\"base_de\":%.2f,\"best_de\":%.2f}",
+					            snm != NULL ? snm : "?", mis, base_de, best_de);
+					if (snm != NULL)
+						free(snm);
+				}
+			}
 			cq_write_ti3_atomic();
 
 			incflag = 2;		/* Skip to next unread */
@@ -2979,6 +3069,9 @@ int main(int argc, char *argv[]) {
 				eat = 1;
 			} else if (strcmp(argv[ai], "--autosave") == 0) {
 				cq_autosave = 1;
+				eat = 1;
+			} else if (strcmp(argv[ai], "--safenet") == 0) {
+				cq_safenet = 1;
 				eat = 1;
 			} else if (strcmp(argv[ai], "--replay") == 0 && ai + 1 < argc) {
 				cq_replay_path = argv[ai + 1];

@@ -764,6 +764,38 @@ class SettingsDialog(QDialog):
             self))
         _beta.addLayout(_fc_row)
 
+        # Misalignment safety net (#50, opt-in): warn when a strip fits
+        # dramatically better shifted by a patch (a likely one-off misread).
+        self._safenet_check = QCheckBox(
+            tr("Warn me if a strip looks misaligned"), self)
+        _sn_row = QHBoxLayout()
+        _sn_row.addWidget(self._safenet_check)
+        _sn_row.addStretch()
+        _sn_row.addWidget(TooltipButton(
+            tr("Misalignment safety net"),
+            tr("A safety net for a rare but annoying reading slip: sometimes a "
+            "hand-held instrument locks onto a row one patch too early or too "
+            "late — for example it starts on the blank paper before the first "
+            "patch. Every patch in that strip is then filed one position out, "
+            "and the last one reads the empty paper. The colours still get "
+            "saved, so without a warning you might not notice until the profile "
+            "looks off.\n\n"
+            "With this turned on, after each strip ChromIQ quietly checks "
+            "whether the reading would fit the chart dramatically better shifted "
+            "by a patch or two. If it clearly would, it stops and tells you — "
+            "and offers to jump straight back and re-measure just that one "
+            "strip. Your other strips and everything read so far are untouched.\n\n"
+            "It is deliberately cautious: it only speaks up when a shift makes a "
+            "big, unmistakable improvement, so a normal good read — where vivid "
+            "colours naturally differ from the design — never triggers it. And "
+            "it only ever warns; it never changes your measurements on its own.\n\n"
+            "Leave it off (the default) and nothing changes. Most misreads are "
+            "already caught by the ‘wrong strip’ warning; this catches the "
+            "subtler one-patch slips that slip past it.\n\n"
+            "Default: off"),
+            self))
+        _beta.addLayout(_sn_row)
+
         # Measurement report auto-save (#126, Knut).
         self._save_report_check = QCheckBox(
             tr("Save a measurement report after each measurement"), self)
@@ -1877,6 +1909,7 @@ class SettingsDialog(QDialog):
             float(s.get("patch_read_warn_de", 20.0)))
         self._fast_connect_check.setChecked(
             bool(s.get("fast_instrument_connect", True)))
+        self._safenet_check.setChecked(bool(s.get("misalign_safenet", False)))
         self._native_print_check.setChecked(bool(s.get("use_native_print_dialog", False)))
         self._pdf_fallback_check.setChecked(bool(s.get("pdf_print_fallback", False)))
         self._confirm_print_check.setChecked(bool(s.get("confirm_before_printing", True)))
@@ -2592,6 +2625,7 @@ class SettingsDialog(QDialog):
         s.set("save_measurement_report", self._save_report_check.isChecked())
         s.set("patch_read_warn_de", float(self._patch_warn_spin.value()))
         s.set("fast_instrument_connect", self._fast_connect_check.isChecked())
+        s.set("misalign_safenet", self._safenet_check.isChecked())
         s.set("use_native_print_dialog",   self._native_print_check.isChecked())
         s.set("pdf_print_fallback",        self._pdf_fallback_check.isChecked())
         s.set("confirm_before_printing",   self._confirm_print_check.isChecked())
