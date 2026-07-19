@@ -1,5 +1,14 @@
 # Changelog
 
+## v3.13.12-beta.18
+
+- **Instrument-specific measuring instructions everywhere.** The measurement
+  pop-up now matches your instrument in all three cases — a normal measurement,
+  the guided re-measurement, and a manual resume — not just the first. A
+  ColorMunki / i1Studio is told to turn the dial to the measurement position; an
+  i1Pro to take it off its base, hold the button and slide; other instruments
+  keep the general wording.
+
 ## v3.13.12-beta.17
 
 - **Instrument-specific measuring instructions.** The "calibrate the instrument"
