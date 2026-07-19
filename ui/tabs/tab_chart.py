@@ -1398,6 +1398,28 @@ class TabChart(QWidget):
             target = Path(custom).expanduser() if custom else Path.home() / "ChromIQ"
         reveal_in_file_manager(target)
 
+    def _warn_if_hexagonal_selected(self, *_a) -> None:
+        """Heads-up when the user switches the SpectroScan patch shape to
+        Hexagonal: the scanner / camera (CHT) features can't use such a chart
+        (Knut). Fires only on a real hex selection (not while a preset loads),
+        and re-arms once the shape leaves hex so each new pick is flagged."""
+        pnl = self._manual_layout_panel
+        if pnl is None or pnl.instr is None or pnl.mode is None:
+            return
+        is_hex = (pnl.instr.currentData() == "SS"
+                  and pnl.mode.currentData() == "hex")
+        if not is_hex:
+            self._hex_warned = False
+            return
+        if getattr(pnl, "_loading", False) or getattr(self, "_hex_warned", False):
+            return
+        self._hex_warned = True
+        from workflow.hex_support import hex_unsupported_message
+        from PyQt6.QtWidgets import QMessageBox
+        QMessageBox.information(
+            self, tr("Hexagonal patches — a heads-up"),
+            hex_unsupported_message())
+
     # ------------------------------------------------------------------
     # Guided panel
     # ------------------------------------------------------------------
@@ -2438,6 +2460,11 @@ class TabChart(QWidget):
         # Let the panel's "Use instrument margins" checkbox read the user's
         # Instrument-Margins thresholds for the current combo (#93, Knut).
         self._manual_layout_panel.set_threshold_lookup(self._combo_thresholds)
+        # Warn once when the user picks SpectroScan hexagonal patches — the CHT
+        # scanner/camera features can't handle that chart (Knut).
+        if self._manual_layout_panel.mode is not None:
+            self._manual_layout_panel.mode.currentIndexChanged.connect(
+                self._warn_if_hexagonal_selected)
         # Keep the engine panel's instrument/paper and the canonical Manual
         # selection (printtarg -i/-p) in step, so loading a preset then enabling
         # the engine carries Instrument/Paper across and the threshold lookup +

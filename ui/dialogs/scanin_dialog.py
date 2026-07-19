@@ -1690,6 +1690,15 @@ class ScannerProfileDialog(_ToolDialogBase):
         # .ti3, then the .ti2 (aim values) — a chart you only PRINTED still
         # works for a printer profile; both carry loc + RGB + XYZ.
         base = _chart_base(picked)
+        # SpectroScan hexagonal charts can't be read via a CHT file (Knut): warn
+        # and refuse rather than build a target/grid that can never line up.
+        from workflow.hex_support import chart_is_hexagonal, hex_unsupported_message
+        if chart_is_hexagonal(base):
+            from PyQt6.QtWidgets import QMessageBox
+            QMessageBox.warning(
+                self, tr("Hexagonal chart — not supported here"),
+                hex_unsupported_message())
+            return
         ti3, ti2 = base.with_suffix(".ti3"), base.with_suffix(".ti2")
         if (picked.suffix.lower() in (".ti2", ".ti3") and picked.is_file()
                 and picked.stem == base.name):     # not a "-verify" alias pick

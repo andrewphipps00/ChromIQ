@@ -3028,5 +3028,8 @@
   "⟳ Rotate 90°": "⟳ 90° drehen",
   "⤢ Dock back": "⤢ Wieder andocken",
   "⤢ Pop out for a bigger view": "⤢ Für größere Ansicht ablösen",
-  "＋ Add another scan to average": "＋ Weiteren Scan zum Mitteln hinzufügen"
+  "＋ Add another scan to average": "＋ Weiteren Scan zum Mitteln hinzufügen",
+  "Hexagonal chart — not supported here": "Sechseckige Vorlage — hier nicht unterstützt",
+  "Hexagonal patches — a heads-up": "Sechseckige Messfelder — ein Hinweis",
+  "This chart uses hexagonal SpectroScan patches.\n\nThe recognition file (CHT) that ChromIQ's scanner and camera tools rely on can only describe rectangular patches — the file format has no way to represent a hexagon. So these features cannot be used with a hexagonal chart:\n\n  •  Create scanner or camera target\n  •  Build profile with scanner or camera\n\nEverything else works normally — you can still print the chart and measure it with the SpectroScan itself.\n\nIf you want to profile with a scanner or camera instead, make the chart with square / rectangular patches: in Create Chart, with the SpectroScan selected, set “Patch shape” to “Rectangular”.": "Diese Vorlage verwendet sechseckige SpectroScan-Messfelder.\n\nDie Erkennungsdatei (CHT), auf die sich die Scanner- und Kamera-Werkzeuge von ChromIQ stützen, kann nur rechteckige Messfelder beschreiben — das Dateiformat kann kein Sechseck darstellen. Deshalb lassen sich diese Funktionen mit einer sechseckigen Vorlage nicht verwenden:\n\n  •  Scanner- oder Kamera-Ziel erstellen\n  •  Profil mit Scanner oder Kamera erstellen\n\nAlles andere funktioniert wie gewohnt — du kannst die Vorlage weiterhin drucken und mit dem SpectroScan selbst vermessen.\n\nWenn du stattdessen mit einem Scanner oder einer Kamera profilieren möchtest, erstelle die Vorlage mit quadratischen / rechteckigen Messfeldern: Wähle unter „Vorlage erstellen“ den SpectroScan aus und setze „Messfeldform“ auf „Rechteckig“."
 }

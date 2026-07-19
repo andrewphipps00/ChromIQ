@@ -3028,5 +3028,8 @@
   "⟳ Rotate 90°": "⟳ Obróć o 90°",
   "⤢ Dock back": "⤢ Zadokuj z powrotem",
   "⤢ Pop out for a bigger view": "⤢ Otwórz w większym oknie",
-  "＋ Add another scan to average": "＋ Dodaj kolejny skan do uśrednienia"
+  "＋ Add another scan to average": "＋ Dodaj kolejny skan do uśrednienia",
+  "Hexagonal chart — not supported here": "Hexagonal chart — not supported here",
+  "Hexagonal patches — a heads-up": "Hexagonal patches — a heads-up",
+  "This chart uses hexagonal SpectroScan patches.\n\nThe recognition file (CHT) that ChromIQ's scanner and camera tools rely on can only describe rectangular patches — the file format has no way to represent a hexagon. So these features cannot be used with a hexagonal chart:\n\n  •  Create scanner or camera target\n  •  Build profile with scanner or camera\n\nEverything else works normally — you can still print the chart and measure it with the SpectroScan itself.\n\nIf you want to profile with a scanner or camera instead, make the chart with square / rectangular patches: in Create Chart, with the SpectroScan selected, set “Patch shape” to “Rectangular”.": "This chart uses hexagonal SpectroScan patches.\n\nThe recognition file (CHT) that ChromIQ's scanner and camera tools rely on can only describe rectangular patches — the file format has no way to represent a hexagon. So these features cannot be used with a hexagonal chart:\n\n  •  Create scanner or camera target\n  •  Build profile with scanner or camera\n\nEverything else works normally — you can still print the chart and measure it with the SpectroScan itself.\n\nIf you want to profile with a scanner or camera instead, make the chart with square / rectangular patches: in Create Chart, with the SpectroScan selected, set “Patch shape” to “Rectangular”."
 }

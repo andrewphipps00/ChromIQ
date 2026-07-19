@@ -353,11 +353,26 @@ class ScaninTargetDialog(_ToolDialogBase):
             start_dir=str(_initial_dir(self._settings, self.TOOL_KEY)))
         if not path:
             return
+        if self._reject_if_hexagonal(_chart_base(Path(path))):
+            return
         self._ti3_path = Path(path)
         self._ti3_field.setText(path)
         _remember_dir(self._settings, self.TOOL_KEY, self._ti3_path.parent)
         self._refresh_note()
         self._refresh()
+
+    def _reject_if_hexagonal(self, chart_base: Path) -> bool:
+        """When *chart_base* is a SpectroScan hexagonal chart, warn and refuse it
+        — the CHT format can't describe hexagons (Knut). Returns True if
+        rejected."""
+        from workflow.hex_support import chart_is_hexagonal, hex_unsupported_message
+        if chart_is_hexagonal(chart_base):
+            from PyQt6.QtWidgets import QMessageBox
+            QMessageBox.warning(
+                self, tr("Hexagonal chart — not supported here"),
+                hex_unsupported_message())
+            return True
+        return False
 
     def _pick_pset(self) -> None:
         path = open_file_dialog(
@@ -391,6 +406,8 @@ class ScaninTargetDialog(_ToolDialogBase):
             self, tr("Choose your measurement"), _MEAS_FILTER,
             start_dir=str(_initial_dir(self._settings, self.TOOL_KEY)))
         if not path:
+            return
+        if self._reject_if_hexagonal(_chart_base(Path(path))):
             return
         self._meas_path = Path(path)
         self._meas_field.setText(path)
