@@ -1212,22 +1212,19 @@ class TiffPreview(QWidget):
         if self._show_only_measured:
             boxes = self._page_patch_boxes.get(self._current) or []
             if boxes:
-                # Blank each unread patch to white, then draw its outline INSET
-                # 1px inside the white fill. The inset keeps neighbouring boxes'
-                # outlines from ever touching, and a light-grey hairline keeps
-                # the contrast low — together they stop the downscaling moiré
-                # that made every few column-edges look pixel-thick (Sebastian).
-                pen = QPen(QColor(205, 205, 205))
-                pen.setCosmetic(True)
-                pen.setWidthF(1.0)
-                white = QColor(255, 255, 255)
+                # Blank each unread patch to a very light grey. We draw NO
+                # per-patch outline: the chart's own spacer gaps between patches
+                # (which we deliberately leave unfilled) already delineate every
+                # cell, and drawing thousands of 1px outlines on a fit-to-window
+                # (down-scaled) canvas produced a moiré that made a few column
+                # edges look pixel-thick, wandering as the zoom changed
+                # (Sebastian). No drawn lines ⇒ no beat. The faint grey (vs pure
+                # white) keeps unread cells readable against the white paper.
+                blank = QColor(247, 247, 247)
                 for b in boxes:
                     r = QRectF(b.x() * s + ox, b.y() * s + oy,
                                b.width() * s, b.height() * s)
-                    painter.fillRect(r, white)
-                    painter.setPen(pen)
-                    painter.setBrush(Qt.BrushStyle.NoBrush)
-                    painter.drawRect(r.adjusted(1.0, 1.0, -1.0, -1.0))
+                    painter.fillRect(r, blank)
         for rect, c_exp, c_meas, warn in items:
             # Round BOTH edges to whole pixels so the split covers exactly the
             # same span as the printed patch — flooring each of x/y/w/h
