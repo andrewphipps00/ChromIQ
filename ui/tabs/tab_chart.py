@@ -2906,9 +2906,12 @@ class TabChart(QWidget):
                     "Unlock \"Edit page layout\" to re-arrange the same patches, "
                     "or \"Edit patch recipe\" to build a different chart."
                 )
-            self._manual_info_lbl.setText(info)
-            return
-        if tc918_repro:
+            # Fall through to the shared visibility/label tail below — an early
+            # return here (the old behaviour) skipped the engine↔printtarg panel
+            # swap, so enabling the ChromIQ layout engine on a prebuilt preset
+            # (e.g. TC9.18 by Pharmacist) left only the printtarg layout showing
+            # and the engine panel hidden (Knut). The tail sets the info label.
+        elif tc918_repro:
             info = (
                 tr("i1Pro TC9.18 by Pharmacist — fixed patch set ({notes}):\n"
                    "Uses the bundled tc918.ti1 (targen skipped).").format(
