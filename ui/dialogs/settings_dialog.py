@@ -2147,8 +2147,16 @@ class SettingsDialog(QDialog):
         # Create Chart). The engine ⇄ old-clip-border mutual exclusion is applied
         # from the setting in _load_settings (and enforced live at the Create Chart
         # toggle), so nothing to gate here.
+        # Populating the instrument/paper/mode combos fires their change signals,
+        # each of which would run the (expensive) live layout estimate — several
+        # thousand font text-measurements. Suspend it while the tab is being set
+        # up and run it exactly once at the end, so opening Preferences is quick
+        # (Basti: the window was slow to load).
+        self._suspend_layout_calc = True
         self._on_layout_instr_changed()      # populate paper+mode for the default
         self._preselect_layout_combo()       # then jump to the active combo (#93)
+        self._suspend_layout_calc = False
+        self._update_layout_calc()           # one estimate for the final selection
 
         # Re-home the printtarg (old-engine) i1Pro options here, greyed when the
         # ChromIQ engine is active (they have no effect then) (Knut #93).
@@ -2423,6 +2431,8 @@ class SettingsDialog(QDialog):
         self._update_layout_calc()
 
     def _update_layout_calc(self) -> None:
+        if getattr(self, "_suspend_layout_calc", False):
+            return
         from workflow.layout_engine import geometry, instruments, papers, preflight
         try:
             r = self._recipe_from_fields()
