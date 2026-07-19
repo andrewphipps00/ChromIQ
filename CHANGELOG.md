@@ -1,5 +1,16 @@
 # Changelog
 
+## v3.13.12-beta.19
+
+- **"Offset every second strip" is finally hidden everywhere it should be.** The
+  previous fix only reached the Create Chart panel; in Preferences → Chart Layout
+  the ColorMunki-only checkbox (and the clip-border On/Off selector) still showed
+  for the i1Pro, i1Pro 3 Plus, SpectroScan and the old DTP readers. Both windows
+  now hide it for every non-ColorMunki instrument.
+- **Consistent instrument lists.** Preferences → Chart Layout no longer lists
+  DTP41 / DTP51 — they aren't offered in Create Chart or Instrument Limits and
+  aren't supported, so all three places now show the same four instruments.
+
 ## v3.13.12-beta.18
 
 - **Instrument-specific measuring instructions everywhere.** The measurement
