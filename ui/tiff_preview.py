@@ -697,7 +697,16 @@ class TiffPreview(QWidget):
         if replace_page or page not in self._patch_overlay:
             self._patch_overlay[page] = list(items)
         else:
-            self._patch_overlay[page].extend(items)
+            # Re-measuring a strip must REPLACE its patches' results, not stack a
+            # second copy on top: drop any existing entry whose box matches one of
+            # the incoming patches, then add the new ones. So measuring different
+            # strips accumulates, but re-reading the same strip refreshes it (no
+            # duplicates, no stale warning outline) (Basti).
+            new_boxes = {(r.x(), r.y(), r.width(), r.height()) for r, *_ in items}
+            self._patch_overlay[page] = [
+                it for it in self._patch_overlay[page]
+                if (it[0].x(), it[0].y(), it[0].width(), it[0].height()) not in new_boxes
+            ] + list(items)
         self._schedule_refresh()
 
     def clear_patch_overlay(self) -> None:

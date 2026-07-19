@@ -122,17 +122,28 @@ def test_coord_readout_uses_label_space_overlay():
     assert pv._cursor_overlay._pos is None
 
 
-def test_patch_overlay_accumulates_and_clears():
+def test_patch_overlay_accumulates_new_boxes_but_replaces_re_measured():
+    """Measuring different strips accumulates their split patches; re-measuring
+    the SAME patch box REPLACES its entry (no duplicates, no stale outline) —
+    so a re-measured chart's overlay always reflects the latest reading (Basti)."""
     pv = _make_preview()
-    items = [(QRect(10, 10, 20, 20), QColor("red"), QColor("blue"), False)]
-    pv.set_patch_overlay(0, items)
-    pv.set_patch_overlay(0, items)
+    a = [(QRect(10, 10, 20, 20), QColor("red"), QColor("blue"), False)]
+    b = [(QRect(40, 10, 20, 20), QColor("red"), QColor("blue"), False)]
+    pv.set_patch_overlay(0, a)
+    pv.set_patch_overlay(0, b)                       # different box → accumulates
     assert len(pv._patch_overlay[0]) == 2
+    # Re-measure box A (now warns) — replaces, doesn't duplicate.
+    a2 = [(QRect(10, 10, 20, 20), QColor("green"), QColor("yellow"), True)]
+    pv.set_patch_overlay(0, a2)
+    assert len(pv._patch_overlay[0]) == 2
+    a_entry = next(it for it in pv._patch_overlay[0] if it[0] == QRect(10, 10, 20, 20))
+    assert a_entry[3] is True                        # the fresh (warning) result
+
     assert pv.has_patch_overlay()
     pv.clear_patch_overlay()
     assert not pv.has_patch_overlay()
     # painting with an overlay present must not raise
-    pv.set_patch_overlay(0, items)
+    pv.set_patch_overlay(0, a)
     pv._repaint_label()
 
 
