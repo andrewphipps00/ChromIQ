@@ -186,6 +186,7 @@ class MeasurementReportDialog(QDialog):
         self._ti3: Path | None = None
         self._trend_series: list = []
         self._history: list = []
+        self._project_dirs: set = set()
         self.setWindowTitle(tr("Measurement Report"))
         self.setMinimumSize(720, 640)
 
@@ -242,6 +243,14 @@ class MeasurementReportDialog(QDialog):
         self._open_btn = QPushButton(tr("Open another measurement (.ti3)…"), self)
         self._open_btn.clicked.connect(self._on_open)
         btn_row.addWidget(self._open_btn)
+        self._add_btn = QPushButton(tr("Add another project's runs…"), self)
+        self._add_btn.setToolTip(tr(
+            "Fold another profile folder's saved measurements into the trend and "
+            "PDF — for the SAME printer kept in a different project. Pick any "
+            ".ti3 from that project."))
+        self._add_btn.clicked.connect(self._on_add_project)
+        self._add_btn.setEnabled(False)
+        btn_row.addWidget(self._add_btn)
         self._pdf_btn = QPushButton(tr("Save report as PDF…"), self)
         self._pdf_btn.clicked.connect(self._export_pdf)
         self._pdf_btn.setEnabled(False)
@@ -324,18 +333,58 @@ class MeasurementReportDialog(QDialog):
             except Exception:  # noqa: BLE001
                 continue
         self._history = history                 # every saved run, for the PDF
+        self._project_dirs = {self._ti3.parent}  # folders folded into the trend
         comparison = None
         for older in reversed(history):
             if older.get("created") != self._report.get("created"):
                 comparison = compare_reports(older, self._report)
                 break
 
-        from ui.theme import resolve_mode
-        dark = resolve_mode(self._settings.get("appearance", "auto")) != "light"
-        self._trend_series = report_trend(history)
-        self._update_trends(self._trend_series, dark)
+        self._refresh_trend()
         self._view.setHtml(self._report_html(self._report, comparison))
         self._pdf_btn.setEnabled(True)
+        self._add_btn.setEnabled(True)
+
+    def _refresh_trend(self) -> None:
+        """Recompute the trend series from the current history (which may span
+        several project folders once the user has added some) and repaint."""
+        from ui.theme import resolve_mode
+        from workflow.measurement_report import report_trend
+        dark = resolve_mode(self._settings.get("appearance", "auto")) != "light"
+        # Oldest-first by the report's own date, across whatever folders are in.
+        self._history.sort(key=lambda r: str(r.get("created") or ""))
+        self._trend_series = report_trend(self._history)
+        self._update_trends(self._trend_series, dark)
+
+    def _on_add_project(self) -> None:
+        """Manual multi-printer: fold another profile folder's saved reports into
+        the trend + PDF (for the same printer kept in a different project)."""
+        import json
+        from workflow.measurement_report import list_project_reports
+        path = open_file_dialog(
+            self, tr("Add a project (pick any of its .ti3 files)"),
+            tr("Measurement files (*.ti3)"),
+            extra_path=self._settings.get("custom_output_path", ""))
+        if not path:
+            return
+        run_dir = Path(path).parent
+        if run_dir in self._project_dirs:
+            return                                # already included
+        self._project_dirs.add(run_dir)
+        seen = {(r.get("chart"), r.get("created")) for r in self._history}
+        added = 0
+        for p in list_project_reports(run_dir):
+            try:
+                r = json.loads(p.read_text())
+            except Exception:  # noqa: BLE001
+                continue
+            if (r.get("chart"), r.get("created")) not in seen:
+                self._history.append(r)
+                seen.add((r.get("chart"), r.get("created")))
+                added += 1
+        self._refresh_trend()
+        self._add_btn.setText(tr("Added — {n} projects in trend").format(
+            n=len(self._project_dirs)))
 
     def _trend_configs(self) -> list:
         """The three grouped charts as ``(chart, title, metrics, y_max, dec)`` —
