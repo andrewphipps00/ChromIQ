@@ -210,6 +210,7 @@ DEFAULTS: dict[str, Any] = {
     "margin_measured_guides_show": False,  # long dotted lines at the measured margins
     "margin_coords_show":         False,   # cross-hair + paper-mm/inch readout on pointer (#29)
     "declutter_on_load":          True,    # tidy legacy flat folders into v2 subfolders on file load (#36)
+    "export_shuffled_pxf":        False,   # also write a patch-order-shuffled i1Profiler .pxf copy (Nelson)
     "margin_thresholds":         "",      # JSON blob; "" → default_margin_thresholds()
     # Scanner/camera profiling: misalignment-check thresholds (Knut #108).
     # Editable in Settings → Scanner; the defaults carry a buffer for real

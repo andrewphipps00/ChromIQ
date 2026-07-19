@@ -62,12 +62,17 @@ def write_colours_txt(ti1_path: str | Path, txt_path: str | Path) -> Path | None
 
 
 def write_sidecars(ti1_path: str | Path, out_dir: str | Path,
-                   base_name: str) -> list[Path]:
+                   base_name: str, also_shuffled: bool = False) -> list[Path]:
     """Write the colour list and i1Profiler pair into *out_dir*.
 
     Best-effort: a failure of one file logs and skips it, never raising. Returns
     the list of files actually written. The ``.cht`` is produced by the chart
     build itself (engine ``emit_cht`` / printtarg), not here.
+
+    When *also_shuffled* is set, a patch-order-shuffled copy of the i1Profiler
+    files is written too (``<base_name>-i1profiler-shuffled.pxf`` (+ ``.txt``)),
+    for users who load the chart into i1Profiler and want its layout kept as-is
+    rather than regenerated in patch-list order (Nelson).
     """
     import logging
     log = logging.getLogger(__name__)
@@ -87,8 +92,14 @@ def write_sidecars(ti1_path: str | Path, out_dir: str | Path,
         from workflow.i1profiler_export import export_from_ti1
         txt, pxf = export_from_ti1(ti1_path, out_dir,
                                    base_name=f"{base_name}-i1profiler",
-                                   descriptor=base_name)
+                                   descriptor=base_name,
+                                   also_shuffled=also_shuffled)
         written += [q for q in (txt, pxf) if q is not None]
+        if also_shuffled:
+            for suffix in (".pxf", ".txt"):
+                shuf = out_dir / f"{base_name}-i1profiler-shuffled{suffix}"
+                if shuf.is_file():
+                    written.append(shuf)
     except Exception:  # noqa: BLE001 — never block on the i1Profiler export
         log.warning("i1Profiler export failed", exc_info=True)
     return written

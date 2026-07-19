@@ -7516,7 +7516,9 @@ class TabChart(QWidget):
             # Project-named export so the file is self-identifying when handed
             # to i1Profiler (e.g. printer-test-file-i1profiler.pxf).
             base_name = f"{project.current_run().stem}-i1profiler"
-            txt_path, pxf_path = export_from_ti1(ti1, exports_dir, base_name=base_name)
+            txt_path, pxf_path = export_from_ti1(
+                ti1, exports_dir, base_name=base_name,
+                also_shuffled=self._settings.get("export_shuffled_pxf", False))
         except Exception as exc:  # noqa: BLE001
             log.exception("i1Profiler export failed")
             self._log.appendPlainText(f"[i1iSis] export failed: {exc}")
@@ -7531,6 +7533,10 @@ class TabChart(QWidget):
         if txt_path is not None:
             self._log.appendPlainText(f"[i1iSis] wrote {txt_path.name}")
         self._log.appendPlainText(f"[i1iSis] wrote {pxf_path.name}")
+        if self._settings.get("export_shuffled_pxf", False):
+            shuf = pxf_path.with_name(f"{pxf_path.stem}-shuffled.pxf")
+            if shuf.is_file():
+                self._log.appendPlainText(f"[i1iSis] wrote {shuf.name} (shuffled)")
 
         # Colorspace label for the popup. i1Profiler does not read the colour
         # space from the patch set — the user must select it in the workflow —
@@ -7669,8 +7675,9 @@ class TabChart(QWidget):
             try:
                 from core.file_manager import exports_subdir
                 from workflow.chart_exports import write_sidecars
-                extras = write_sidecars(ti2.with_suffix(".ti1"),
-                                        exports_subdir(ti2.parent), stem)
+                extras = write_sidecars(
+                    ti2.with_suffix(".ti1"), exports_subdir(ti2.parent), stem,
+                    also_shuffled=self._settings.get("export_shuffled_pxf", False))
                 for e in extras:
                     self._log.appendPlainText(f"wrote {e.name}")
             except Exception:  # noqa: BLE001 — never block on the sidecars

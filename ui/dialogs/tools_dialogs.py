@@ -53,8 +53,8 @@ from ui.theme import resolve_mode
 from ui.tab_header import dialog_masthead
 from ui.tooltip_button import TooltipButton
 from ui.widgets import (
-    confirm, NoScrollComboBox, NoScrollSpinBox, open_dir_dialog, open_file_dialog,
-    open_files_dialog,
+    confirm, make_browse_button, NoScrollComboBox, NoScrollSpinBox,
+    open_dir_dialog, open_file_dialog, open_files_dialog,
 )
 
 
@@ -546,6 +546,7 @@ class _OutputRow(QWidget):
         on_change: Callable[[], None],
         initial_dir: Path,
         initial_name: str = "",
+        browse_color: "str | None" = None,
     ) -> None:
         super().__init__(parent)
         self._on_change = on_change
@@ -559,8 +560,15 @@ class _OutputRow(QWidget):
         self._dir_edit.textChanged.connect(lambda _t: self._on_change())
         row.addWidget(self._dir_edit, 3)
 
-        browse = QPushButton(tr("Browse…"), self)
+        if browse_color is not None:
+            # Icon-only folder button tinted to the dialog's accent (matches the
+            # Soft-proof dialog's browse buttons), instead of a text "Browse…".
+            browse = make_browse_button(
+                self, tr("Choose destination folder"), color=browse_color)
+        else:
+            browse = QPushButton(tr("Browse…"), self)
         browse.clicked.connect(self._browse)
+        self._browse_btn = browse
         row.addWidget(browse)
 
         self._name_edit = QLineEdit(initial_name, self)
@@ -983,6 +991,10 @@ class Ti1ToI1ProfilerDialog(_ToolDialogBase):
         super().__init__(settings, parent)
         self._ti1: Path | None = None
         self._ti1_kind: str | None = None   # "RGB" | "CMYK" | "CMYKPLUSN"
+        # This dialog uses its masthead magenta as the live accent for checkboxes
+        # and focused inputs (not the neutral indicator the other tool dialogs
+        # keep). Appended after the base QSS so the magenta rules win.
+        self.setStyleSheet(self.styleSheet() + neutral_controls_qss(self.ACCENT))
         self._build_inputs()
         self._refresh()
 
@@ -993,7 +1005,8 @@ class Ti1ToI1ProfilerDialog(_ToolDialogBase):
         self._ti1_field.setReadOnly(True)
         self._ti1_field.setPlaceholderText(tr("No file selected"))
         row.addWidget(self._ti1_field, 1)
-        btn = QPushButton(tr("Browse…"), self)
+        btn = make_browse_button(
+            self, tr("Browse for the chart definition"), color=self.ACCENT)
         btn.clicked.connect(self._pick_ti1)
         row.addWidget(btn)
         self._content.addLayout(row)
@@ -1005,22 +1018,69 @@ class Ti1ToI1ProfilerDialog(_ToolDialogBase):
             on_change=self._refresh,
             initial_dir=_initial_dir(self._settings, self.TOOL_KEY),
             initial_name="i1profiler",
+            browse_color=self.ACCENT,
         )
         self._content.addWidget(self._output)
+
+        shuf_row = QHBoxLayout()
+        self._shuffle_check = QCheckBox(
+            tr("Also save a shuffled copy for i1Profiler"), self)
+        self._shuffle_check.setChecked(
+            bool(self._settings.get("export_shuffled_pxf", False)))
+        self._shuffle_check.toggled.connect(
+            lambda on: self._settings.set("export_shuffled_pxf", bool(on)))
+        shuf_row.addWidget(self._shuffle_check)
+        shuf_row.addStretch(1)
+        shuf_row.addWidget(
+            TooltipButton(
+                tr("Keep your chart layout in i1Profiler"),
+                tr("When you load a patch set into i1Profiler, it arranges the "
+                "patches on the page in the order they appear in the file. A "
+                "chart straight out of ChromIQ lists its colours in a tidy, "
+                "systematic order — which can put very similar colours right "
+                "next to each other on the printed strip. That is a little "
+                "harder to read by eye and slightly less ideal for the "
+                "instrument.\n\n"
+                "Tick this box and ChromIQ saves a second copy whose patches "
+                "are shuffled into a mixed-up order, with “-shuffled” "
+                "added to the file name. Hand that shuffled copy to i1Profiler "
+                "and it keeps exactly this mixed order instead of lining the "
+                "colours back up — so similar colours end up spread apart "
+                "across the chart.\n\n"
+                "Both copies are always written, so you can pick whichever you "
+                "prefer. If you are unsure, the shuffled copy is the safer one "
+                "to print and measure."),
+                self, min_width=460, color=self.ACCENT),
+            0, Qt.AlignmentFlag.AlignVCenter)
+        self._content.addLayout(shuf_row)
 
         self._build_workflow_section()
 
     def _build_workflow_section(self) -> None:
-        sep = QFrame(self)
-        sep.setFrameShape(QFrame.Shape.HLine)
-        sep.setFrameShadow(QFrame.Shadow.Sunken)
-        self._content.addWidget(sep)
-
+        wf_row = QHBoxLayout()
         self._wf_check = QCheckBox(
             tr("Also write an i1Profiler workflow file (.pwxf)"), self
         )
         self._wf_check.toggled.connect(self._update_workflow_state)
-        self._content.addWidget(self._wf_check)
+        wf_row.addWidget(self._wf_check)
+        wf_row.addStretch(1)
+        wf_row.addWidget(
+            TooltipButton(
+                tr("What an i1Profiler workflow file does"),
+                tr("A workflow file (.pwxf) is a ready-made i1Profiler project, "
+                "not just the list of colour patches. On top of the patches it "
+                "also remembers which measuring instrument you use, the paper "
+                "size, and how the patches should be laid out on the page.\n\n"
+                "When you open a .pwxf in i1Profiler, all of that is already "
+                "filled in — you can go straight to printing and measuring the "
+                "chart, without clicking through i1Profiler's setup screens or "
+                "picking those settings by hand every time.\n\n"
+                "This is only offered for RGB charts. Leave it off if you just "
+                "want the plain patch set (.pxf / .txt) and prefer to choose "
+                "the instrument and layout inside i1Profiler yourself."),
+                self, min_width=460, color=self.ACCENT),
+            0, Qt.AlignmentFlag.AlignVCenter)
+        self._content.addLayout(wf_row)
 
         self._wf_note = QLabel("", self)
         self._wf_note.setWordWrap(True)
@@ -1143,10 +1203,15 @@ class Ti1ToI1ProfilerDialog(_ToolDialogBase):
         base = self._output.name
         want_wf = self._want_workflow()
 
+        want_shuffle = self._shuffle_check.isChecked()
+
         pxf = out_dir / f"{base}.pxf"
         txt = out_dir / f"{base}.txt"
         pwxf = out_dir / f"{base}.pwxf"
         candidates = [pxf, txt] + ([pwxf] if want_wf else [])
+        if want_shuffle:
+            candidates += [out_dir / f"{base}-shuffled.pxf",
+                           out_dir / f"{base}-shuffled.txt"]
         existing = [p for p in candidates if p.exists()]
         if existing:
             names = ", ".join(p.name for p in existing)
@@ -1166,7 +1231,8 @@ class Ti1ToI1ProfilerDialog(_ToolDialogBase):
         self._log.appendPlainText(f"Converting {self._ti1.name} → {base}.pxf / {base}.txt")
 
         try:
-            txt_out, pxf_out = export_from_ti1(self._ti1, out_dir, base_name=base)
+            txt_out, pxf_out = export_from_ti1(
+                self._ti1, out_dir, base_name=base, also_shuffled=want_shuffle)
         except ValueError as exc:
             self._log.appendPlainText(f"[ERROR] {exc}")
             self._finish(False)
@@ -1175,7 +1241,12 @@ class Ti1ToI1ProfilerDialog(_ToolDialogBase):
         self._log.appendPlainText(f"[OK] Wrote {pxf_out}")
         if txt_out is not None:
             self._log.appendPlainText(f"[OK] Wrote {txt_out}")
-        else:
+        if want_shuffle:
+            for suffix in (".pxf", ".txt"):
+                shuf = out_dir / f"{base}-shuffled{suffix}"
+                if shuf.exists():
+                    self._log.appendPlainText(f"[OK] Wrote {shuf} (shuffled)")
+        if txt_out is None:
             self._log.appendPlainText(
                 "Note: CMYK+N targets are only written as .pxf — i1Profiler does "
                 "not accept extended-gamut patch sets in CGATS .txt form."

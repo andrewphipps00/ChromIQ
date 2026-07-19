@@ -26,7 +26,8 @@ not differentiate i1iSis / i1iSis 2 / i1iSis XL here.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+import random
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from xml.sax.saxutils import escape
@@ -489,17 +490,47 @@ def write_pxf(
     out_path.write_text("\n".join(parts), encoding="utf-8")
 
 
+def _shuffled_target(target: Target, seed: int | None = None) -> Target:
+    """Return *target* with its patch rows in random order.
+
+    i1Profiler builds the printed chart in the order the patches appear in the
+    file. A TI1 straight from ``targen`` keeps its colours in a systematic
+    order, so a plain export can place near-identical patches side by side on
+    the strip — a little harder to read and slightly worse for the instrument.
+    Shuffling the row order spreads similar colours apart. The written ``.pxf``
+    keeps ``ScramblePatches="False"``, so i1Profiler honours exactly this order
+    on import instead of re-shuffling on top of it (Nelson / pharmacist)."""
+    rows = list(target.rows)
+    random.Random(seed).shuffle(rows)
+    return replace(target, rows=rows)
+
+
+def _write_pair(
+    target: Target, out_dir: Path, base_name: str, descriptor: str
+) -> tuple[Path | None, Path]:
+    """Write ``<base_name>.pxf`` (always) and ``<base_name>.txt`` (RGB/CMYK
+    only) for *target*. Returns (txt_or_None, pxf)."""
+    txt_out = out_dir / f"{base_name}.txt"
+    pxf_out = out_dir / f"{base_name}.pxf"
+    wrote_txt = write_txt(target, txt_out, descriptor)
+    write_pxf(target, pxf_out, descriptor)
+    return (txt_out if wrote_txt else None), pxf_out
+
+
 def export_from_ti1(
     ti1_path: Path,
     out_dir: Path,
     base_name: str = "i1profiler",
     descriptor: str | None = None,
+    also_shuffled: bool = False,
+    shuffle_seed: int | None = None,
 ) -> tuple[Path | None, Path]:
     """Read TI1, write ``<base_name>.pxf`` (always) and ``<base_name>.txt``
     (RGB/CMYK only) into ``out_dir``.
 
-    Returns (txt_path_or_None, pxf_path). txt_path is None for CMYK+N, which
-    i1Profiler only accepts as a CxF3 .pxf.
+    Returns (txt_path_or_None, pxf_path) for the primary (patch-list-order)
+    pair. txt_path is None for CMYK+N, which i1Profiler only accepts as a
+    CxF3 .pxf.
 
     The default ``base_name="i1profiler"`` keeps tests / generic callers
     self-contained. The tab_chart caller passes ``<project>-i1profiler`` so
@@ -509,15 +540,21 @@ def export_from_ti1(
     ``descriptor`` controls the internal CxF/CGATS profile name (shown by
     i1Profiler in the workflow dropdown). Defaults to the TI1 stem, which
     under the per-run layout is the (sanitised) project name.
+
+    When ``also_shuffled`` is set, a second copy with the patch order shuffled
+    (see :func:`_shuffled_target`) is written alongside as
+    ``<base_name>-shuffled.pxf`` (+ ``.txt``). The returned paths are always
+    those of the primary, unshuffled pair. ``shuffle_seed`` makes the shuffle
+    reproducible (used by tests); the UI leaves it None for a fresh order.
     """
     target = parse_ti1(ti1_path)
     desc = descriptor or ti1_path.stem
     out_dir.mkdir(parents=True, exist_ok=True)
-    txt_out = out_dir / f"{base_name}.txt"
-    pxf_out = out_dir / f"{base_name}.pxf"
-    wrote_txt = write_txt(target, txt_out, desc)
-    write_pxf(target, pxf_out, desc)
-    return (txt_out if wrote_txt else None), pxf_out
+    txt_out, pxf_out = _write_pair(target, out_dir, base_name, desc)
+    if also_shuffled:
+        _write_pair(_shuffled_target(target, seed=shuffle_seed),
+                    out_dir, f"{base_name}-shuffled", desc)
+    return txt_out, pxf_out
 
 
 # --- CxF3 .pwxf (i1Profiler workflow) --------------------------------------

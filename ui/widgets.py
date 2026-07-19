@@ -1576,18 +1576,26 @@ def make_browse_button(
     parent: QWidget | None = None,
     tooltip: str = "Browse…",
     icon: str = "folder",
+    color: str | None = None,
 ) -> QPushButton:
     """Create a standardised file-browse button with a folder icon.
 
     Pass the icon name (without path or extension) to select a colored variant,
-    e.g. ``icon="folder_build"``.
+    e.g. ``icon="folder_build"``. Pass ``color`` (a hex accent) to tint the
+    plain folder glyph to an arbitrary colour instead — used where the button
+    should match a dialog's masthead accent (e.g. the magenta Tools dialogs).
+    A tinted button carries no ``themed_folder_icon`` property, so the app's
+    theme-reload leaves its custom colour untouched.
     """
     btn = QPushButton(parent)
     btn.setObjectName("browse")
     btn.setFixedWidth(36)
     btn.setToolTip(tooltip)
-    btn.setIcon(load_folder_icon(icon))
-    btn.setProperty("themed_folder_icon", icon)
+    if color is not None:
+        btn.setIcon(load_tinted_folder_icon(color, size=20))
+    else:
+        btn.setIcon(load_folder_icon(icon))
+        btn.setProperty("themed_folder_icon", icon)
     btn.setIconSize(QSize(20, 20))
     return btn
 

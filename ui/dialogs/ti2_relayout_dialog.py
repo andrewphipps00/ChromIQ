@@ -6158,7 +6158,9 @@ class Ti2RelayoutDialog(QDialog):
                         write_ti1 as _write_ti1
                     _write_ti1([RgbPatch(*rgb) for rgb in prog], ti1)
                 txt_out, pxf_out = X.export_from_ti1(
-                    ti1, out_dir, base_name=base, descriptor=base)
+                    ti1, out_dir, base_name=base, descriptor=base,
+                    also_shuffled=bool(self._settings and self._settings.get(
+                        "export_shuffled_pxf", False)))
         except Exception as exc:  # noqa: BLE001 — surface any writer failure
             QMessageBox.warning(self, tr("Save failed"), str(exc))
             return
@@ -7482,7 +7484,9 @@ class Ti2RelayoutDialog(QDialog):
             ti1 = res.ti2.with_suffix(".ti1")
             if ti1.exists():
                 _txt, pxf = X.export_from_ti1(
-                    ti1, target, base_name=f"{name}-i1profiler", descriptor=name)
+                    ti1, target, base_name=f"{name}-i1profiler", descriptor=name,
+                    also_shuffled=bool(self._settings and self._settings.get(
+                        "export_shuffled_pxf", False)))
                 i1_note = f"i1Profiler files: {pxf.stem}.txt/.pxf"
         except Exception as exc:  # noqa: BLE001
             log.warning("i1Profiler export during save failed: %s", exc)
@@ -7541,7 +7545,10 @@ class Ti2RelayoutDialog(QDialog):
         # target (.cht + .cie) is produced from the *measured* .ti3 after
         # measurement (workflow.scanin_target, #97). Best-effort.
         from workflow.chart_exports import write_sidecars
-        extras = write_sidecars(target / f"{name}.ti1", target, name)
+        extras = write_sidecars(
+            target / f"{name}.ti1", target, name,
+            also_shuffled=bool(self._settings and self._settings.get(
+                "export_shuffled_pxf", False)))
         # Write meta.json with the creation recipe (Set B), like the printtarg
         # save path does — without it an engine chart saved or applied from
         # here loses its New-patch-set design, so the Create Chart tab can't
@@ -7714,6 +7721,49 @@ class Ti2RelayoutDialog(QDialog):
                "  •  Cancel — go back to the editor and change nothing."), dlg)
         body.setWordWrap(True)
         lay.addWidget(body)
+
+        # Nelson: opt-in "also save a shuffled i1Profiler copy". It lives here in
+        # the Apply/Save window (Knut) because this is where the export happens;
+        # it shares the single export_shuffled_pxf setting with the Tools ▸
+        # Convert TI1 → i1Profiler dialog, so ticking it persists and the
+        # Overwrite/Save As export below picks it up. Far-right magenta ⓘ.
+        shuf_row = QHBoxLayout()
+        shuf_row.setSpacing(6)
+        shuffle_check = QCheckBox(
+            tr("Also save a shuffled copy for i1Profiler"), dlg)
+        shuffle_check.setChecked(
+            bool(self._settings and self._settings.get("export_shuffled_pxf", False)))
+        shuffle_check.setStyleSheet(
+            f"QCheckBox::indicator:checked {{ background: {SPEC_MAGENTA};"
+            f" border-color: {SPEC_MAGENTA}; }}"
+            f"QCheckBox::indicator:hover {{ border-color: {SPEC_MAGENTA}; }}")
+        if self._settings is not None:
+            shuffle_check.toggled.connect(
+                lambda on: self._settings.set("export_shuffled_pxf", bool(on)))
+        shuf_row.addWidget(shuffle_check)
+        shuf_row.addStretch(1)
+        shuf_row.addWidget(
+            _magenta_tip(
+                tr("Keep your chart layout in i1Profiler"),
+                tr("When you load a patch set into i1Profiler, it arranges the "
+                "patches on the page in the order they appear in the file. A "
+                "chart straight out of ChromIQ lists its colours in a tidy, "
+                "systematic order — which can put very similar colours right "
+                "next to each other on the printed strip. That is a little "
+                "harder to read by eye and slightly less ideal for the "
+                "instrument.\n\n"
+                "Tick this box and ChromIQ saves a second copy whose patches "
+                "are shuffled into a mixed-up order, with “-shuffled” "
+                "added to the file name. Hand that shuffled copy to i1Profiler "
+                "and it keeps exactly this mixed order instead of lining the "
+                "colours back up — so similar colours end up spread apart "
+                "across the chart.\n\n"
+                "Both copies are always written, so you can pick whichever you "
+                "prefer. If you are unsure, the shuffled copy is the safer one "
+                "to print and measure."),
+                dlg),
+            0, Qt.AlignmentFlag.AlignVCenter)
+        lay.addLayout(shuf_row)
 
         bb = QDialogButtonBox(dlg)
         overwrite_btn = bb.addButton(tr("Overwrite"),

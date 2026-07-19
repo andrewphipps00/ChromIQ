@@ -1,5 +1,25 @@
 # Changelog
 
+## v3.13.12-beta.16
+
+- **Save a shuffled copy of the patch set for i1Profiler.** When you hand a patch
+  set to i1Profiler, it lays the chart out in the exact order the patches appear
+  in the file. A chart straight out of ChromIQ keeps its colours in a tidy,
+  systematic order, which can put very similar colours right next to each other
+  on the printed strip — a little harder to read and slightly less ideal for the
+  instrument. There's now an opt-in "Also save a shuffled copy for i1Profiler"
+  checkbox: tick it and ChromIQ writes a second copy alongside the normal one,
+  with the patches shuffled into a mixed-up order and "-shuffled" added to the
+  file name. Handed to i1Profiler, that copy keeps the mixed order instead of
+  lining the colours back up, so similar colours end up spread across the chart.
+  Both copies are always written, so you can pick whichever you prefer. The
+  checkbox appears in Tools ▸ Convert TI1 → i1Profiler and in the patch-set
+  editor's Apply / Save window (Nelson / pharmacist).
+- **Convert TI1 → i1Profiler polish.** The window now uses its magenta accent for
+  ticked checkboxes and focused fields, its Browse buttons are compact folder
+  icons (matching the Soft-proof window), and the workflow-file option gained a
+  plain-language help icon explaining what a `.pwxf` is.
+
 ## v3.13.12-beta.15
 
 - **Faster instrument connection.** On some computers there was a long pause —
