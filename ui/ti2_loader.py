@@ -101,6 +101,73 @@ def is_i1pro(name: str | None) -> bool:
     return "i1 pro" in low or "i1pro" in low
 
 
+def instrument_family(name: str | None) -> "str | None":
+    """Coarse instrument family for instruction wording: ``"colormunki"``
+    (ColorMunki / i1Studio / ColorChecker Studio), ``"i1pro"`` (the whole i1 Pro
+    line — Argyll tags them all the same, so they share one instruction set),
+    ``"spectroscan"`` (XY table), or ``None`` when unrecognised (→ generic
+    wording). Accepts a TARGET_INSTRUMENT value or spotread's reported model."""
+    if is_colormunki(name):
+        return "colormunki"
+    if is_spectroscan(name):
+        return "spectroscan"
+    if is_i1pro(name):
+        return "i1pro"
+    return None
+
+
+def calibration_instructions_html(family: "str | None") -> str:
+    """The calibration-position pop-up body for an instrument *family*.
+
+    Placing-the-instrument wording is device-specific where the chart tells us
+    the family; the SpectroScan and any unknown instrument keep the generic
+    text. HTML (``<b>…</b>``) — the caller shows it in a rich-text label."""
+    if family == "colormunki":
+        return tr(
+            "<b>Your instrument needs to be calibrated before measuring.</b>"
+            "<br><br>Turn the dial on the side of your ColorMunki / i1Studio to "
+            "the <b>calibration position</b> (the small gear icon), then click "
+            "<b>Start Calibration</b>.<br><br>Calibration takes only a few "
+            "seconds. Once it's done, another message will tell you how to start "
+            "measuring.")
+    if family == "i1pro":
+        return tr(
+            "<b>Your instrument needs to be calibrated before measuring.</b>"
+            "<br><br>Place your i1Pro on its <b>calibration base</b>, with the "
+            "measuring aperture over the <b>white tile</b>. On the i1Pro and "
+            "i1Pro 2, make sure the base's slider is set to the white-tile "
+            "(calibration) position. Then click <b>Start Calibration</b>."
+            "<br><br>Calibration takes only a few seconds. Once it's done, "
+            "another message will tell you how to start measuring.")
+    return tr(
+        "<b>Your instrument needs to be calibrated before measuring.</b><br><br>"
+        "Place the instrument in the <b>calibration position</b> as described "
+        "in its manual, then click <b>Start Calibration</b>.<br><br>The "
+        "calibration takes only a few seconds. Once it is complete, another "
+        "message will appear with instructions on how to start measuring the "
+        "stripes.")
+
+
+def measurement_instructions_html(family: "str | None") -> str:
+    """The measurement-position instruction for an instrument *family* — how to
+    physically place and read a strip. Generic for SpectroScan / unknown."""
+    if family == "colormunki":
+        return tr(
+            "Turn the dial to the <b>measurement position</b> (the target / "
+            "aperture icon). Rest the device flat on the paper with the lens at "
+            "the <b>start of the strip</b>, hold the button down, and slide it "
+            "smoothly along the whole strip at a steady pace.")
+    if family == "i1pro":
+        return tr(
+            "Take the i1Pro off its base. Place it flat at the <b>start of the "
+            "strip</b> (on the lead-in, just before the first patch), press and "
+            "<b>hold the button</b>, and slide it smoothly along the whole strip "
+            "at an even speed.")
+    return tr(
+        "Place your instrument at the <b>start of the strip</b> and scan it as "
+        "described in its manual.")
+
+
 def disable_bidir_for_instrument(name: str | None) -> bool:
     """Whether the Auto toggle should disable bidirectional strip recognition
     (chartread ``-B``).

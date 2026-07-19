@@ -3737,15 +3737,14 @@ class TabMeasure(QWidget):
         layout.setSpacing(16)
         layout.setContentsMargins(24, 20, 24, 20)
 
+        from ui.ti2_loader import (calibration_instructions_html,
+                                    instrument_family)
         msg = QLabel(
-            tr("<b>Your instrument needs to be calibrated before measuring.</b><br><br>"
-            "Place the instrument in the <b>calibration position</b> as described "
-            "in its manual, then click <b>Start Calibration</b>.<br><br>"
-            "The calibration takes only a few seconds. Once it is complete, another "
-            "message will appear with instructions on how to start measuring the "
-            "stripes."),
+            calibration_instructions_html(
+                instrument_family(self._detected_instrument)),
             dlg,
         )
+        msg.setTextFormat(Qt.TextFormat.RichText)
         msg.setWordWrap(True)
         layout.addWidget(msg)
 
@@ -3893,12 +3892,17 @@ class TabMeasure(QWidget):
         else:
             dlg.setWindowTitle(tr("Calibration Complete — How to Measure"))
 
+            from ui.ti2_loader import (instrument_family,
+                                       measurement_instructions_html)
+            _fam = instrument_family(self._detected_instrument)
             msg = QLabel(
-                tr("<b>Calibration complete. You are ready to start measuring.</b><br><br>"
-                "Place your instrument at the beginning of the first stripe and trigger it to scan. "
-                "Then proceed stripe by stripe until all are done."),
+                tr("<b>Calibration complete. You are ready to start measuring."
+                   "</b><br><br>{how}<br><br>Then proceed stripe by stripe until "
+                   "all are done.").format(
+                    how=measurement_instructions_html(_fam)),
                 dlg,
             )
+            msg.setTextFormat(Qt.TextFormat.RichText)
             msg.setWordWrap(True)
             layout.addWidget(msg)
 
