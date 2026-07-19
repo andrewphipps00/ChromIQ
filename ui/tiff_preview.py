@@ -1296,19 +1296,9 @@ class TiffPreview(QWidget):
                     continue
                 pats.sort(key=lambda b: b.y())
                 if read_map.get(i, False):
-                    # Read strip: keep its real spacers, but still draw the OUTER
-                    # top and bottom edge of the column, so the top row's top and
-                    # the bottom row's bottom are separated like every other cell
-                    # edge (Sebastian).
-                    tb = pats[0]
-                    bb = pats[-1]
-                    painter.drawLine(QPointF(tb.x() * s + ox, tb.y() * s + oy),
-                                     QPointF((tb.x() + tb.width()) * s + ox,
-                                             tb.y() * s + oy))
-                    painter.drawLine(
-                        QPointF(bb.x() * s + ox, (bb.y() + bb.height()) * s + oy),
-                        QPointF((bb.x() + bb.width()) * s + ox,
-                                (bb.y() + bb.height()) * s + oy))
+                    # Read strip: no grid — it keeps its normal split and the
+                    # chart's own spacers between patches. Knut confirmed read
+                    # patches don't need the unread-cell grid lines.
                     continue
                 # True dedup grid (Knut): every patch draws RIGHT + BOTTOM; the
                 # TOP edge only on the topmost patch of the strip; the LEFT edge
