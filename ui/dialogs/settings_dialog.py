@@ -1979,10 +1979,15 @@ class SettingsDialog(QDialog):
     # ------------------------------------------------------------------
     # Labels mirror the printtarg -i combobox (data/parameters.yaml), so the
     # engine and printtarg show the same instrument names (Knut). Codes unchanged.
+    # The four instruments ChromIQ actually supports end-to-end — matching the
+    # Create Chart picker and the Instrument Limits tab. DTP41/DTP51 were listed
+    # here only because the layout engine knows their geometry, but they were
+    # never wired into chart creation or instrument limits (and aren't supported
+    # — the extra testing isn't worth it), so they've been dropped (Basti/Knut).
     _LAYOUT_INSTRUMENTS = [
         ("i1", "i1Pro / i1Pro 2 / i1Pro 3"), ("p3", "i1Pro 3 Plus"),
         ("CM", "ColorMunki / i1Studio / ColorChecker Studio"),
-        ("SS", "SpectroScan (flatbed)"), ("41", "DTP41"), ("51", "DTP51"),
+        ("SS", "SpectroScan (flatbed)"),
     ]
 
     @staticmethod
