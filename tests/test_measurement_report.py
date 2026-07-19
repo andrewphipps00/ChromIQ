@@ -131,6 +131,18 @@ def test_report_trend_series_extracts_plottable_metrics() -> None:
     assert "mean" not in tr[1] and tr[1]["white_L"] == 95.0
 
 
+def test_export_pdf_writes_file(qapp, chart, tmp_path, monkeypatch) -> None:
+    from PyQt6.QtWidgets import QFileDialog
+    from ui.dialogs.measurement_report_dialog import MeasurementReportDialog
+    out = tmp_path / "report.pdf"
+    monkeypatch.setattr(QFileDialog, "getSaveFileName",
+                        staticmethod(lambda *a, **k: (str(out), "PDF (*.pdf)")))
+    dlg = MeasurementReportDialog({"appearance": "light"}, initial_ti3=chart)
+    dlg._export_pdf()
+    assert out.exists() and out.stat().st_size > 1000
+    assert out.read_bytes()[:5] == b"%PDF-"
+
+
 def test_trend_chart_widget_visibility(qapp) -> None:
     from PyQt6.QtGui import QColor
     from ui.dialogs.measurement_report_dialog import _TrendChart

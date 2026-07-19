@@ -184,6 +184,7 @@ class MeasurementReportDialog(QDialog):
         self._settings = settings
         self._report: dict | None = None
         self._ti3: Path | None = None
+        self._trend_series: list = []
         self.setWindowTitle(tr("Measurement Report"))
         self.setMinimumSize(720, 640)
 
@@ -240,6 +241,10 @@ class MeasurementReportDialog(QDialog):
         self._open_btn = QPushButton(tr("Open another measurement (.ti3)…"), self)
         self._open_btn.clicked.connect(self._on_open)
         btn_row.addWidget(self._open_btn)
+        self._pdf_btn = QPushButton(tr("Save report as PDF…"), self)
+        self._pdf_btn.clicked.connect(self._export_pdf)
+        self._pdf_btn.setEnabled(False)
+        btn_row.addWidget(self._pdf_btn)
         btn_row.addStretch(1)
         v.addLayout(btn_row)
 
@@ -315,29 +320,118 @@ class MeasurementReportDialog(QDialog):
 
         from ui.theme import resolve_mode
         dark = resolve_mode(self._settings.get("appearance", "auto")) != "light"
-        self._update_trends(report_trend(history), dark)
+        self._trend_series = report_trend(history)
+        self._update_trends(self._trend_series, dark)
         self._view.setHtml(self._report_html(self._report, comparison))
+        self._pdf_btn.setEnabled(True)
 
-    def _update_trends(self, series: list, dark: bool) -> None:
-        """Feed the three grouped trend charts their own metric sets (#40, Knut)."""
-        self._trend_de.set_data(series, [
-            (tr("Average"), QColor("#56d6a5"), lambda pt: pt.get("mean")),
-            (tr("Worst"),   QColor("#e0864b"), lambda pt: pt.get("max")),
-        ], dark=dark, dec=1)
-        # Paper white sits near L*100 and black near L*10 — pin the axis to the
-        # full L* range so both read on one scale and the black's rise (ink
-        # fade) is obvious.
-        self._trend_wb.set_data(series, [
-            (tr("Paper white L*"), QColor("#b0b0b0"), lambda pt: pt.get("white_L")),
-            (tr("Black L*"),       QColor("#505050"), lambda pt: pt.get("black_L")),
-        ], dark=dark, y_max=100.0, dec=0)
-        # One ΔE00 line per cube corner, coloured like the ink it stands for.
+    def _trend_configs(self) -> list:
+        """The three grouped charts as ``(chart, title, metrics, y_max, dec)`` —
+        shared by the live tabs and the PDF export so they always match."""
         corner_metrics = [
             (_CORNER_LABELS[code](), QColor(_CORNER_LINE[code]),
              (lambda pt, c=code: (pt.get("corners") or {}).get(c)))
             for code in ("W", "K", "R", "G", "B", "C", "M", "Y")
         ]
-        self._trend_corners.set_data(series, corner_metrics, dark=dark, dec=1)
+        return [
+            (self._trend_de, tr("Colour accuracy (ΔE00)"), [
+                (tr("Average"), QColor("#56d6a5"), lambda pt: pt.get("mean")),
+                (tr("Worst"),   QColor("#e0864b"), lambda pt: pt.get("max")),
+            ], None, 1),
+            # White sits near L*100 and black near L*10 — pin the axis to the full
+            # L* range so both read on one scale and black's rise (fade) is clear.
+            (self._trend_wb, tr("Paper white / black (L*)"), [
+                (tr("Paper white L*"), QColor("#b0b0b0"), lambda pt: pt.get("white_L")),
+                (tr("Black L*"),       QColor("#505050"), lambda pt: pt.get("black_L")),
+            ], 100.0, 0),
+            (self._trend_corners, tr("Cube corners (ΔE00 per ink)"),
+             corner_metrics, None, 1),
+        ]
+
+    def _export_pdf(self) -> None:
+        """Write the full report — all data, the trend charts and a plain-language
+        guide to reading them — as a PDF into the reports folder (Knut)."""
+        if not self._report or not self._ti3:
+            return
+        from datetime import datetime
+        from PyQt6.QtCore import QMarginsF, QSizeF, QUrl
+        from PyQt6.QtGui import (
+            QImage, QPageLayout, QPageSize, QPdfWriter, QTextDocument,
+        )
+        from core.file_manager import reports_subdir
+
+        reports = reports_subdir(self._ti3.parent)
+        reports.mkdir(parents=True, exist_ok=True)
+        default = reports / (
+            f"report_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.pdf")
+        path, _ = QFileDialog.getSaveFileName(
+            self, tr("Save report as PDF"), str(default), "PDF (*.pdf)")
+        if not path:
+            return
+
+        doc = QTextDocument()
+        charts_html = ""
+        if self._trend_de.has_trend():
+            # Render each grouped chart off-screen at a fixed export size (the
+            # live tabs only lay out the current one) and embed it as a resource.
+            for i, (_c, title, metrics, y_max, dec) in enumerate(self._trend_configs()):
+                tmp = _TrendChart()
+                tmp.resize(720, 240)
+                tmp.set_data(self._trend_series, metrics, dark=False,
+                             y_max=y_max, dec=dec)
+                img = tmp.grab().toImage()
+                url = QUrl(f"chart://{i}")
+                doc.addResource(QTextDocument.ResourceType.ImageResource, url, img)
+                charts_html += (f"<h3>{html.escape(title)}</h3>"
+                                f"<img src='chart://{i}' width='680'>")
+        doc.setHtml(self._pdf_html(self._report, charts_html))
+
+        writer = QPdfWriter(str(path))
+        writer.setPageSize(QPageSize(QPageSize.PageSizeId.A4))
+        writer.setPageMargins(QMarginsF(14, 14, 14, 14), QPageLayout.Unit.Millimeter)
+        doc.setPageSize(QSizeF(writer.width(), writer.height()))
+        doc.print(writer)
+        self._pdf_btn.setText(tr("Saved: {name}").format(name=Path(path).name))
+
+    def _pdf_html(self, r: dict, charts_html: str) -> str:
+        """The printable report: the on-screen data, the trend charts, and a
+        plain-language guide to what each part means and how to read it (Knut)."""
+        body = self._report_html(r, None)
+        guide = (
+            "<h2>" + tr("How to read this report") + "</h2>"
+            "<p>" + tr(
+                "This report compares what your instrument measured against the "
+                "colours the chart was designed to have. Every number is a colour "
+                "difference (ΔE00): 0 is a perfect match, 1–2 is barely visible, "
+                "and 10+ is clearly wrong.") + "</p>"
+            "<ul>"
+            "<li>" + tr("<b>Colour accuracy</b> — the average, median, worst, best "
+                        "and spread of ΔE00 across every patch. On a printer the "
+                        "absolute value is less telling than how it CHANGES between "
+                        "dated reports of the same chart.") + "</li>"
+            "<li>" + tr("<b>Paper white &amp; darkest black</b> — the brightest and "
+                        "deepest patches (L*), a quick health check of your paper "
+                        "and maximum ink.") + "</li>"
+            "<li>" + tr("<b>Cube corners</b> — paper white, composite black and the "
+                        "six primary and secondary inks. These say as much about "
+                        "your inks as about the instrument.") + "</li>"
+            "</ul>"
+            "<p>" + tr(
+                "The trend charts plot every saved report of this printer over "
+                "time, so a slow rise (drift — ageing inks, a drifting printer or "
+                "instrument) or a sudden jump (a bad print or a misread) stands "
+                "out at a glance. Save a report after each measurement to build "
+                "that history. Screen and print colours here are approximate; the "
+                "numbers come from your measurement file and are exact.") + "</p>")
+        charts = (("<h2>" + tr("Trend over time (this printer)") + "</h2>" + charts_html)
+                  if charts_html else "")
+        return ("<div style='font-family:sans-serif'>"
+                + body + charts + "<hr>" + guide + "</div>")
+
+    def _update_trends(self, series: list, dark: bool) -> None:
+        """Feed the three grouped trend charts their own metric sets (#40, Knut)."""
+        for chart, _title, metrics, y_max, dec in self._trend_configs():
+            chart.set_data(series, metrics, dark=dark, y_max=y_max, dec=dec)
         has = self._trend_de.has_trend()
         self._trend_label.setVisible(has)
         self._trend_tabs.setVisible(has)
