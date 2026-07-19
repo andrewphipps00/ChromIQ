@@ -1,5 +1,20 @@
 # Changelog
 
+## v3.13.12-beta.7
+
+A small polish to the chart-reading engine's live preview (engine on).
+
+- **The warning outline around an off patch is now unmissable.** When a patch
+  reads far from what the chart expected, its live split-patch preview is
+  outlined so you can spot it at a glance. That outline was a muted red drawn
+  on the patch edge, which blended into red, magenta, pink or dark patches. It
+  is now a bright red line over a white halo — the same high-contrast style the
+  margin guides use — so it stands out on any patch colour, in light or dark
+  mode, without covering the patch.
+- **The outline now hugs every patch identically.** A rounding quirk left some
+  outlines a pixel off-centre while others sat perfectly; they now all line up
+  exactly with their patch.
+
 ## v3.13.12-beta.6
 
 Every point from Knut's beta.5 test report, fixed in one go.
