@@ -155,8 +155,9 @@ def measurement_instructions_html(family: "str | None") -> str:
         return tr(
             "Turn the dial to the <b>measurement position</b> (the target / "
             "aperture icon). Rest the device flat on the paper with the lens at "
-            "the <b>start of the strip</b>, hold the button down, and slide it "
-            "smoothly along the whole strip at a steady pace.")
+            "the <b>start of the strip</b>, then <b>press and hold the side "
+            "button</b> and slide the whole device smoothly along the strip at "
+            "a steady pace.")
     if family == "i1pro":
         return tr(
             "Take the i1Pro off its base. Place it flat at the <b>start of the "
