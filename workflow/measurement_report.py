@@ -30,7 +30,22 @@ from workflow.ti3_analysis import (
 
 log = get_logger(__name__)
 
-REPORT_SCHEMA = 1
+REPORT_SCHEMA = 2
+
+# The eight corners of the RGB device cube, by device value (0..100). These are
+# the paper white, the composite black and the six primary/secondary ink colours
+# — so they say as much about the INKS as about the measurement (Knut). Order:
+# neutral pair first, then primaries, then secondaries.
+CUBE_CORNERS: "list[tuple[str, tuple[float, float, float]]]" = [
+    ("W", (100.0, 100.0, 100.0)),
+    ("K", (0.0, 0.0, 0.0)),
+    ("R", (100.0, 0.0, 0.0)),
+    ("G", (0.0, 100.0, 0.0)),
+    ("B", (0.0, 0.0, 100.0)),
+    ("C", (0.0, 100.0, 100.0)),
+    ("M", (100.0, 0.0, 100.0)),
+    ("Y", (100.0, 100.0, 0.0)),
+]
 
 
 def _srgb_hex(xyz100: "tuple[float, float, float]") -> str:
@@ -114,6 +129,31 @@ def build_report(ti3_path: str | Path, worst_n: int = 15) -> dict:
     }
 
     ref = _reference_labs(ti3_path.with_suffix(".ti2"))
+
+    # The eight cube corners (paper white, composite black, the six ink
+    # primaries/secondaries) — nearest patch to each corner by device RGB. Each
+    # carries its measured colour and, when a reference exists, its expected
+    # colour and ΔE00, so the report says something about the inks, not only the
+    # instrument (Knut). rgb is device 0..100.
+    report["corners"] = []
+    if data.rgb is not None and len(data.rgb):
+        rgb = np.asarray(data.rgb, dtype=float)
+        for name, target in CUBE_CORNERS:
+            ci = int(np.argmin(((rgb - np.array(target)) ** 2).sum(axis=1)))
+            entry: dict = {
+                "name": name,
+                "loc": data.sample_locs[ci] if data.sample_locs else data.sample_ids[ci],
+                "rgb": [round(v, 1) for v in rgb[ci]],
+                "lab": [round(v, 2) for v in lab[ci]],
+                "hex": _srgb_hex(tuple(data.xyz[ci])),
+            }
+            r = ref.get(data.sample_ids[ci]) if ref else None
+            if r is not None:
+                entry["expected_lab"] = [round(v, 2) for v in r]
+                entry["expected_hex"] = _srgb_hex(ref_xyz(ref, data, ci))
+                entry["de"] = round(ciede2000(tuple(lab[ci]), r), 2)
+            report["corners"].append(entry)
+
     if ref:
         des: list[tuple[float, int]] = []
         for i, sid in enumerate(data.sample_ids):
@@ -138,8 +178,10 @@ def ref_xyz(ref_labs, data, i):
     """Expected XYZ(0..100) for patch i, recovered from its reference Lab."""
     from workflow.ti3_analysis import _lab_to_xyz_array
     lab = np.array([ref_labs[data.sample_ids[i]]])
-    xyz = _lab_to_xyz_array(lab)[0] * 100.0
-    return tuple(xyz)
+    # _lab_to_xyz_array already scales to 0..100 (it multiplies the white point
+    # by 100 internally); a second ×100 here overflowed _srgb_hex to white on
+    # every expected swatch (worst-patches and cube corners). One scale only.
+    return tuple(_lab_to_xyz_array(lab)[0])
 
 
 def save_report(report: dict, run_dir: str | Path) -> Path:
@@ -206,6 +248,12 @@ def report_trend(reports: "list[dict]") -> "list[dict]":
             pt["white_L"] = float(w["lab"][0])
         if b and b.get("lab"):
             pt["black_L"] = float(b["lab"][0])
+        # Per-corner ΔE00-from-design, so the cube-corner chart can plot how
+        # each ink drifts over time (Knut).
+        corners = {c["name"]: float(c["de"])
+                   for c in (r.get("corners") or []) if c.get("de") is not None}
+        if corners:
+            pt["corners"] = corners
         if len(pt) > 2:                             # more than just created+chart
             series.append(pt)
     return series

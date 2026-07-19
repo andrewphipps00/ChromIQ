@@ -59,6 +59,22 @@ def test_build_report_stats_and_worst(chart):
     assert r["max_black"]["loc"] == "A2"
 
 
+def test_report_cube_corners(chart):
+    r = build_report(chart)
+    corners = r["corners"]
+    assert [c["name"] for c in corners] == ["W", "K", "R", "G", "B", "C", "M", "Y"]
+    by = {c["name"]: c for c in corners}
+    # Nearest patch by device RGB to each corner.
+    assert by["W"]["loc"] == "A1" and by["K"]["loc"] == "A2" and by["R"]["loc"] == "A3"
+    # A corner with a reference carries expected + measured + ΔE00.
+    assert {"expected_hex", "hex", "de"} <= set(by["R"])
+    # ref_xyz regression (the old double-×100 overflowed _srgb_hex to white):
+    # the RED corner's EXPECTED swatch must be a real red, not clipped white.
+    assert by["R"]["expected_hex"].lower() != "#ffffff"
+    er, eg, eb = (int(by["R"]["expected_hex"][i:i + 2], 16) for i in (1, 3, 5))
+    assert er > eg and er > eb                          # clearly reddish
+
+
 def test_report_without_reference(tmp_path):
     # No .ti2 → no ΔE stats, but white/black still reported.
     (tmp_path / "c.ti3").write_text(_TI3)
@@ -116,12 +132,15 @@ def test_report_trend_series_extracts_plottable_metrics() -> None:
 
 
 def test_trend_chart_widget_visibility(qapp) -> None:
+    from PyQt6.QtGui import QColor
     from ui.dialogs.measurement_report_dialog import _TrendChart
+    metrics = [("Average", QColor("#56d6a5"), lambda pt: pt.get("mean")),
+               ("Worst", QColor("#e0864b"), lambda pt: pt.get("max"))]
     w = _TrendChart()
-    w.set_series([{"created": "2026-01-01", "mean": 3.0}], dark=True)
-    assert not w.has_trend() and not w.isVisible()      # one point → hidden
-    w.set_series([{"created": "2026-01-01", "mean": 3.0},
-                  {"created": "2026-02-01", "mean": 2.5, "max": 6.0}], dark=True)
+    w.set_data([{"created": "2026-01-01", "mean": 3.0}], metrics, dark=True)
+    assert not w.has_trend()                            # one point → no trend
+    w.set_data([{"created": "2026-01-01", "mean": 3.0},
+                {"created": "2026-02-01", "mean": 2.5, "max": 6.0}], metrics, dark=True)
     assert w.has_trend()
     w.resize(400, 200)
     w.grab()                                            # paints without error

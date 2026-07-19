@@ -15,7 +15,8 @@ from pathlib import Path
 from PyQt6.QtCore import QPointF, QRectF, Qt
 from PyQt6.QtGui import QColor, QFont, QPainter, QPen
 from PyQt6.QtWidgets import (
-    QDialog, QHBoxLayout, QLabel, QPushButton, QTextBrowser, QVBoxLayout, QWidget,
+    QDialog, QFileDialog, QHBoxLayout, QLabel, QPushButton, QTabWidget,
+    QTextBrowser, QVBoxLayout, QWidget,
 )
 
 from core.i18n import tr
@@ -28,26 +29,54 @@ log = get_logger(__name__)
 _TAB_COLOR = "#56d6a5"
 
 
-class _TrendChart(QWidget):
-    """A compact line chart of the printer's measurement history over time
-    (#40, Knut): mean and worst ΔE00 across every saved report, so drift —
-    ageing inks, a drifting printer or instrument — is visible at a glance.
-    Only the CHANGE over time is meaningful on a printer, which is exactly what
-    a trend shows. Hidden by the dialog until there are at least two points."""
+# Cube-corner codes → human labels (lazy so tr() runs under the active language).
+_CORNER_LABELS = {
+    "W": lambda: tr("White"),
+    "K": lambda: tr("Black"),
+    "R": lambda: tr("Red"),
+    "G": lambda: tr("Green"),
+    "B": lambda: tr("Blue"),
+    "C": lambda: tr("Cyan"),
+    "M": lambda: tr("Magenta"),
+    "Y": lambda: tr("Yellow"),
+}
 
-    _MEAN = QColor("#56d6a5")
-    _WORST = QColor("#e0864b")
+# Distinct, theme-legible line colours for each cube corner's trend line.
+_CORNER_LINE = {
+    "W": "#9a9a9a", "K": "#555555", "R": "#e23b3b", "G": "#33a94a",
+    "B": "#3b6fe2", "C": "#1fb0b0", "M": "#c93bc9", "Y": "#c2a41f",
+}
+
+
+class _TrendChart(QWidget):
+    """A compact multi-line chart of a printer's measurement history over time
+    (#40, Knut). Generic: each instance plots one GROUP of related metrics
+    (ΔE00 accuracy, paper white/black, or the eight cube corners) so unlike
+    scales never share an axis. A metric is ``(label, QColor, accessor)`` where
+    ``accessor(point)`` returns the value or ``None``. Hidden until ≥2 points.
+    ``unit_dec`` sets the y-label decimals; ``y_max`` optionally pins the top
+    (e.g. 100 for L*)."""
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
         self._series: list[dict] = []
+        self._metrics: list = []
         self._dark = True
-        self.setMinimumHeight(190)
+        self._y_max: "float | None" = None
+        self._dec = 1
+        self.setMinimumHeight(210)
 
-    def set_series(self, series: "list[dict]", dark: bool = True) -> None:
-        self._series = [p for p in (series or []) if "mean" in p or "max" in p]
+    def set_data(self, series, metrics, dark=True, y_max=None, dec=1) -> None:
+        def has_any(pt) -> bool:
+            return any(acc(pt) is not None for _, _, acc in metrics)
+        self._series = [p for p in (series or []) if has_any(p)]
+        self._metrics = metrics
         self._dark = dark
-        self.setVisible(len(self._series) >= 2)
+        self._y_max = y_max
+        self._dec = dec
+        # NB: visibility is owned by the container (the tab widget), NOT the
+        # chart — a per-widget setVisible here fought the tab stack and made all
+        # three pages paint on top of each other before layout settled.
         self.update()
 
     def has_trend(self) -> bool:
@@ -66,14 +95,13 @@ class _TrendChart(QWidget):
         L, R, T, B = 40.0, 12.0, 24.0, 26.0
         w = max(1.0, self.width() - L - R)
         h = max(1.0, self.height() - T - B)
-        vals = [v for pt in pts for k in ("mean", "max") if (v := pt.get(k)) is not None]
-        vmax = max(vals + [1.0]) * 1.12
+        vals = [v for pt in pts for _, _, acc in self._metrics
+                if (v := acc(pt)) is not None]
+        vmax = self._y_max if self._y_max else max(vals + [1.0]) * 1.12
         n = len(pts)
 
         def xy(i: int, val: float):
-            x = L + (w * i / (n - 1))
-            y = T + h * (1.0 - val / vmax)
-            return QPointF(x, y)
+            return QPointF(L + (w * i / (n - 1)), T + h * (1.0 - val / vmax))
 
         # Y grid + labels (0, mid, top).
         p.setPen(QPen(grid, 1.0))
@@ -83,12 +111,13 @@ class _TrendChart(QWidget):
             p.setPen(QPen(fg, 1.0))
             p.drawText(QRectF(0, yy - 7, L - 4, 14),
                        Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter,
-                       f"{vmax * frac:.1f}")
+                       f"{vmax * frac:.{self._dec}f}")
             p.setPen(QPen(grid, 1.0))
 
-        # Two series.
-        for key, col in (("mean", self._MEAN), ("max", self._WORST)):
-            poly = [xy(i, pt[key]) for i, pt in enumerate(pts) if pt.get(key) is not None]
+        # One polyline per metric.
+        for _lbl, col, acc in self._metrics:
+            poly = [xy(i, v) for i, pt in enumerate(pts)
+                    if (v := acc(pt)) is not None]
             if len(poly) < 2:
                 continue
             p.setPen(QPen(col, 2.0))
@@ -96,7 +125,7 @@ class _TrendChart(QWidget):
                 p.drawLine(a, b)
             p.setBrush(col); p.setPen(Qt.PenStyle.NoPen)
             for q in poly:
-                p.drawEllipse(q, 2.6, 2.6)
+                p.drawEllipse(q, 2.4, 2.4)
 
         # X axis: a tick under EVERY measurement point plus as many dated labels
         # (YYYY-MM-DD) as fit without overlapping — always the first and last —
@@ -135,14 +164,17 @@ class _TrendChart(QWidget):
                 _draw_date(left, d)
                 occupied.append((left, right))
 
-        # Legend.
-        lx = L + 4
-        for lbl, col in ((tr("Average"), self._MEAN), (tr("Worst"), self._WORST)):
+        # Legend (wraps across as many rows as needed for 8 corners).
+        lx, ly = L + 4, T - 12
+        for lbl, col, _acc in self._metrics:
+            adv = 26 + fm.horizontalAdvance(lbl)
+            if lx + adv > L + w:
+                lx = L + 4; ly += 13
             p.setBrush(col); p.setPen(Qt.PenStyle.NoPen)
-            p.drawEllipse(QPointF(lx + 4, T - 12), 3.0, 3.0)
+            p.drawEllipse(QPointF(lx + 4, ly), 3.0, 3.0)
             p.setPen(QPen(fg, 1.0))
-            p.drawText(QPointF(lx + 12, T - 8), lbl)
-            lx += 26 + p.fontMetrics().horizontalAdvance(lbl)
+            p.drawText(QPointF(lx + 12, ly + 4), lbl)
+            lx += adv
         p.end()
 
 
@@ -179,7 +211,12 @@ class MeasurementReportDialog(QDialog):
             "the expected and measured colour side by side, so you can spot a "
             "misread or a genuinely hard-to-reproduce colour.\n"
             "  • Paper white and darkest black — the brightest and deepest "
-            "patches, a quick health check of your paper and maximum ink.\n\n"
+            "patches, a quick health check of your paper and maximum ink.\n"
+            "  • Cube corners — paper white, composite black and the six "
+            "primary and secondary inks (red, green, blue, cyan, magenta, "
+            "yellow): the corners of the colour cube. Each is compared to its "
+            "design colour, so they tell you about the inks themselves, not "
+            "only the instrument or the paper.\n\n"
             "Why compare over time? On a printer, a single ΔE against the "
             "design isn't meaningful on its own (a printer doesn't reproduce "
             "sRGB). But because the design reference never changes, the "
@@ -210,9 +247,18 @@ class MeasurementReportDialog(QDialog):
         self._trend_label.setStyleSheet("font-weight:bold;margin-top:2px")
         self._trend_label.setVisible(False)
         v.addWidget(self._trend_label)
-        self._trend = _TrendChart(self)
-        self._trend.setVisible(False)
-        v.addWidget(self._trend)
+        # Unlike-scaled metrics can't share one axis (Knut), so group them into
+        # three tabbed charts: ΔE00 accuracy, paper white/black, and the eight
+        # cube corners. Each is a _TrendChart fed its own metric set in _load.
+        self._trend_tabs = QTabWidget(self)
+        self._trend_de = _TrendChart(self)
+        self._trend_wb = _TrendChart(self)
+        self._trend_corners = _TrendChart(self)
+        self._trend_tabs.addTab(self._trend_de, tr("Colour accuracy (ΔE00)"))
+        self._trend_tabs.addTab(self._trend_wb, tr("Paper white / black"))
+        self._trend_tabs.addTab(self._trend_corners, tr("Cube corners"))
+        self._trend_tabs.setVisible(False)
+        v.addWidget(self._trend_tabs)
 
         self._view = QTextBrowser(self)
         self._view.setOpenExternalLinks(False)
@@ -269,9 +315,32 @@ class MeasurementReportDialog(QDialog):
 
         from ui.theme import resolve_mode
         dark = resolve_mode(self._settings.get("appearance", "auto")) != "light"
-        self._trend.set_series(report_trend(history), dark=dark)
-        self._trend_label.setVisible(self._trend.has_trend())
+        self._update_trends(report_trend(history), dark)
         self._view.setHtml(self._report_html(self._report, comparison))
+
+    def _update_trends(self, series: list, dark: bool) -> None:
+        """Feed the three grouped trend charts their own metric sets (#40, Knut)."""
+        self._trend_de.set_data(series, [
+            (tr("Average"), QColor("#56d6a5"), lambda pt: pt.get("mean")),
+            (tr("Worst"),   QColor("#e0864b"), lambda pt: pt.get("max")),
+        ], dark=dark, dec=1)
+        # Paper white sits near L*100 and black near L*10 — pin the axis to the
+        # full L* range so both read on one scale and the black's rise (ink
+        # fade) is obvious.
+        self._trend_wb.set_data(series, [
+            (tr("Paper white L*"), QColor("#b0b0b0"), lambda pt: pt.get("white_L")),
+            (tr("Black L*"),       QColor("#505050"), lambda pt: pt.get("black_L")),
+        ], dark=dark, y_max=100.0, dec=0)
+        # One ΔE00 line per cube corner, coloured like the ink it stands for.
+        corner_metrics = [
+            (_CORNER_LABELS[code](), QColor(_CORNER_LINE[code]),
+             (lambda pt, c=code: (pt.get("corners") or {}).get(c)))
+            for code in ("W", "K", "R", "G", "B", "C", "M", "Y")
+        ]
+        self._trend_corners.set_data(series, corner_metrics, dark=dark, dec=1)
+        has = self._trend_de.has_trend()
+        self._trend_label.setVisible(has)
+        self._trend_tabs.setVisible(has)
 
     # ------------------------------------------------------------------
     def _empty_html(self) -> str:
@@ -286,9 +355,14 @@ class MeasurementReportDialog(QDialog):
 
     def _report_html(self, r: dict, comparison: "dict | None") -> str:
         def sw(hexc: str) -> str:
-            return (f"<span style='display:inline-block;width:14px;height:14px;"
-                    f"border:1px solid #999;background:{html.escape(hexc)};"
-                    f"vertical-align:middle'></span>")
+            # Qt's rich-text engine ignores display:inline-block width/height on
+            # an empty span (the swatches came out invisible), but it DOES honour
+            # background-color on a span with content. Fill it with spaces hidden
+            # by matching the text colour to the fill, so a solid colour block
+            # shows on every theme.
+            c = html.escape(hexc)
+            return (f"<span style='background-color:{c};color:{c};"
+                    f"border:1px solid #999'>&nbsp;&nbsp;&nbsp;</span>")
 
         de = r.get("de00")
         parts = [f"<h2 style='margin:0 0 2px'>{html.escape(r['chart'])}</h2>",
@@ -322,6 +396,31 @@ class MeasurementReportDialog(QDialog):
             f"— L* {w['lab'][0]:.1f}</div>"
             f"<div>{sw(b['hex'])} " + tr("Black") + f" ({html.escape(str(b['loc']))}) "
             f"— L* {b['lab'][0]:.1f}</div>")
+
+        corners = r.get("corners") or []
+        if corners:
+            parts.append("<h3>" + tr("Cube corners (the eight ink extremes)") + "</h3>")
+            parts.append("<div style='color:#888;font-size:12px;margin-bottom:4px'>"
+                         + tr("Paper white, composite black and the six primary and "
+                              "secondary inks — the corners of the colour cube. These "
+                              "say as much about your inks as about the measurement.")
+                         + "</div>")
+            head = ("<tr style='color:#888'><th align='left'>" + tr("Corner")
+                    + "</th><th>" + tr("Expected") + "</th><th>" + tr("Measured")
+                    + "</th><th align='right'>ΔE00</th></tr>")
+            crows = [head]
+            for c in corners:
+                lbl = _CORNER_LABELS.get(c["name"], lambda: c["name"])()
+                exp = (sw(c["expected_hex"]) if c.get("expected_hex") else "—")
+                de_c = (f"<b>{c['de']:.2f}</b>" if c.get("de") is not None else "—")
+                crows.append(
+                    f"<tr><td>{html.escape(lbl)} "
+                    f"<span style='color:#888'>({html.escape(str(c['loc']))})</span></td>"
+                    f"<td align='center'>{exp}</td>"
+                    f"<td align='center'>{sw(c['hex'])}</td>"
+                    f"<td align='right'>{de_c}</td></tr>")
+            parts.append("<table cellpadding='5' style='border-collapse:collapse'>"
+                         + "".join(crows) + "</table>")
 
         worst = r.get("worst_patches") or []
         if worst:
