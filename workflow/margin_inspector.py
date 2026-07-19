@@ -189,6 +189,21 @@ def measure_from_engine(
         except Exception:  # pragma: no cover - defensive; fall back to patch rects
             pass
 
+    # SpectroScan hexagonal patches are DRAWN beyond their slot rectangles: the
+    # top/bottom apex pokes ph/6 past the slot (reserved as hxeh) and the ±¼·w
+    # row stagger pushes the flat left/right sides past the slot (reserved as
+    # hxew) — see raster._hexagon_points. So the true ink extremes, and thus the
+    # margins Knut wants the guides to mark, are the hex tips (top/bottom) and
+    # flat edges (left/right), not the slot box. Expand the bbox to match (#28).
+    from workflow.hex_support import recipe_is_hexagonal
+    if recipe_is_hexagonal(rec):
+        w_px = max(r["w"] for r in rects)
+        h_px = max(r["h"] for r in rects)
+        x0 -= w_px / 4.0          # flat left edge of the left-shifted rows
+        x1 += w_px / 4.0          # flat right edge of the right-shifted rows
+        y0 -= h_px / 6.0          # upper apex of the top row
+        y1 += h_px / 6.0          # lower apex of the bottom row
+
     report = MarginReport(
         left_mm=max(0.0, x0 * px2mm),
         right_mm=max(0.0, paper_w_mm - x1 * px2mm),

@@ -287,6 +287,42 @@ def test_measure_from_engine_exact_geometry(tmp_path):
     assert ruler == 240.0                             # i1Pro ruler for the warning
 
 
+def test_measure_from_engine_hex_expands_to_tips_and_edges(tmp_path):
+    """#28 (Knut): SpectroScan hexagons are drawn beyond their slots — the apex
+    reaches h/6 past the slot top/bottom, the ±w/4 stagger past the left/right
+    sides. So the margins (and the guides they drive) must sit at the hex tips
+    (top/bottom) and flat edges (left/right), not the slot box."""
+    import json
+    from workflow.margin_inspector import measure_from_engine
+    mm = 200 / 25.4
+    def px(v):
+        return round(v * mm)
+    w = h = px(7.0)                                  # 7 mm hex slot
+    rects = []
+    for col in range(3):
+        for row in range(4):
+            rects.append({"page": 0, "x": px(20.0) + col * w,
+                          "y": px(15.0) + row * h, "w": w, "h": h})
+    # rectangular reference (no hex): margins fall on the slot box.
+    base = {"layout": {"engine": "chromiq", "dpi": 200, "paper_mm": [210.0, 297.0],
+                       "patches": rects, "recipe": {"instrument": "i1"}}}
+    scb = tmp_path / "rect.channels.json"; scb.write_text(json.dumps(base))
+    r_rect, _ = measure_from_engine(scb, 0)
+
+    hexdoc = {"layout": {"engine": "chromiq", "dpi": 200, "paper_mm": [210.0, 297.0],
+                         "patches": rects,
+                         "recipe": {"instrument": "SS", "hflag": True}}}
+    sch = tmp_path / "hex.channels.json"; sch.write_text(json.dumps(hexdoc))
+    r_hex, _ = measure_from_engine(sch, 0)
+
+    px2mm = 25.4 / 200
+    # hex margins are SMALLER than the slot margins by exactly the overhang.
+    assert abs((r_rect.left_mm - r_hex.left_mm) - (w / 4) * px2mm) < 0.05
+    assert abs((r_rect.right_mm - r_hex.right_mm) - (w / 4) * px2mm) < 0.05
+    assert abs((r_rect.top_mm - r_hex.top_mm) - (h / 6) * px2mm) < 0.05
+    assert abs((r_rect.bottom_mm - r_hex.bottom_mm) - (h / 6) * px2mm) < 0.05
+
+
 def test_measure_from_engine_skips_printtarg_charts(tmp_path):
     """A non-engine (printtarg) channels.json returns None so the caller falls
     back to image measurement (#93)."""
