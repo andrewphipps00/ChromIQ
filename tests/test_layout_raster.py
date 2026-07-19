@@ -38,6 +38,40 @@ def test_render_dimensions_and_pages():
     assert h == round(297.0 * 150 / 25.4)
 
 
+def test_by_grid_loaded_patchset_honours_requested_rows(tmp_path):
+    """Knut #34: a LOADED patch set (1170) with area-first 'By columns / rows'
+    set to 15 columns × 16 rows must render 16 rows per full page — not 15.
+    Exercised through the full build_chart path (not just geometry.compute),
+    because the fixed count feeds area-first via area_target_count and an
+    off-by-one in the row-fit would silently drop a row (needs 17 to get 16)."""
+    import random
+    from workflow.layout_engine import chart as le_chart, instruments, papers
+    from workflow.layout_engine.presets import default_recipe
+    import workflow.ti2_relayout as R
+
+    random.seed(3)
+    prog = [(random.random() * 100, random.random() * 100, random.random() * 100)
+            for _ in range(1170)]
+    R.write_ti1(R.ChartSpec.new("i1", "A4"), prog, tmp_path / "g.ti1")
+    rec = default_recipe("i1", "A4")
+    rec.randomize = False
+    rec.layout_mode = "area_first"
+    rec.area_method = "by_grid"
+    rec.area_cols, rec.area_rows = 15, 16
+    kw = rec.build_kwargs(); kw["dpi"] = 150
+    res = le_chart.build_chart(str(tmp_path / "g.ti1"), tmp_path / "g", **kw)
+
+    kw["area_target_count"] = res.layout.total_patches
+    geom = instruments.geom_from_build_kwargs(kw)
+    w, h = papers.dimensions_mm("A4")
+    rects = geometry.patch_rects_px(geom, w, h, res.layout, 150)
+    page0 = [d for d in rects if d["page"] == 0]
+    n_cols = len({d["x"] for d in page0})
+    n_rows = len({d["y"] for d in page0})
+    assert (n_cols, n_rows) == (15, 16), \
+        f"requested 15×16, got {n_cols}×{n_rows} (off-by-one row drop)"
+
+
 def test_saved_tiff_colours_match_ti2_at_every_location(tmp_path):
     """The chartread-critical property end to end: every patch in the SAVED .tif
     must show the exact device colour the .ti2 records at that SAMPLE_LOC — so
