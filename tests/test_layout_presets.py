@@ -125,6 +125,17 @@ def test_default_recipe_mode_application():
     assert default_recipe("CM", "A4", mode="extrahigh").cm_density == 3
 
 
+def test_spectroscan_defaults_to_patch_first():
+    """A flatbed reads a fixed grid, so the SpectroScan defaults to patch-first
+    (area-first + By-minimum-width collapses it to full-width bands). Other
+    instruments keep the generic area-first default."""
+    assert default_recipe("SS", "A4").layout_mode == "patch_first"
+    assert default_recipe("SS", "A4", mode="hex").layout_mode == "patch_first"
+    assert default_recipe("SS", "A4", mode="flat").layout_mode == "patch_first"
+    assert default_recipe("i1", "A4").layout_mode == "area_first"
+    assert default_recipe("CM", "A4").layout_mode == "area_first"
+
+
 def test_from_build_kwargs_roundtrip_and_detection():
     """A chart whose channels.json stored build-kwargs (not a recipe) must
     reload faithfully — esp. clip_border (kwargs spell it nolpcbord) (#93)."""

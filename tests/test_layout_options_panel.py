@@ -564,3 +564,36 @@ def test_no_stale_conflict_after_recipe_load_with_band_off(app):
         assert not _has_conflict(w), "stale conflict outline survived load"
     assert all(_has_bg_rule(w) for w in
                (p.margins["l"], p.margins["r"], p.clip_width))
+
+
+def test_spectroscan_switch_defaults_patch_first(app):
+    """Picking the SpectroScan in the panel defaults the layout to patch-first
+    (the flatbed's fixed grid), but area-first + By-columns/rows stays available
+    and a loaded preset keeps its own mode."""
+    from ui.dialogs.layout_options_panel import LayoutOptionsPanel
+    p = LayoutOptionsPanel(with_selectors=True)
+
+    # A user switch INTO the SpectroScan → patch-first, and By-columns/rows as
+    # the area method (so area-first never lands on the band-collapsing method).
+    p.instr.setCurrentIndex(p.instr.findData("SS"))
+    r = p.get_recipe()
+    assert r.layout_mode == "patch_first" and r.area_method == "by_grid"
+
+    # Switching to area-first WITHOUT touching the method still gives a grid
+    # method (Knut's workflow), never By-minimum-width.
+    p.layout_mode.setCurrentIndex(p.layout_mode.findData("area_first"))
+    got = p.get_recipe()
+    assert got.layout_mode == "area_first" and got.area_method == "by_grid"
+
+    # Loading a saved SpectroScan area-first preset must NOT be overridden.
+    p2 = LayoutOptionsPanel(with_selectors=True)
+    p2.set_recipe(LayoutRecipe(instrument="SS", paper="A4", hflag=True,
+                               layout_mode="area_first", area_method="by_grid",
+                               area_cols=15, area_rows=16))
+    assert p2.get_recipe().layout_mode == "area_first"
+
+    # Other instruments are unaffected by the SpectroScan rule.
+    p3 = LayoutOptionsPanel(with_selectors=True)
+    p3.instr.setCurrentIndex(p3.instr.findData("SS"))
+    p3.instr.setCurrentIndex(p3.instr.findData("i1"))
+    assert p3.get_recipe().instrument == "i1"

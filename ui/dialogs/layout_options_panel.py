@@ -1425,6 +1425,10 @@ class LayoutOptionsPanel(QWidget):
         from workflow.layout_engine import papers
         if self.instr is None:
             return
+        # True when set_recipe() is driving this change (it sets _loading before
+        # touching the instrument combo): then the recipe supplies the layout
+        # mode, so the SpectroScan default below must NOT override it.
+        was_loading = self._loading
         self._loading = True
         inst = self.instr.currentData() or "i1"
         prev_paper = self.paper.currentData()
@@ -1463,9 +1467,22 @@ class LayoutOptionsPanel(QWidget):
         if hasattr(self, "cm_stagger_cb"):
             self.cm_stagger_cb.setVisible(inst == "CM")
             self._cm_stagger_tip.setVisible(inst == "CM")
-        # Re-evaluate area-first field visibility / Density-disable for the new
-        # instrument (Density is moot for CM in area-first).
+        # Picking the SpectroScan defaults the layout to patch-first (a flatbed
+        # reads a fixed grid; area-first + By-minimum-width collapses it to
+        # useless full-width bands). Its area method also defaults to
+        # By-columns/rows, so even if the user later switches to area-first they
+        # get a proper grid, never bands (By-minimum-width is meaningless for a
+        # flatbed). Only on a genuine USER switch — a preset load carries its own
+        # values. Both selectors stay fully changeable afterwards.
         if hasattr(self, "layout_mode"):
+            if not was_loading and inst == "SS":
+                _pf = self.layout_mode.findData("patch_first")
+                if _pf >= 0:
+                    self.layout_mode.setCurrentIndex(_pf)
+                if hasattr(self, "area_method"):
+                    _bg = self.area_method.findData("by_grid")
+                    if _bg >= 0:
+                        self.area_method.setCurrentIndex(_bg)
             self._sync_layout_mode()
         self._loading = False
         self._on_paper_changed()

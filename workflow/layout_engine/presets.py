@@ -363,6 +363,15 @@ def default_recipe(instrument: str = "i1", paper: str = "A4", *, mode: str | Non
                    ) -> LayoutRecipe:
     """A sensible default recipe for *instrument*/*paper* (and optional *mode*)."""
     r = LayoutRecipe(instrument=instrument, paper=paper)
+    # The SpectroScan is a flatbed XY-table: it reads a FIXED 2-D grid, so
+    # "prioritise patch size, then fit to page" (patch_first) is its natural
+    # layout — it gives the proper grid of hexagons/squares. The generic
+    # area_first default with the "By minimum width" method collapses a flatbed
+    # into a single full-width column of thin bands (there is no fixed aperture
+    # to stop it), so patch_first is the right default here. area_first + "By
+    # columns/rows" stays fully available for users who want an explicit grid.
+    if instrument == "SS":
+        r.layout_mode = "patch_first"
     # ColorMunki / SpectroScan have no physical clip; the notes band is opt-in, so
     # it defaults OFF for every mode (Sebastian). i1/p3 keep "notes" so that when
     # their clip border is on it carries the record strip.
