@@ -63,6 +63,48 @@ def _folders():
     ]
 
 
+def _features():
+    """(feature, input files, output files) rows — Knut's "Files Relating to
+    Features" table, so it's clear at a glance what each feature reads and
+    writes. File names use “{name}” for the profile's name, like the rest of the
+    guide."""
+    return [
+        (tr("Create Chart"),
+         tr("Your settings (or a loaded patch set / preset)"),
+         tr("{name}.ti1, {name}.ti2, {name}.channels.json, {name}.strips.json, "
+            "{name}_01.tif …; optional {name}.pdf; the exports/ sidecars")),
+        (tr("Print Chart"),
+         tr("{name}_01.tif … (the chart pages)"),
+         tr("{name}.ps (only on the PostScript print path)")),
+        (tr("Measure"),
+         tr("{name}.ti2 (+ {name}.strips.json / .channels.json for the preview)"),
+         tr("{name}.ti3; reads/readN.ti3 when averaging; "
+            "reports/report_*.json when a measurement report is saved")),
+        (tr("Build Profile"),
+         tr("{name}.ti3"),
+         tr("{name}.icc; merged.ti3 / merged.icc and calibrated.icc when "
+            "refinement / calibration are used")),
+        (tr("Check & Refine"),
+         tr("{name}.ti3 and {name}.icc"),
+         tr("reports/Quality_Check_N_{name}.txt, reports/Refine_Strips_{name}.txt")),
+        (tr("Create scanner or camera target"),
+         tr("A measurement of the chart ({name}.ti3 or a reference .cie/i1Profiler file)"),
+         tr("{name}.cht (recognition template) + {name}.cie (reference values)")),
+        (tr("Build profile with scanner or camera"),
+         tr("Your scan/photo image(s) + the chart's {name}.cht and {name}.cie"),
+         tr("The scanner/camera ICC profile; cache/ working copies + a -diag.tif")),
+        (tr("Verify a profile (Tools)"),
+         tr("{name}.icc and {name}.ti3"),
+         tr("reports/Verify_Profile_N_{name}.txt; a 3D difference map (*.x3d.html)")),
+        (tr("Verify against reference (Tools)"),
+         tr("A profile / measurement and a reference"),
+         tr("reports/Verify_Reference_N_{name}.txt")),
+        (tr("i1Profiler export (Tools)"),
+         tr("{name}.ti1 / {name}.ti2"),
+         tr("exports/{name}-i1profiler.txt and .pxf")),
+    ]
+
+
 def _rows():
     """Groups of (file, folder, description, origin) rows, grouped by where
     they live (folder-first since #127). Lazily built so the tr() calls run
@@ -125,6 +167,30 @@ def file_guide_html() -> str:
     # engine collapses a <p> bottom margin against a following <table>, so the
     # blank line is an explicit small spacer paragraph instead.
     spacer = "<p style='font-size:5px; margin:0'>&nbsp;</p>"
+
+    # Section 1 — "Files Relating to Features": what each feature reads/writes.
+    parts.append(f"<p style='margin:16px 0 0; font-size:15px'><b>"
+                 f"{esc(tr('Files Relating to Features'))}</b></p>")
+    parts.append(spacer)
+    parts.append("<table cellspacing='0' cellpadding='4' width='100%' "
+                 "style='border-collapse:collapse'>")
+    parts.append(
+        "<tr style='color:#888'>"
+        f"<th align='left'>{esc(tr('Feature'))}</th>"
+        f"<th align='left'>{esc(tr('Input Files'))}</th>"
+        f"<th align='left'>{esc(tr('Output Files'))}</th></tr>")
+    for feat, ins, outs in _features():
+        parts.append(
+            "<tr>"
+            f"<td valign='top'>{esc(feat)}</td>"
+            f"<td valign='top'>{esc(ins)}</td>"
+            f"<td valign='top'>{esc(outs)}</td></tr>")
+    parts.append("</table>")
+
+    # Section 2 — "All File Types and Their Use": the folder map + file detail.
+    parts.append(f"<p style='margin:20px 0 0; font-size:15px'><b>"
+                 f"{esc(tr('All File Types and Their Use'))}</b></p>")
+    parts.append(spacer)
     parts.append(f"<p style='margin:14px 0 0'><b>{esc(tr('What the folders mean'))}</b></p>")
     parts.append(spacer)
     parts.append("<table cellspacing='0' cellpadding='4' width='100%' "
@@ -165,6 +231,15 @@ def file_guide_html() -> str:
 def file_guide_body() -> str:
     """Plain-text version for the ``Where are my files.txt`` sidecar."""
     lines = [_intro(), ""]
+    lines.append("=== " + tr("Files Relating to Features").upper() + " ===")
+    lines.append("")
+    for feat, ins, outs in _features():
+        lines.append(f"  • {feat}")
+        lines.append(f"      {tr('Input Files')}:  {ins}")
+        lines.append(f"      {tr('Output Files')}: {outs}")
+    lines.append("")
+    lines.append("=== " + tr("All File Types and Their Use").upper() + " ===")
+    lines.append("")
     lines.append(tr("What the folders mean").upper())
     lines.append("")
     for folder, meaning in _folders():
