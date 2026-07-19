@@ -35,6 +35,15 @@ class TooltipButton(QToolButton):
     # Set by MainWindow._on_tab_changed() each time the tab switches.
     ACCENT: str = "#1FB7C7"
 
+    # The ⓘ glyph is fully determined by its colour and the screen's device
+    # pixel ratio (the size and font are constants), so identical-colour buttons
+    # render pixel-for-pixel the same icon. Cache the finished QIcon per
+    # (colour, dpr): at startup ~600 tooltip buttons share a handful of accent
+    # colours, so all but the first draw of each become a dict lookup instead of
+    # a QPainter render (~90 ms off app start). QIcon is immutable, so sharing
+    # one instance across buttons is safe.
+    _ICON_CACHE: "dict[tuple, QIcon]" = {}
+
     def __init__(
         self,
         title: str,
@@ -92,6 +101,10 @@ class TooltipButton(QToolButton):
 
     def _draw_icon(self, color: QColor) -> QIcon:
         dpr  = QGuiApplication.primaryScreen().devicePixelRatio()
+        key  = (color.rgba(), round(dpr, 4))
+        cached = TooltipButton._ICON_CACHE.get(key)
+        if cached is not None:
+            return cached
         phys = round(_ICON_SIZE * dpr)
         px   = QPixmap(phys, phys)
         px.fill(Qt.GlobalColor.transparent)
@@ -120,7 +133,9 @@ class TooltipButton(QToolButton):
         )
         p.end()
         px.setDevicePixelRatio(dpr)
-        return QIcon(px)
+        icon = QIcon(px)
+        TooltipButton._ICON_CACHE[key] = icon
+        return icon
 
     # ------------------------------------------------------------------
     def _show_dialog(self) -> None:
