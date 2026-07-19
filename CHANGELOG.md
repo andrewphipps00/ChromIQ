@@ -1,5 +1,30 @@
 # Changelog
 
+## v3.13.12-beta.20
+
+- **Measurement report: the eight cube corners.** The report now keeps paper
+  white, composite black and the six primary/secondary inks (red, green, blue,
+  cyan, magenta, yellow) — each with its measured colour, expected colour and
+  ΔE00 — so it tells you about the inks themselves, not only the instrument
+  (Knut).
+- **Grouped trend charts.** Unlike-scaled metrics no longer share one axis:
+  the trend is now three tabbed charts — colour accuracy (ΔE00), paper
+  white/black (L*), and the eight cube corners (ΔE00 per ink). The trend
+  x-axis now dates every measurement, not just the first and last.
+- **Save the report as a PDF.** A new button writes the whole report — every
+  data table, all three trend charts, and a plain-language "how to read this
+  report" guide — as a PDF into the reports folder.
+- **Hexagonal SpectroScan charts in "Show only measured patches".** Unread
+  patches now draw as their true hexagon and measured patches fill the hexagon
+  (with the diagonal expected/measured split), both following the zigzag —
+  they were being drawn as rectangles.
+- **No more wiped caption on a partial last page.** The "Show only measured"
+  blank-out no longer covers the right-margin caption on a ragged last page.
+- **ColorMunki measuring pop-up** now says to press and hold the side button
+  while sliding the whole device (Knut).
+- Fixed expected-colour swatches rendering white in the report (a scaling bug
+  in the reference-colour conversion).
+
 ## v3.13.12-beta.19
 
 - **"Offset every second strip" is finally hidden everywhere it should be.** The
