@@ -13,7 +13,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from core.logger import get_logger
 from core.resource_path import resource_path
+
+log = get_logger(__name__)
 
 # Friendly names for the well-known targets (filename stem → display). Anything
 # not listed falls back to its stem. Ordered-priority list decides the combo
@@ -160,6 +163,101 @@ def bundled_targets_dir() -> Path | None:
     return d if d.is_dir() else None
 
 
+def user_targets_dir(settings) -> Path:
+    """The user-visible ``scanner-test-targets`` folder inside the ChromIQ
+    output root (``~/ChromIQ`` or the custom output path). Holds a copy of
+    every bundled target ``.cht`` so users can inspect or tweak them, plus the
+    demo scans the "Try with a demo scan" button generates. A same-named
+    ``.cht`` in here OVERRIDES the bundled one (Knut, beta.5) — that's how a
+    user-modified recognition file takes effect."""
+    custom = (settings.get("custom_output_path", "") or "") if settings else ""
+    root = Path(custom) if custom else Path.home() / "ChromIQ"
+    return root / "scanner-test-targets"
+
+
+_USER_TARGETS_README = """\
+About this folder (created by ChromIQ)
+
+These are the recognition files (.cht) for the standard scanner/camera
+targets ChromIQ knows, copied here so you can look at them — plus any demo
+scans and references made by the "Try with a demo scan" button.
+
+Want to tweak a target's patch geometry? Edit the .cht right here (or copy
+your own over it, keeping the same file name). ChromIQ always prefers the
+files in this folder over its built-in copies, so your version is what the
+"Build profile with scanner or camera" tool actually uses.
+
+Deleted something? No problem — ChromIQ puts a fresh copy of any missing
+file back the next time you open the scanner tool. Your edited files are
+never overwritten.
+"""
+
+
+def ensure_user_targets_dir(settings) -> Path | None:
+    """Create/refresh the user ``scanner-test-targets`` folder: copy every
+    bundled ``.cht`` (plus README/LICENSE and an explainer) that is missing,
+    and refresh copies the user has NOT touched when a ChromIQ update ships a
+    corrected file — a ``.provisioned.json`` manifest records the hash of what
+    ChromIQ copied, so an unmodified copy is recognised and updated while an
+    edited one is never overwritten (Knut, beta.5: updated files must reach
+    users). Best-effort; returns the folder (None when nothing could be
+    created)."""
+    import hashlib
+    import json
+    import shutil
+
+    def _sha(p: Path) -> str:
+        return hashlib.sha256(p.read_bytes()).hexdigest()
+
+    try:
+        d = user_targets_dir(settings)
+        d.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        log.warning("could not create user targets folder: %s", exc)
+        return None
+    manifest_path = d / ".provisioned.json"
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        manifest = {}
+    bundled = bundled_targets_dir()
+    if bundled is not None:
+        for src in sorted(bundled.iterdir()):
+            if not src.is_file():
+                continue
+            dst = d / src.name
+            try:
+                if not dst.exists():
+                    shutil.copy2(src, dst)             # missing → (re)place
+                    manifest[src.name] = _sha(src)
+                    continue
+                recorded = manifest.get(src.name)
+                if recorded is None:
+                    # Pre-manifest copy (or user-supplied file): adopt only a
+                    # byte-identical file as "provisioned"; leave anything
+                    # else alone — it may be a user's edit.
+                    if _sha(dst) == _sha(src):
+                        manifest[src.name] = _sha(src)
+                    continue
+                if _sha(dst) == recorded and recorded != _sha(src):
+                    shutil.copy2(src, dst)             # untouched + update → refresh
+                    manifest[src.name] = _sha(src)
+            except OSError as exc:
+                log.warning("could not provision %s: %s", src.name, exc)
+    note = d / "About this folder.txt"
+    if not note.exists():
+        try:
+            note.write_text(_USER_TARGETS_README, encoding="utf-8")
+        except OSError:
+            pass
+    try:
+        manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True),
+                                 encoding="utf-8")
+    except OSError:
+        pass
+    return d
+
+
 def display_name(cht: Path) -> str:
     return _FRIENDLY.get(cht.stem, cht.stem)
 
@@ -176,6 +274,14 @@ def list_standard_targets(settings) -> list[tuple[str, Path]]:
     bundled = bundled_targets_dir()
     if bundled is not None:                       # bundled corrected files win
         by_stem.update({p.stem: p for p in bundled.glob("*.cht")})
+    # …and a user's copy in <output>/scanner-test-targets wins over everything:
+    # that folder is exactly where a tweaked recognition file goes to take
+    # effect (Knut, beta.5). Only stems the app already knows are overridden —
+    # a stray demo/foreign .cht in the folder doesn't invent a new target.
+    user_dir = user_targets_dir(settings)
+    if user_dir.is_dir():
+        by_stem.update({p.stem: p for p in user_dir.glob("*.cht")
+                        if p.stem in by_stem})
     if not by_stem:
         return []
     ordered: list[tuple[str, Path]] = []

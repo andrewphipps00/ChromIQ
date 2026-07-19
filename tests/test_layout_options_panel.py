@@ -466,3 +466,84 @@ def test_clip_image_rows_only_visible_for_image(app):
     assert all(shown())
     p.clip_content_mode.setCurrentIndex(p.clip_content_mode.findData("text"))
     assert not any(shown())
+
+
+# ---------------------------------------------------------------------------
+# Conflict styling must not eat the input-background rule (Knut, beta.5):
+# the red outline merges with the widget's own stylesheet, clearing restores
+# it, and a stale flag can never survive a recipe load with the band off.
+# ---------------------------------------------------------------------------
+
+def _has_bg_rule(w) -> bool:
+    return "background-color" in w.styleSheet()
+
+
+def _has_conflict(w) -> bool:
+    return "#d9534f" in w.styleSheet()
+
+
+def test_conflict_flag_preserves_input_background(app):
+    """Boxes that take part in conflict handling (clip width, left/right
+    margins) must keep their white-field rule at all times — flagged or not.
+    The old code replaced the whole stylesheet, leaving enabled boxes looking
+    permanently greyed-out (Knut, beta.5)."""
+    from ui.dialogs.layout_options_panel import LayoutOptionsPanel
+    p = LayoutOptionsPanel(with_selectors=True)
+    boxes = [p.clip_width, p.margins["l"], p.margins["r"],
+             p.margins["t"], p.margins["b"]]
+    assert all(_has_bg_rule(w) for w in boxes)
+
+    # Changing the clip width (Knut's first repro) must not strip any rule.
+    p.clip_width.setValue(p.clip_width.value() + 2)
+    assert all(_has_bg_rule(w) for w in boxes)
+    assert p.clip_width.isEnabled()
+
+    # Instrument margins on → off: all rules intact, everything editable.
+    p.set_threshold_lookup(lambda i, pa: {"L": 26, "R": 9, "T": 38, "B": 10})
+    p.use_instr_margins.setChecked(True)
+    p.use_instr_margins.setChecked(False)
+    assert all(_has_bg_rule(w) for w in boxes)
+    for k in ("t", "r", "b", "l"):
+        assert p.margins[k].isEnabled()
+
+
+def test_conflict_flag_merges_and_restores(app):
+    """A flagged box carries BOTH its own rule and the red border; clearing
+    the conflict restores the exact original stylesheet."""
+    from ui.dialogs.layout_options_panel import LayoutOptionsPanel
+    p = LayoutOptionsPanel(with_selectors=True)
+    side = p.margins["l"]
+    # The default values may already flag the box — neutralise first so the
+    # captured "original" stylesheet is the unflagged one.
+    side.setValue(p.clip_width.value())
+    assert not _has_conflict(side)
+    orig = side.styleSheet()
+    # Force a conflict: clip band on (default i1 clip mode), width > margin.
+    side.setValue(1.0)
+    p.clip_width.setValue(30.0)
+    assert _has_conflict(side) and _has_bg_rule(side)
+    # Equal values → conflict cleared → original stylesheet back, verbatim.
+    side.setValue(30.0)
+    assert side.styleSheet() == orig
+
+
+def test_no_stale_conflict_after_recipe_load_with_band_off(app):
+    """Preferences repro (Knut, beta.5): a conflict flagged mid-session must
+    not survive loading a recipe whose clip border is OFF — the hidden clip
+    width must never paint a margin box red."""
+    from ui.dialogs.layout_options_panel import LayoutOptionsPanel
+    from workflow.layout_engine.presets import LayoutRecipe
+    p = LayoutOptionsPanel(with_selectors=True)
+    p.margins["l"].setValue(6.0)
+    p.clip_width.setValue(26.0)          # band on by default → left flagged
+    assert _has_conflict(p.margins["l"])
+
+    r = LayoutRecipe()
+    r.clip_border = False
+    r.margin_l = 6.0
+    r.clip_width = 26.0
+    p.set_recipe(r)
+    for w in (p.margins["l"], p.margins["r"], p.clip_width):
+        assert not _has_conflict(w), "stale conflict outline survived load"
+    assert all(_has_bg_rule(w) for w in
+               (p.margins["l"], p.margins["r"], p.clip_width))

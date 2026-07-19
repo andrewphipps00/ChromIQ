@@ -40,10 +40,50 @@ def test_bundled_cht_preferred_over_argyll_ref(tmp_path):
     (ref / "Hutchcolor.cht").write_text("stale argyll copy")
     (tmp_path / "bin").mkdir()
     targets = dict((p.stem, p) for _, p in
-                   list_standard_targets(_S(argyll_bin_path=str(tmp_path / "bin"))))
+                   list_standard_targets(_S(argyll_bin_path=str(tmp_path / "bin"),
+                                            custom_output_path=str(tmp_path))))
     hutch = targets["Hutchcolor"]
     assert hutch == bundled_targets_dir() / "Hutchcolor.cht"   # bundle wins
     assert "stale argyll copy" not in hutch.read_text()
+
+
+# ---------------------------------------------------------------------------
+# The user scanner-test-targets folder (#127 / Knut's beta.5 report): copies
+# of the bundled .cht are provisioned into the output root, missing files come
+# back, edits survive, and a user's copy overrides the bundled one.
+# ---------------------------------------------------------------------------
+
+def test_ensure_user_targets_dir_provisions_and_never_overwrites(tmp_path):
+    from workflow.standard_targets import ensure_user_targets_dir
+    s = _S(custom_output_path=str(tmp_path))
+    d = ensure_user_targets_dir(s)
+    assert d == tmp_path / "scanner-test-targets"
+    for stem in _BUNDLED:
+        assert (d / f"{stem}.cht").is_file()
+    assert (d / "About this folder.txt").is_file()
+    assert (d / "README.md").is_file()
+
+    # A user edit survives re-provisioning; a deleted file comes back.
+    (d / "it8Wolf.cht").write_text("MY TWEAKED VERSION")
+    (d / "Hutchcolor.cht").unlink()
+    ensure_user_targets_dir(s)
+    assert (d / "it8Wolf.cht").read_text() == "MY TWEAKED VERSION"
+    assert (d / "Hutchcolor.cht").is_file()
+
+
+def test_user_copy_overrides_bundled(tmp_path):
+    from workflow.standard_targets import ensure_user_targets_dir
+    s = _S(argyll_bin_path=str(tmp_path / "bin"),
+           custom_output_path=str(tmp_path))
+    d = ensure_user_targets_dir(s)
+    (d / "it8Wolf.cht").write_text("USER OVERRIDE")
+    targets = dict((p.stem, p) for _, p in list_standard_targets(s))
+    assert targets["it8Wolf"] == d / "it8Wolf.cht"
+    assert targets["it8Wolf"].read_text() == "USER OVERRIDE"
+    # A stray .cht that matches no known target must NOT invent a new entry.
+    (d / "my-own-notes.cht").write_text("not a target")
+    targets = dict((p.stem, p) for _, p in list_standard_targets(s))
+    assert "my-own-notes" not in targets
 
 
 def test_bundled_cht_parses_and_registers():
@@ -103,3 +143,24 @@ def test_merge_demo_references_concatenates(tmp_path):
         assert re.search(rf"(?m)^{name} ", txt)
     # exactly one data block (BEGIN_DATA_FORMAT must not be miscounted)
     assert [l.strip() for l in txt.splitlines()].count("BEGIN_DATA") == 1
+
+
+def test_unmodified_copy_refreshes_on_bundle_update(tmp_path, monkeypatch):
+    """An untouched provisioned copy follows a bundle update; an edited one
+    never does (the manifest records what ChromIQ copied)."""
+    import workflow.standard_targets as st
+    bundle = tmp_path / "bundle"; bundle.mkdir()
+    (bundle / "it8Wolf.cht").write_text("v1 content")
+    (bundle / "Hutchcolor.cht").write_text("v1 content")
+    monkeypatch.setattr(st, "bundled_targets_dir", lambda: bundle)
+    s = _S(custom_output_path=str(tmp_path))
+
+    d = st.ensure_user_targets_dir(s)
+    assert (d / "it8Wolf.cht").read_text() == "v1 content"
+
+    (d / "Hutchcolor.cht").write_text("USER EDIT")     # user tweaks one file
+    (bundle / "it8Wolf.cht").write_text("v2 corrected")  # update ships fixes
+    (bundle / "Hutchcolor.cht").write_text("v2 corrected")
+    st.ensure_user_targets_dir(s)
+    assert (d / "it8Wolf.cht").read_text() == "v2 corrected"   # refreshed
+    assert (d / "Hutchcolor.cht").read_text() == "USER EDIT"   # preserved

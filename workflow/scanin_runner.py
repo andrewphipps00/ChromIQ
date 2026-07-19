@@ -39,6 +39,63 @@ log = get_logger(__name__)
 # Corner order scanin -F expects, matching the .cht F line and the marquee.
 CORNER_ORDER = ("top-left", "top-right", "bottom-right", "bottom-left")
 
+# ---------------------------------------------------------------------------
+# Working-folder tidy-up (#127, Knut's beta.5 report): scanner intermediates
+# left behind by EARLIER releases — the "-aligned" template family, prepared
+# patchbox/sample copies and diagnostic images written flat next to the scans
+# or the chart. New runs write these into cache/; this sweeps the old ones in
+# too, so a re-used folder ends up organised the same way. Measurement data
+# (-printer.ti2/.ti3, -scanner.ti3, per-shot -pNsK-scanner.ti3, -pN-avg.ti3)
+# is NEVER touched — those are real readings, not cache.
+# ---------------------------------------------------------------------------
+
+_LEGACY_INTERMEDIATE_RES = (
+    re.compile(r"^.+-patchbox\.cht$"),
+    re.compile(r"^.+-patchbox-sample\.cht$"),
+    re.compile(r"^.+-aligned\.cht$"),
+    re.compile(r"^.+-aligned-patchbox.*\.cht$"),
+    re.compile(r"^.+-diag\.tif$", re.IGNORECASE),
+)
+_PLAIN_SAMPLE_RE = re.compile(r"^(?P<base>.+)-sample\.cht$")
+
+
+def tidy_legacy_intermediates(folder: str | Path) -> list[Path]:
+    """Move earlier releases' scanner intermediates from *folder* into its
+    ``cache/`` sub-folder. A plain ``<x>-sample.cht`` moves only when the
+    ``<x>.cht`` it was derived from sits in the same folder — a user's own
+    chart that merely *ends* in ``-sample`` is never touched. Conflict-safe
+    (never overwrites) and best-effort per file. Returns the moved paths."""
+    from core.file_manager import cache_subdir
+    folder = Path(folder)
+    if not folder.is_dir():
+        return []
+    moved: list[Path] = []
+    cache = cache_subdir(folder)
+    for f in sorted(folder.iterdir()):
+        if not f.is_file():
+            continue
+        take = any(rx.match(f.name) for rx in _LEGACY_INTERMEDIATE_RES)
+        if not take:
+            m = _PLAIN_SAMPLE_RE.match(f.name)
+            take = (m is not None
+                    and (folder / f"{m.group('base')}.cht").is_file())
+        if not take:
+            continue
+        try:
+            cache.mkdir(parents=True, exist_ok=True)
+            dst = cache / f.name
+            if dst.exists():
+                f.unlink()          # same-named copy already tidied → drop dupe
+            else:
+                f.rename(dst)
+                moved.append(dst)
+        except OSError as exc:
+            log.warning("could not tidy %s into cache/: %s", f, exc)
+    if moved:
+        log.info("tidied %d older scanner working file(s) into %s",
+                 len(moved), cache)
+    return moved
+
 _BOX_LINE = re.compile(r"^\s*[XY]\s+\S+\s+\S+\s+\S+\s+\S+\s+"
                        r"([\d.]+)\s+([\d.]+)\s", re.MULTILINE)
 _SHRINK_LINE = re.compile(r"^(\s*BOX_SHRINK\s+)([\d.]+)", re.MULTILINE)

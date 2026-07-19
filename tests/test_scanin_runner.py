@@ -102,3 +102,55 @@ def test_reference_io_and_oom_messages():
     assert _first_key("Write error to 'out.ti3' : disk full") == "reference_io"
     assert _first_key("Unable to allocate scanrd object") == "out_of_memory"
     assert _first_key("Malloc failed!") == "out_of_memory"
+
+
+# ---------------------------------------------------------------------------
+# Legacy-intermediates tidy-up (#127, Knut's beta.5 report)
+# ---------------------------------------------------------------------------
+
+def test_tidy_legacy_intermediates_moves_debris_keeps_data(tmp_path):
+    from workflow.scanin_runner import tidy_legacy_intermediates
+    debris = ["x-printer-p3-aligned.cht", "x-printer-p3-aligned-patchbox.cht",
+              "x-p3s1-aligned-patchbox.cht", "x-p3s1-aligned-patchbox-sample.cht",
+              "x-patchbox.cht", "x-patchbox-sample.cht", "scan1-diag.tif",
+              "SCAN2-DIAG.TIF"]
+    data = ["x-printer.ti2", "x-printer.ti3", "x-scanner.ti3",
+            "x-p1s1-scanner.ti3", "x-p1-avg.ti3", "chart.cht", "chart.cie",
+            "myscan.tif"]
+    for n in debris + data:
+        (tmp_path / n).write_text("f")
+    moved = tidy_legacy_intermediates(tmp_path)
+    assert sorted(p.name for p in moved) == sorted(debris)
+    for n in debris:
+        assert (tmp_path / "cache" / n).is_file()
+        assert not (tmp_path / n).exists()
+    for n in data:
+        assert (tmp_path / n).is_file(), f"measurement data {n} was moved!"
+
+
+def test_tidy_plain_sample_only_when_derived(tmp_path):
+    """`<x>-sample.cht` moves only when its source `<x>.cht` sits beside it —
+    a user's own chart merely ending in -sample is never touched."""
+    from workflow.scanin_runner import tidy_legacy_intermediates
+    (tmp_path / "chart.cht").write_text("src")
+    (tmp_path / "chart-sample.cht").write_text("derived")      # → cache
+    (tmp_path / "colour-sample.cht").write_text("user chart")  # stays
+    moved = tidy_legacy_intermediates(tmp_path)
+    assert [p.name for p in moved] == ["chart-sample.cht"]
+    assert (tmp_path / "colour-sample.cht").exists()
+
+
+def test_tidy_conflict_drops_stale_duplicate(tmp_path):
+    from workflow.scanin_runner import tidy_legacy_intermediates
+    (tmp_path / "cache").mkdir()
+    (tmp_path / "cache" / "a-patchbox.cht").write_text("fresh")
+    (tmp_path / "a-patchbox.cht").write_text("stale flat copy")
+    moved = tidy_legacy_intermediates(tmp_path)
+    assert moved == []                                  # nothing newly moved
+    assert not (tmp_path / "a-patchbox.cht").exists()   # stale dupe removed
+    assert (tmp_path / "cache" / "a-patchbox.cht").read_text() == "fresh"
+
+
+def test_tidy_missing_folder_is_noop(tmp_path):
+    from workflow.scanin_runner import tidy_legacy_intermediates
+    assert tidy_legacy_intermediates(tmp_path / "nope") == []

@@ -85,6 +85,8 @@ def _rows():
         (tr("reports/ — things ChromIQ tells you"), [
             ("Quality_Check_1_{name}.txt", "runs/runN/reports", tr("A readable quality report — grade, explanation, worst strips, full output. Numbered so checks don't overwrite each other."), tr("Check & Refine")),
             ("Refine_Strips_{name}.txt", "runs/runN/reports", tr("The list of strips to re-measure after a check; the guided refinement reads it back."), tr("Check & Refine")),
+            ("Verify_Profile_1_{name}.txt", "runs/runN/reports", tr("A readable report from “Verify a profile” — verdict, scores, full output. Numbered so repeated checks keep a history."), tr("Verify a profile (Tools)")),
+            ("Verify_Reference_1_{name}.txt", "runs/runN/reports", tr("A readable report from “Verify against reference” — result summary and full output."), tr("Verify against reference (Tools)")),
             ("report_*.json", "runs/runN/reports", tr("Dated measurement reports (accuracy & drift), when “Save a measurement report” is on. Compared over time in the Measurement report window."), tr("Measure tab")),
         ]),
         (tr("exports/ — files for other programs"), [
@@ -108,6 +110,7 @@ def _rows():
             ("cal/{name}-cal.*", "cal", tr("The calibration chart, its measurement (-cal.ti3) and curves (-cal.cal); the chart's own exports live in cal/exports."), tr("Calibration workflow")),
             ("exports/{name}-i1profiler.*", "exports", tr("i1Profiler exports made from the Tools menu."), tr("Tools menu")),
             ("Where are my files.txt", "(project root)", tr("This guide as a text file, updated when the folder layout changes. Edit or delete freely."), tr("Created on first use")),
+            ("scanner-test-targets/", "(output folder)", tr("Next to your projects: every standard scanner target's layout file (.cht), yours to inspect or tweak — ChromIQ prefers the files here over its built-in copies, puts missing ones back, and never overwrites your edits. Demo scans land here too."), tr("Scanner/camera profiling")),
         ]),
     ]
 

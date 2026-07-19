@@ -412,6 +412,35 @@ def total_strip_count(patch_errors: list[tuple[str, float]]) -> int:
     return len(strips)
 
 
+def write_named_report(
+    folder: Path,
+    prefix: str,
+    stem: str,
+    summary_text: str,
+    raw_log: str,
+    log_title: str = "Full output",
+) -> Path:
+    """Write ``<prefix>_<n>_<stem>.txt`` into *folder*, incrementing *n* until
+    the name is free — so repeated runs keep a little history instead of
+    overwriting each other. Shared by the quality check and the two Verify
+    tools (Knut, beta.5: verification runs should leave a report in
+    ``reports/`` just like quality checks do)."""
+    n = 1
+    while True:
+        candidate = folder / f"{prefix}_{n}_{stem}.txt"
+        if not candidate.exists():
+            target = candidate
+            break
+        n += 1
+
+    target.write_text(
+        f"{summary_text}\n\n{'─' * 60}\n\n{log_title}:\n\n{raw_log}",
+        encoding="utf-8",
+    )
+    log.info("Report written to %s", target)
+    return target
+
+
 def write_quality_report(
     folder: Path,
     stem: str,
@@ -419,20 +448,8 @@ def write_quality_report(
     raw_log: str,
 ) -> Path:
     """Write Quality_Check_<n>_<stem>.txt, incrementing n until the name is free."""
-    n = 1
-    while True:
-        candidate = folder / f"Quality_Check_{n}_{stem}.txt"
-        if not candidate.exists():
-            target = candidate
-            break
-        n += 1
-
-    target.write_text(
-        f"{summary_text}\n\n{'─' * 60}\n\nFull profcheck output:\n\n{raw_log}",
-        encoding="utf-8",
-    )
-    log.info("Quality report written to %s", target)
-    return target
+    return write_named_report(folder, "Quality_Check", stem, summary_text,
+                              raw_log, log_title="Full profcheck output")
 
 
 def write_refine_strips(

@@ -43,7 +43,13 @@ class _FakeSettings:
 
 def _dialog(_app):
     from ui.dialogs.scanin_dialog import ScannerProfileDialog
-    return ScannerProfileDialog(object(), _FakeSettings())
+    # Hermetic output root: the dialog provisions <root>/scanner-test-targets
+    # on open (#127 beta.6) and must never write into the real ~/ChromIQ from
+    # a test run.
+    import tempfile
+    return ScannerProfileDialog(
+        object(), _FakeSettings(custom_output_path=tempfile.mkdtemp(
+            prefix="chromiq-test-out-")))
 
 
 def test_marquee_receives_initial_sample_fraction(_app):
@@ -1151,5 +1157,55 @@ def test_colprof_settings_are_stored_per_context(_app):
         stored = settings.get("scanner_colprof_configs", {})
         assert set(stored) == {"printer"}
         assert stored["printer"]["main"]["description"] == "printer-prof"
+    finally:
+        dlg.deleteLater()
+
+
+# ---------------------------------------------------------------------------
+# Standard-mode page selector follows the TARGET, never the chart (Knut,
+# beta.5): switching to standard mode unchecks "Profile my printer", whose
+# toggle re-picks the chart → _chart_geometry_ready fired and repopulated the
+# page dropdown with the chart's pages inside standard mode.
+# ---------------------------------------------------------------------------
+
+def test_std_page_selector_survives_late_chart_geometry(_app):
+    dlg = _dialog(_app)
+    try:
+        patch = lambda pg: {"page": pg, "x": 10, "y": 10, "w": 5, "h": 5,
+                            "id": "A1"}
+        dlg._layout = {"patches": [patch(0), patch(1), patch(2)]}
+        dlg._chart_measured = True
+
+        dlg._chart_geometry_ready()                    # chart mode: 3 pages
+        assert dlg._page_combo.count() == 3
+
+        dlg._mode_standard.setChecked(True)            # → standard (IT8: 1 page)
+        assert dlg._page_combo.count() == 1
+
+        dlg._chart_geometry_ready()                    # the late re-pick tail
+        assert dlg._pages == [0]
+        assert dlg._page_combo.count() == 1, \
+            "chart geometry clobbered the standard-target page selector"
+
+        dlg._mode_chromiq.setChecked(True)             # back → chart's 3 pages
+        assert dlg._page_combo.count() == 3
+    finally:
+        dlg.deleteLater()
+
+
+def test_execute_tidies_legacy_intermediates(_app, tmp_path, monkeypatch):
+    """The run entry sweeps older releases' debris into cache/ for the chart's
+    folder in every mode (Knut, beta.5)."""
+    dlg = _dialog(_app)
+    try:
+        import re
+        from pathlib import Path
+        src = Path("ui/dialogs/scanin_dialog.py").read_text(encoding="utf-8")
+        # The sweep must run in _execute BEFORE the printer-mode branch, so all
+        # three modes pass through it.
+        body = src[src.index("def _execute(self)"):]
+        i_tidy = body.index("tidy_legacy_intermediates")
+        i_printer = body.index("self._execute_printer(")
+        assert i_tidy < i_printer
     finally:
         dlg.deleteLater()

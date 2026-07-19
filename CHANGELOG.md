@@ -1,5 +1,51 @@
 # Changelog
 
+## v3.13.12-beta.6
+
+Every point from Knut's beta.5 test report, fixed in one go.
+
+### Create Chart / Preferences — no more "greyed-out" boxes
+
+- The **Clip border width** box and the **Left/Right margin** boxes no longer
+  turn permanently grey after a value change or after toggling "Use
+  instrument margins". The red conflict outline used to *replace* each box's
+  field styling instead of merging with it, leaving enabled boxes looking
+  disabled. Now the outline rides on top and clears back to the exact
+  original look. The boxes were always editable — they just looked locked.
+- In **Preferences → Chart Layout**, a stale red outline no longer survives
+  on a margin box when the clip border is **Off** (the hidden clip-width
+  value used to keep the conflict highlight alive there).
+
+### Build profile with scanner or camera
+
+- **Older working files get tidied too**: starting a run now moves the
+  previous releases' scanner intermediates (`…-aligned.cht`,
+  `…-aligned-patchbox….cht`, prepared `…-patchbox/-sample.cht` copies,
+  `…-diag.tif`) from the chart's and the scans' folders into `cache/`, in
+  all three modes. Measurement data (`…-printer.ti2/.ti3`, `…-scanner.ti3`,
+  per-shot `…-pNsK-scanner.ti3`, `…-pN-avg.ti3`) is real data and stays put.
+- **The page selector always follows the selected target** in "A standard
+  target I own" mode. Switching from a multi-page ChromIQ chart to a
+  single-page standard target could leave the chart's page dropdown behind
+  (the "Profile my printer" un-tick re-picked the chart under the hood and
+  restored its pages).
+- **Your `scanner-test-targets` folder is back — and smarter.** ChromIQ now
+  places every standard target's layout file (`.cht`) into
+  `scanner-test-targets` in your output folder whenever the scanner window
+  opens: missing files are restored, a file you edited is never overwritten,
+  and an untouched copy is refreshed automatically when a ChromIQ update
+  ships a corrected version. **Your copy is the one ChromIQ uses** — edit a
+  `.cht` there (same file name) and the tool reads your version instead of
+  its built-in copy. The target-type help explains this, and the folder
+  carries its own "About this folder.txt".
+
+### Verify tools now leave reports
+
+- **"Verify a profile"** and **"Verify against reference"** save a readable,
+  numbered report (`Verify_Profile_N_….txt` / `Verify_Reference_N_….txt`)
+  into the `reports/` folder next to the measurement — verdict, inputs and
+  the full tool output, keeping a history just like the quality check.
+
 ## v3.13.12-beta.5
 
 A small fix on the Create Chart layout panel.

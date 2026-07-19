@@ -42,6 +42,8 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from datetime import datetime
+
 from core.i18n import tr
 from core.logger import get_logger
 from ui.fade_scroll import FadeScrollArea
@@ -1821,6 +1823,34 @@ class VerifyAgainstReferenceDialog(_ToolDialogBase):
             result = self._cv.parse_results()
             if code == 0 and result.avg_de is not None:
                 self._banner.setText(interpret(result))
+                # Leave a readable report in reports/ next to the ORIGINAL
+                # measurement (the 3D-map run verifies a staged temp copy),
+                # like the quality check does (Knut, beta.5). Best-effort.
+                try:
+                    from core.file_manager import ensure_subdir, reports_subdir
+                    from workflow.profcheck_runner import write_named_report
+                    summary = "\n".join([
+                        tr("Verification against reference values"),
+                        datetime.now().isoformat(timespec="seconds"),
+                        "",
+                        tr("Measured file: {p}").format(p=self._measured),
+                        tr("Reference: {n} patches ({space})").format(
+                            n=len(rows), space=space),
+                        "",
+                        interpret(result),
+                    ])
+                    rp = write_named_report(
+                        ensure_subdir(reports_subdir(self._measured.parent)),
+                        "Verify_Reference", self._measured.stem,
+                        summary, result.raw_log,
+                        log_title="Full colverify output")
+                    self._log.appendPlainText(tr(
+                        "Report saved: {name} (in the reports folder next to "
+                        "your measurement)").format(
+                            name=f"{rp.parent.name}/{rp.name}"))
+                except Exception:  # noqa: BLE001 — a report must never block the verdict
+                    log.warning("could not write verification report",
+                                exc_info=True)
                 self._finish(True)
                 if want_plot:
                     html = vrml_output_path(measured_path)
@@ -2035,6 +2065,37 @@ class VerifyProfileDialog(_ToolDialogBase):
                 )
                 for _key, msg in self._checker.captured_warnings():
                     self._log.appendPlainText(f"[NOTE] {msg}")
+                # Leave a readable report in reports/ next to the measurement,
+                # like the quality check does (Knut, beta.5). Best-effort.
+                try:
+                    from core.file_manager import ensure_subdir, reports_subdir
+                    from workflow.profcheck_runner import write_named_report
+                    summary = "\n".join([
+                        tr("Profile verification (independent check)"),
+                        datetime.now().isoformat(timespec="seconds"),
+                        "",
+                        tr("Profile tested: {p}").format(p=self._profile),
+                        tr("Measured chart: {p}").format(p=self._measured),
+                        tr("ΔE formula: {f}   Intent: {i}").format(
+                            f=self._formula.currentText(),
+                            i=self._intent.currentText()),
+                        "",
+                        tr("Verdict: {grade}").format(grade=grade),
+                        "",
+                        quality_explanation(result.avg_de, result.peak_de),
+                    ])
+                    rp = write_named_report(
+                        ensure_subdir(reports_subdir(self._measured.parent)),
+                        "Verify_Profile", self._measured.stem,
+                        summary, result.raw_log,
+                        log_title="Full profcheck output")
+                    self._log.appendPlainText(tr(
+                        "Report saved: {name} (in the reports folder next to "
+                        "your measurement)").format(
+                            name=f"{rp.parent.name}/{rp.name}"))
+                except Exception:  # noqa: BLE001 — a report must never block the verdict
+                    log.warning("could not write verification report",
+                                exc_info=True)
                 self._finish(True)
             else:
                 failure = self._checker.primary_failure()

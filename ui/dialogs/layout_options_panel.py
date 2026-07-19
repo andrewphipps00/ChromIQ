@@ -1670,21 +1670,36 @@ class LayoutOptionsPanel(QWidget):
                     and self.clip_content_mode.currentData() not in (None, "off"))
         return False
 
+    # Scoped to the spinbox classes so the red outline MERGES with the
+    # widget's own per-widget stylesheet instead of replacing it. The margin /
+    # clip-width boxes carry the load-bearing _input_bg_qss() rule (their
+    # white-in-light field background — app-wide QSS is ignored for compound
+    # widgets); the old un-scoped "border: …" sheet wiped that rule, leaving
+    # every box that ever touched conflict handling looking permanently
+    # greyed-out even though it stayed enabled (Knut, beta.5).
+    _CONFLICT_QSS = (" QSpinBox, QDoubleSpinBox {"
+                     " border: 1px solid #d9534f; border-radius: 3px; }")
+
     def _set_field_conflict(self, widget, message: "str | None") -> None:
         """Flag ``widget`` with a red outline + ``message`` tooltip, or clear the
-        flag (restoring its original tooltip) when ``message`` is None. Used for
-        the clip-width ↔ clip-side-margin priority conflict (#125, Knut)."""
+        flag when ``message`` is None — restoring the widget's original tooltip
+        AND its original stylesheet. Clearing a never-flagged widget is a no-op
+        (it must not touch the widget's own stylesheet). Used for the
+        clip-width ↔ clip-side-margin priority conflict (#125, Knut)."""
         if not hasattr(self, "_field_conflict_orig"):
-            self._field_conflict_orig: dict[int, str] = {}
+            self._field_conflict_orig: dict[int, tuple[str, str]] = {}
         wid = id(widget)
         if message:
-            self._field_conflict_orig.setdefault(wid, widget.toolTip())
-            widget.setStyleSheet("border: 1px solid #d9534f; border-radius: 3px;")
+            if wid not in self._field_conflict_orig:
+                self._field_conflict_orig[wid] = (widget.toolTip(),
+                                                  widget.styleSheet())
+            _tip, orig_qss = self._field_conflict_orig[wid]
+            widget.setStyleSheet(orig_qss + self._CONFLICT_QSS)
             widget.setToolTip(message)
-        else:
-            if wid in self._field_conflict_orig:
-                widget.setToolTip(self._field_conflict_orig.pop(wid))
-            widget.setStyleSheet("")
+        elif wid in self._field_conflict_orig:
+            tip, orig_qss = self._field_conflict_orig.pop(wid)
+            widget.setToolTip(tip)
+            widget.setStyleSheet(orig_qss)
 
     def _set_field_hint(self, widget, message: "str | None") -> None:
         """Set an explanatory tooltip on a field **without** a red outline (and
@@ -1716,14 +1731,17 @@ class LayoutOptionsPanel(QWidget):
           • equal, band OFF, or margins locked by "Use instrument margins" → no
             conflict; both fields shown normally.
         """
-        if self._loading or not (hasattr(self, "clip_width")
-                                 and hasattr(self, "clip_side")):
+        if not (hasattr(self, "clip_width") and hasattr(self, "clip_side")):
             return
         m_l, m_r = self.margins.get("l"), self.margins.get("r")
         if m_l is None or m_r is None:
             return
         # Always start from a clean slate (both the red-outline flags and any
-        # tooltip-only hint we parked on the clip-width box).
+        # tooltip-only hint we parked on the clip-width box) — even while
+        # values are being loaded. Skipping the clean-up during loading left a
+        # stale red outline behind in the Preferences panel: a flag set
+        # mid-load survived because the clip band ended up OFF and nothing
+        # re-evaluated afterwards (Knut, beta.5).
         for w in (m_l, m_r, self.clip_width):
             self._set_field_conflict(w, None)
         self._set_field_hint(self.clip_width, None)
@@ -1731,7 +1749,7 @@ class LayoutOptionsPanel(QWidget):
         # margins" locks the page margins (Knut): the clip-border width is
         # still yours to change, so knowing which value wins matters. Only the
         # clip band being off makes it moot.
-        if not self._clip_band_active():
+        if self._loading or not self._clip_band_active():
             return
         locked = (hasattr(self, "use_instr_margins")
                   and self.use_instr_margins.isChecked())
@@ -2397,6 +2415,9 @@ class LayoutOptionsPanel(QWidget):
         self._inst, self._clip = r.instrument, r.clip_border
         self._update_clip_visibility()
         self._loading = False
+        # Final pass with loading off: computes the real conflict state for
+        # the values just loaded (during loading only the clean-up runs).
+        self._update_clip_margin_conflict()
 
     def apply_to_recipe(self, r: LayoutRecipe) -> LayoutRecipe:
         """Write the panel's values onto *r* (keeps r's instrument/paper/mode)."""

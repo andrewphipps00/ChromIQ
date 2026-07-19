@@ -493,3 +493,39 @@ def test_softproof_auto_flow(tmp_path: Path, monkeypatch):
     dlg._teardown_webengine()
     assert not dlg._rerun_timer.isActive()   # teardown cancels the pending proof
     dlg.close()
+
+
+# ---------------------------------------------------------------------------
+# Verification reports (Knut, beta.5): both Verify tools leave a numbered
+# report in reports/ next to the measurement, like the quality check does.
+# ---------------------------------------------------------------------------
+
+def test_write_named_report_numbers_and_content(tmp_path):
+    from workflow.profcheck_runner import write_named_report
+    p1 = write_named_report(tmp_path, "Verify_Profile", "chart",
+                            "Verdict: good", "raw output",
+                            log_title="Full profcheck output")
+    p2 = write_named_report(tmp_path, "Verify_Profile", "chart",
+                            "Verdict: better", "raw output 2")
+    assert p1.name == "Verify_Profile_1_chart.txt"
+    assert p2.name == "Verify_Profile_2_chart.txt"          # history accrues
+    text = p1.read_text(encoding="utf-8")
+    assert "Verdict: good" in text and "raw output" in text
+    assert "Full profcheck output" in text
+
+
+def test_quality_report_still_uses_shared_writer(tmp_path):
+    from workflow.profcheck_runner import write_quality_report
+    p = write_quality_report(tmp_path, "chart", "summary", "log")
+    assert p.name == "Quality_Check_1_chart.txt"
+    assert "Full profcheck output" in p.read_text(encoding="utf-8")
+
+
+def test_verify_dialogs_route_reports():
+    """Source tripwires: both Verify tools write via write_named_report into
+    reports_subdir next to the measurement."""
+    from pathlib import Path
+    src = Path("ui/dialogs/tools_dialogs.py").read_text(encoding="utf-8")
+    assert src.count("write_named_report") >= 2
+    assert src.count("reports_subdir(self._measured.parent)") == 2
+    assert '"Verify_Profile"' in src and '"Verify_Reference"' in src

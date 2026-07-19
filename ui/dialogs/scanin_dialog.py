@@ -42,7 +42,9 @@ from workflow.scanin_runner import ScaninParams, ScaninRunner
 from workflow.ti3_average import Ti3AverageError, average_scanner_ti3
 from workflow.scanin_target import (
     ScaninTargetError, build_scanin_target_from_paths, has_scanner_geometry)
-from workflow.standard_targets import StandardTarget, grouped_standard_targets
+from workflow.standard_targets import (StandardTarget, ensure_user_targets_dir,
+                                       grouped_standard_targets,
+                                       user_targets_dir)
 
 log = get_logger(__name__)
 
@@ -897,13 +899,27 @@ class ScannerProfileDialog(_ToolDialogBase):
             "target's patches.\n\n"
             "If your target isn't in the list, choose “Other…” and point ChromIQ "
             "at its own layout file (a .cht that came with the target or from "
-            "ArgyllCMS).")))
+            "ArgyllCMS).\n\n"
+            "Want to look at — or fine-tune — a target's layout file? Every "
+            "target's .cht sits in the “scanner-test-targets” folder inside "
+            "your ChromIQ output folder, put there for exactly this purpose. "
+            "Edit the file there (or copy your own over it, keeping the same "
+            "file name) and ChromIQ uses your version instead of its built-in "
+            "copy. If a file goes missing, ChromIQ places a fresh copy the "
+            "next time this window opens — your edited files are never "
+            "overwritten.")))
         trow = QHBoxLayout()
         self._target_combo = NoScrollComboBox(self)
         # Every standard target, keyed so a multi-page set (three ISO 12641-2
         # pages folded into one) can carry all its page .cht files. The label
         # shows each target's patch count — for a set, the per-page count (Knut).
         self._std_targets: dict[str, StandardTarget] = {}
+        # (Re)provision the user-visible scanner-test-targets folder in the
+        # output root: copies of every bundled .cht land there for inspection
+        # / tweaking, missing files are put back, edited ones never touched —
+        # and a same-named .cht in that folder overrides the bundled copy
+        # (Knut, beta.5).
+        ensure_user_targets_dir(self._settings)
         for t in grouped_standard_targets(self._settings):
             self._std_targets[t.key] = t
             self._target_combo.addItem(self._target_label(t), t.key)
@@ -1746,14 +1762,23 @@ class ScannerProfileDialog(_ToolDialogBase):
     def _chart_geometry_ready(self) -> None:
         """Shared success tail of a chart pick: the layout is set and its
         .cht/.cie were written — announce it, fill the page selector and show
-        the grid. Used by the channels.json path and the BYO-.cht path (#105)."""
+        the grid. Used by the channels.json path and the BYO-.cht path (#105).
+
+        In STANDARD mode this only records the layout and the note — the page
+        selector always belongs to the selected target type there. (Switching
+        to standard mode unchecks "Profile my printer", whose toggle handler
+        re-picks the chart and landed here — repopulating the page dropdown
+        with the chart's pages inside standard mode; Knut, beta.5. The
+        switch back to chart mode rebuilds the selector from the layout.)"""
         if self._layout.get("patches"):                     # engine chart
-            self._pages = sorted({int(p.get("page", 0))
+            chart_pages = sorted({int(p.get("page", 0))
                                   for p in self._layout["patches"]})
             n_patches = len(self._layout["patches"])
         else:                                               # printtarg chart
-            self._pages = list(range(len(self._layout.get("cht_pages", [1]))))
+            chart_pages = list(range(len(self._layout.get("cht_pages", [1]))))
             n_patches = len(self._layout.get("locs") or [])
+        if not self._standard_mode():
+            self._pages = chart_pages
         self._chart_reject_reason = None             # pick accepted (#101)
         if not self._chart_measured:
             if self._printer_mode():
@@ -1762,9 +1787,9 @@ class ScannerProfileDialog(_ToolDialogBase):
                 self._chart_note.setText((
                     tr("✓ {n} patches on one page — pick the scan of the "
                        "printed chart below.")
-                    if len(self._pages) == 1 else
+                    if len(chart_pages) == 1 else
                     tr("✓ {n} patches on {p} pages — pick each page's scan "
-                       "below.")).format(n=n_patches, p=len(self._pages)))
+                       "below.")).format(n=n_patches, p=len(chart_pages)))
             else:
                 self._chart_note.setText(tr(
                     "✓ {n} patches. This chart hasn't been measured — tick “Profile my "
@@ -1773,9 +1798,12 @@ class ScannerProfileDialog(_ToolDialogBase):
         else:
             self._chart_note.setText((
                 tr("✓ Ready — {n} patches on one page.")
-                if len(self._pages) == 1 else
+                if len(chart_pages) == 1 else
                 tr("✓ Ready — {n} patches on {p} pages.")
-            ).format(n=n_patches, p=len(self._pages)))
+            ).format(n=n_patches, p=len(chart_pages)))
+        if self._standard_mode():
+            self._refresh()
+            return
         self._page_widget.setVisible(len(self._pages) > 1)
         self._page_combo.blockSignals(True)
         self._page_combo.clear()
@@ -2059,7 +2087,7 @@ class ScannerProfileDialog(_ToolDialogBase):
             return
         from workflow.standard_targets import (
             make_multipage_test_scans, make_test_scan)
-        out = Path.home() / "ChromIQ" / "scanner-test-targets"
+        out = user_targets_dir(self._settings)
         try:
             if len(self._std_chts) > 1:
                 tifs, ref = make_multipage_test_scans(self._std_chts, out)
@@ -2171,7 +2199,7 @@ class ScannerProfileDialog(_ToolDialogBase):
             # target outright (Knut: switching types kept showing the old grid,
             # clearest with Try-a-demo between types). Clear every page.
             self._reset_shots()
-            demo_dir = Path.home() / "ChromIQ" / "scanner-test-targets"
+            demo_dir = user_targets_dir(self._settings)
             self._scan_field.setText("")
             self._marquee.set_image(QImage())
             if self._std_ref and demo_dir in Path(self._std_ref).parents:
@@ -2603,6 +2631,27 @@ class ScannerProfileDialog(_ToolDialogBase):
         else:
             pages = self._pages
             base = _chart_base(self._ti3)
+
+        # Tidy older releases' scanner intermediates into cache/ before this
+        # run writes its own set there (#127, Knut's beta.5 report) — both the
+        # chart's folder and every scan's folder, in all three modes.
+        from workflow.scanin_runner import tidy_legacy_intermediates
+        folders = {base.parent}
+        for pg in pages:
+            for s in self._page_shots(pg):
+                if s["path"]:
+                    folders.add(Path(s["path"]).parent)
+        tidied = [p for f in sorted(folders)
+                  for p in tidy_legacy_intermediates(f)]
+        if len(tidied) == 1:
+            self._log.appendPlainText(tr(
+                "Tidied one working file from an earlier ChromIQ version into "
+                "the cache folder — everything in cache is safe to delete."))
+        elif tidied:
+            self._log.appendPlainText(tr(
+                "Tidied {n} working files from earlier ChromIQ versions into "
+                "the cache folder — everything in cache is safe to delete."
+            ).format(n=len(tidied)))
 
         frac = self._sample_area.value() / 100.0
         if self._printer_mode():
