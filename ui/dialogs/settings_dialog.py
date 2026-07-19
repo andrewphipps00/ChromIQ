@@ -722,6 +722,40 @@ class SettingsDialog(QDialog):
             self))
         _beta.addLayout(_pw_row)
 
+        # Faster instrument connection: skip Argyll's slow serial-port probe.
+        self._fast_connect_check = QCheckBox(
+            tr("Faster instrument connection"), self)
+        _fc_row = QHBoxLayout()
+        _fc_row.addWidget(self._fast_connect_check)
+        _fc_row.addStretch()
+        _fc_row.addWidget(TooltipButton(
+            tr("Faster instrument connection"),
+            tr("On some computers there's an annoying pause — often around ten "
+            "seconds — between pressing Start and your instrument asking to be "
+            "calibrated. This option removes that pause.\n\n"
+            "Why does the pause happen? Before it finds your USB instrument "
+            "(like an i1Pro or ColorMunki), the measuring engine looks at every "
+            "serial port on the computer and, for each one, spends a couple of "
+            "seconds trying to talk to it in case an old serial instrument is "
+            "attached. On a Mac there's almost always an invisible “Bluetooth” "
+            "serial port sitting there, and on Linux there can be Bluetooth "
+            "ports too — so those few seconds are wasted on ports that are not "
+            "instruments at all. (A Windows PC usually doesn't have these, which "
+            "is why it already feels instant.)\n\n"
+            "With this turned ON (the recommended default), ChromIQ tells the "
+            "engine to skip those known-empty ports, so it goes straight to your "
+            "USB instrument — the calibration prompt appears almost immediately.\n\n"
+            "Is it safe? Yes. Only ports that are never real instruments are "
+            "skipped (Bluetooth and debug ports). A genuine serial instrument "
+            "connected through a USB-to-serial adapter is always kept, and USB "
+            "instruments are never affected. Nothing about your measurements "
+            "changes — only how quickly the connection is made.\n\n"
+            "Turn it OFF only if you ever suspect it's stopping an unusual "
+            "instrument from being found.\n\n"
+            "Default: on"),
+            self))
+        _beta.addLayout(_fc_row)
+
         # Measurement report auto-save (#126, Knut).
         self._save_report_check = QCheckBox(
             tr("Save a measurement report after each measurement"), self)
@@ -1829,6 +1863,8 @@ class SettingsDialog(QDialog):
             bool(s.get("save_measurement_report", False)))
         self._patch_warn_spin.setValue(
             float(s.get("patch_read_warn_de", 20.0)))
+        self._fast_connect_check.setChecked(
+            bool(s.get("fast_instrument_connect", True)))
         self._native_print_check.setChecked(bool(s.get("use_native_print_dialog", False)))
         self._pdf_fallback_check.setChecked(bool(s.get("pdf_print_fallback", False)))
         self._confirm_print_check.setChecked(bool(s.get("confirm_before_printing", True)))
@@ -2499,6 +2535,7 @@ class SettingsDialog(QDialog):
               "chromiq" if self._chartread_engine_check.isChecked() else "argyll")
         s.set("save_measurement_report", self._save_report_check.isChecked())
         s.set("patch_read_warn_de", float(self._patch_warn_spin.value()))
+        s.set("fast_instrument_connect", self._fast_connect_check.isChecked())
         s.set("use_native_print_dialog",   self._native_print_check.isChecked())
         s.set("pdf_print_fallback",        self._pdf_fallback_check.isChecked())
         s.set("confirm_before_printing",   self._confirm_print_check.isChecked())

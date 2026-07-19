@@ -10,7 +10,7 @@ import threading
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable
 
-from PyQt6.QtCore import QObject, QProcess, pyqtSignal
+from PyQt6.QtCore import QObject, QProcess, QProcessEnvironment, pyqtSignal
 
 from core.logger import get_logger
 from core.resource_path import argyll_binary
@@ -23,6 +23,73 @@ if TYPE_CHECKING:
     from core.settings import AppSettings
 
 log = get_logger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Fast instrument connection: skip Argyll's slow serial-port probe (#macOS)
+#
+# Before opening a USB spectro, Argyll probes every serial port it can see at
+# several baud rates (~2 s each). On macOS a phantom port like
+# /dev/cu.Bluetooth-Incoming-Port is almost always present, adding ~10 s to
+# every measurement start. Argyll's ARGYLL_EXCLUDE_SERIAL_SCAN env var takes a
+# ';'-separated exact-match list of port paths to skip — we fill it with the
+# phantom ports so a USB instrument is reached immediately, while KEEPING real
+# USB-serial adapters (a serial SpectroScan, etc.) so nothing breaks.
+# ---------------------------------------------------------------------------
+
+#: Substrings of a macOS /dev/cu.* name that mark a REAL serial adapter — never
+#: excluded, so serial instruments still work.
+_REAL_SERIAL_HINTS = ("usbserial", "usbmodem")
+
+
+def _phantom_serial_ports(candidates: list[str]) -> list[str]:
+    """From /dev/cu.* candidates, the phantom ports that are never a measurement
+    instrument (Bluetooth, debug consoles, paired devices) — everything that is
+    NOT a real USB-serial adapter. Pure/side-effect-free for testing."""
+    return sorted(
+        p for p in candidates
+        if not any(h in os.path.basename(p).lower() for h in _REAL_SERIAL_HINTS))
+
+
+def argyll_serial_exclusion_ports() -> list[str]:
+    """The phantom serial ports to exclude from Argyll's scan on this machine.
+
+    macOS: modern Macs have NO built-in serial port — every real serial
+    instrument is on a USB-serial adapter (usbserial/usbmodem) — so excluding
+    every OTHER /dev/cu.* (Bluetooth, debug consoles, paired devices) is both
+    safe and complete.
+
+    Linux: conservative. Only the Bluetooth ``/dev/rfcomm*`` ports are certainly
+    not instruments. Native ``/dev/ttyS*`` ports (and USB adapters ttyUSB/ttyACM)
+    are left completely untouched, so a real serial instrument can never be
+    excluded.
+
+    Windows: nothing — COM ports can't be told apart by name safely, and it is
+    left exactly as-is."""
+    import glob
+    try:
+        if sys.platform == "darwin":
+            return _phantom_serial_ports(glob.glob("/dev/cu.*"))
+        if sys.platform.startswith("linux"):
+            return sorted(glob.glob("/dev/rfcomm*"))
+    except OSError:  # pragma: no cover — enumeration must never block a launch
+        return []
+    return []
+
+
+def merged_serial_exclusion(existing: "str | None",
+                            ports: "list[str] | None" = None) -> "str | None":
+    """The value for ARGYLL_EXCLUDE_SERIAL_SCAN: our phantom ports merged with
+    (and never dropping) anything the user already set. ``None`` when there is
+    nothing to exclude. *ports* defaults to :func:`argyll_serial_exclusion_ports`
+    (injectable for tests)."""
+    if ports is None:
+        ports = argyll_serial_exclusion_ports()
+    items = [x for x in (existing or "").replace(",", ";").split(";") if x]
+    for p in ports:
+        if p not in items:
+            items.append(p)
+    return ";".join(items) if items else None
 
 _CREATE_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
@@ -208,6 +275,18 @@ class ArgyllRunner(QObject):
         self._pty_gen: int = 0
         self._pty_done.connect(self._on_pty_finished)
 
+    def _serial_exclusion_value(self, existing: "str | None") -> "str | None":
+        """The ARGYLL_EXCLUDE_SERIAL_SCAN value to use for the next launch, or
+        ``None`` to leave the environment untouched. Honours the user's
+        "Faster instrument connection" preference (default on); returns None the
+        moment it's off, so the feature can be fully disabled."""
+        try:
+            if not self._settings.get("fast_instrument_connect", True):
+                return None
+        except Exception:  # noqa: BLE001 — a settings hiccup must not block a run
+            pass
+        return merged_serial_exclusion(existing)
+
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
@@ -243,6 +322,15 @@ class ArgyllRunner(QObject):
         self._process.setProcessChannelMode(
             QProcess.ProcessChannelMode.MergedChannels
         )
+        # Skip Argyll's slow phantom-serial-port probe (macOS) so a USB
+        # instrument connects fast. Only touch the environment when the option
+        # is on AND we have something to exclude, so nothing else changes.
+        _env = QProcessEnvironment.systemEnvironment()
+        _excl = self._serial_exclusion_value(
+            _env.value("ARGYLL_EXCLUDE_SERIAL_SCAN", ""))
+        if _excl:
+            _env.insert("ARGYLL_EXCLUDE_SERIAL_SCAN", _excl)
+            self._process.setProcessEnvironment(_env)
 
         self._run_on_finish = on_finish
         self._run_on_line   = on_line
@@ -362,6 +450,12 @@ class ArgyllRunner(QObject):
             return
 
         log.info("Run (PTY): %s %s  [cwd=%s]", bin_path, " ".join(args), cwd)
+        # Skip Argyll's slow phantom-serial-port probe (macOS) — see run().
+        _env = os.environ.copy()
+        _excl = self._serial_exclusion_value(
+            _env.get("ARGYLL_EXCLUDE_SERIAL_SCAN"))
+        if _excl:
+            _env["ARGYLL_EXCLUDE_SERIAL_SCAN"] = _excl
         master_fd, slave_fd = pty.openpty()
         self._pty_proc = subprocess.Popen(
             [str(bin_path)] + args,
@@ -369,6 +463,7 @@ class ArgyllRunner(QObject):
             cwd=str(cwd),
             close_fds=True,
             start_new_session=True,
+            env=_env,
         )
         os.close(slave_fd)
         self._pty_master = master_fd

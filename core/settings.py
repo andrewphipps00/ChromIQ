@@ -158,6 +158,10 @@ DEFAULTS: dict[str, Any] = {
     # strip jumps, live patch feedback). Falls back to "argyll" when the
     # helper binary isn't present.
     "chartread_engine":          "argyll",
+    # Faster instrument connection: skip Argyll's slow phantom-serial-port probe
+    # (macOS Bluetooth/debug ports, Linux rfcomm) so a USB spectro connects
+    # nearly instantly. Default on; real USB-serial adapters are never excluded.
+    "fast_instrument_connect":   True,
     # Measurement report (#126, Knut): when True, ChromIQ builds and saves a
     # dated accuracy report (mean/worst ΔE, worst patches, white/black) to the
     # run's reports/ folder after every measurement, so reports of the same
