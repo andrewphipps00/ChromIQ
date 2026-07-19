@@ -1,5 +1,40 @@
 # Changelog
 
+## v3.13.12-beta.10
+
+Knut's full SpectroScan-hexagonal + follow-up wish list.
+
+- **Hexagonal charts: margin guide lines now land exactly on the patches.**
+  For a SpectroScan hexagonal chart the "Show margin guide lines" lines (and
+  the measured margins) now sit on the true edges of the hexagons — the top
+  and bottom on the pointed tips, the left and right on the flat sides —
+  instead of a little inside them.
+- **New: a ruler on your pointer.** The "Measured from Preview" panel has a
+  third switch, **Show measurement coordinates on pointer**. With it on, a
+  thin cross-hair follows your mouse over the chart and shows its exact
+  position — measured from the top-left corner of the paper — in millimetres
+  (one decimal) and inches (three decimals). The easy way to check a real
+  distance on screen.
+- **Hexagonal chart reading is aligned.** With the chart-reading engine on, the
+  expected/measured split now sits precisely on each hexagon (it followed the
+  hexagons' natural row-to-row zig-zag). Strip counting and labels for
+  hexagonal charts were verified correct.
+- **Hexagonal charts explain their limits fully.** The heads-up now lists every
+  feature that can't use a hexagonal chart (create scanner/camera target, build
+  a scanner/camera profile, and the alignment check).
+- **Tidy up old projects as you open them.** A new preference (General →
+  Behaviour → **Declutter files when loading from legacy folders**, on by
+  default) sorts an old flat project's loose ChromIQ files into the tidy
+  reports / exports / cache sub-folders the first time you load a file from it.
+  Only files ChromIQ made are moved; your own files are never touched.
+- **The folder guide is clearer.** "Where are my files?" now opens with a
+  **Files Relating to Features** table (what each feature reads and writes),
+  followed by the full **All File Types and Their Use** list.
+- **See how a printer drifts over time.** The Measurement Report window now
+  draws a trend chart of the average and worst colour difference across every
+  saved report for a printer — a slow rise or a sudden jump stands out at a
+  glance.
+
 ## v3.13.12-beta.9
 
 More of Knut's chart-layout wish list.
