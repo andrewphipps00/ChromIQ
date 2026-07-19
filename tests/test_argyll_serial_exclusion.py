@@ -8,6 +8,7 @@ import sys
 import pytest
 
 from core.argyll_runner import (_phantom_serial_ports,
+                                _windows_bluetooth_com_ports,
                                 argyll_serial_exclusion_ports,
                                 merged_serial_exclusion)
 
@@ -46,12 +47,47 @@ def test_merged_value_adds_ours_and_keeps_user_set():
     assert merged_serial_exclusion("", []) is None
 
 
-def test_no_exclusion_off_macos(monkeypatch):
-    """Windows/Linux are left completely unchanged — no ports enumerated."""
-    monkeypatch.setattr(sys, "platform", "win32")
-    assert argyll_serial_exclusion_ports() == []
+def test_linux_left_unchanged(monkeypatch):
+    """Linux enumerates only Bluetooth /dev/rfcomm* — none on the test host."""
     monkeypatch.setattr(sys, "platform", "linux")
     assert argyll_serial_exclusion_ports() == []
+
+
+def test_windows_excludes_only_bluetooth_com_ports():
+    """The Windows classifier skips Bluetooth COM ports and KEEPS every
+    USB-serial adapter and native port — so a serial instrument (SpectroScan on
+    a USB-serial bridge) is never excluded."""
+    rows = [
+        (r"\Device\BthModem0", "COM47"),   # paired Bluetooth SPP → exclude
+        (r"\Device\BtPort1",   "COM48"),   # Bluetooth port       → exclude
+        (r"\Device\VCP0",      "COM3"),    # FTDI/virtual USB-serial → KEEP
+        (r"\Device\USBSER000", "COM4"),    # USB serial adapter      → KEEP
+        (r"\Device\Serial0",   "COM1"),    # native UART             → KEEP
+    ]
+    excl = _windows_bluetooth_com_ports(rows)
+    assert excl == ["COM47", "COM48"]                 # sorted, Bluetooth only
+    for keep in ("COM3", "COM4", "COM1"):
+        assert keep not in excl
+    # De-dup: the same Bluetooth COM listed twice appears once.
+    assert _windows_bluetooth_com_ports(
+        [(r"\Device\BthModem0", "COM47"),
+         (r"\Device\BthModem1", "COM47")]) == ["COM47"]
+    # No serial ports at all → nothing excluded.
+    assert _windows_bluetooth_com_ports([]) == []
+
+
+def test_windows_enumeration_delegates_to_registry(monkeypatch):
+    """On win32, argyll_serial_exclusion_ports() reads SERIALCOMM and returns
+    exactly the Bluetooth COM ports found there."""
+    import core.argyll_runner as ar
+    monkeypatch.setattr(sys, "platform", "win32")
+    monkeypatch.setattr(ar, "_read_serialcomm",
+                        lambda: [(r"\Device\BthModem0", "COM47"),
+                                 (r"\Device\USBSER000", "COM4")])
+    assert ar.argyll_serial_exclusion_ports() == ["COM47"]
+    # An empty registry (the common case) excludes nothing.
+    monkeypatch.setattr(ar, "_read_serialcomm", lambda: [])
+    assert ar.argyll_serial_exclusion_ports() == []
 
 
 class _StubSettings:

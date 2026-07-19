@@ -41,6 +41,14 @@ log = get_logger(__name__)
 #: excluded, so serial instruments still work.
 _REAL_SERIAL_HINTS = ("usbserial", "usbmodem")
 
+#: Windows SERIALCOMM value-name prefixes that mark a Bluetooth serial port —
+#: never a ChromIQ measurement instrument, so safe to skip (the direct analog of
+#: excluding /dev/cu.Bluetooth-* on macOS). USB-serial adapters (VCP/USBSER, e.g.
+#: a SpectroScan bridge) are deliberately NOT matched, so real serial instruments
+#: still work. These are exactly the prefixes Argyll itself tags as ``btserial``
+#: (see spectro/icoms_nt.c), so our exclusion can never disagree with its scan.
+_WIN_BLUETOOTH_PREFIXES = ("BtPort", "BthModem")
+
 
 def _phantom_serial_ports(candidates: list[str]) -> list[str]:
     """From /dev/cu.* candidates, the phantom ports that are never a measurement
@@ -49,6 +57,48 @@ def _phantom_serial_ports(candidates: list[str]) -> list[str]:
     return sorted(
         p for p in candidates
         if not any(h in os.path.basename(p).lower() for h in _REAL_SERIAL_HINTS))
+
+
+def _windows_bluetooth_com_ports(entries: "list[tuple[str, str]]") -> list[str]:
+    """From ``(value_name, com_port)`` rows of HKLM\\...\\SERIALCOMM, the COM
+    ports that are Bluetooth serial ports (never an instrument). Argyll keys a
+    port's type off the leaf of its registry value name; we apply the identical
+    rule (``BtPort*`` / ``BthModem*``), keeping every USB-serial adapter
+    (``VCP*`` / ``USBSER*``) and native port. Pure/side-effect-free for
+    testing."""
+    ports: list[str] = []
+    for name, com in entries:
+        leaf = name.rsplit("\\", 1)[-1]
+        if com and any(leaf.startswith(pfx) for pfx in _WIN_BLUETOOTH_PREFIXES):
+            if com not in ports:
+                ports.append(com)
+    return sorted(ports)
+
+
+def _read_serialcomm() -> "list[tuple[str, str]]":
+    """Enumerate ``HKLM\\HARDWARE\\DEVICEMAP\\SERIALCOMM`` as ``(value_name,
+    com_port)`` rows — the exact key Argyll reads. Empty when the key is absent
+    (the common case: no serial ports) or unreadable. Windows-only; never
+    raises."""
+    try:
+        import winreg
+    except ImportError:  # pragma: no cover — non-Windows
+        return []
+    rows: list[tuple[str, str]] = []
+    try:
+        with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE,
+                            r"HARDWARE\DEVICEMAP\SERIALCOMM") as key:
+            i = 0
+            while True:
+                try:
+                    name, value, _ = winreg.EnumValue(key, i)
+                except OSError:  # ERROR_NO_MORE_ITEMS — end of the value list
+                    break
+                rows.append((name, str(value)))
+                i += 1
+    except OSError:  # key absent / unreadable — nothing to exclude
+        return []
+    return rows
 
 
 def argyll_serial_exclusion_ports() -> list[str]:
@@ -64,14 +114,20 @@ def argyll_serial_exclusion_ports() -> list[str]:
     are left completely untouched, so a real serial instrument can never be
     excluded.
 
-    Windows: nothing — COM ports can't be told apart by name safely, and it is
-    left exactly as-is."""
+    Windows: only Bluetooth COM ports. Argyll lists serial ports from
+    ``HKLM\\HARDWARE\\DEVICEMAP\\SERIALCOMM`` and probes each fast/virtual one for
+    ~2 s; a paired Bluetooth device (``BthModem*`` / ``BtPort*``) is never an
+    instrument, so its COM port is skipped. USB-serial adapters (``VCP*`` /
+    ``USBSER*``, e.g. a SpectroScan) and native ports are always kept. A machine
+    with no serial ports (the common case) excludes nothing."""
     import glob
     try:
         if sys.platform == "darwin":
             return _phantom_serial_ports(glob.glob("/dev/cu.*"))
         if sys.platform.startswith("linux"):
             return sorted(glob.glob("/dev/rfcomm*"))
+        if sys.platform == "win32":
+            return _windows_bluetooth_com_ports(_read_serialcomm())
     except OSError:  # pragma: no cover — enumeration must never block a launch
         return []
     return []
