@@ -1212,19 +1212,22 @@ class TiffPreview(QWidget):
         if self._show_only_measured:
             boxes = self._page_patch_boxes.get(self._current) or []
             if boxes:
-                # Blank each unread patch to a very light grey. We draw NO
-                # per-patch outline: the chart's own spacer gaps between patches
-                # (which we deliberately leave unfilled) already delineate every
-                # cell, and drawing thousands of 1px outlines on a fit-to-window
-                # (down-scaled) canvas produced a moiré that made a few column
-                # edges look pixel-thick, wandering as the zoom changed
-                # (Sebastian). No drawn lines ⇒ no beat. The faint grey (vs pure
-                # white) keeps unread cells readable against the white paper.
-                blank = QColor(247, 247, 247)
-                for b in boxes:
-                    r = QRectF(b.x() * s + ox, b.y() * s + oy,
-                               b.width() * s, b.height() * s)
-                    painter.fillRect(r, blank)
+                # Blank the WHOLE patch area with ONE flat rectangle, then draw
+                # the measured split patches on top. Filling per patch left the
+                # spacer gaps between cells showing the printed chart, and that
+                # gap-vs-fill grid beat against the pixel grid when the chart is
+                # scaled to fit — making stray white/coloured lines appear at a
+                # few column edges and wander with the zoom (Sebastian). A single
+                # rectangle has no internal edges, so there is nothing to alias.
+                # A faint tint (vs the white paper) shows the patch-area extent.
+                minx = min(b.x() for b in boxes)
+                miny = min(b.y() for b in boxes)
+                maxx = max(b.x() + b.width() for b in boxes)
+                maxy = max(b.y() + b.height() for b in boxes)
+                painter.fillRect(
+                    QRectF(minx * s + ox, miny * s + oy,
+                           (maxx - minx) * s, (maxy - miny) * s),
+                    QColor(249, 249, 249))
         for rect, c_exp, c_meas, warn in items:
             # Round BOTH edges to whole pixels so the split covers exactly the
             # same span as the printed patch — flooring each of x/y/w/h
