@@ -15,8 +15,8 @@ from pathlib import Path
 from PyQt6.QtCore import QPointF, QRectF, Qt
 from PyQt6.QtGui import QColor, QFont, QPainter, QPen
 from PyQt6.QtWidgets import (
-    QDialog, QFileDialog, QHBoxLayout, QLabel, QPushButton, QTabWidget,
-    QTextBrowser, QVBoxLayout, QWidget,
+    QCheckBox, QDialog, QFileDialog, QHBoxLayout, QLabel, QPushButton,
+    QTabWidget, QTextBrowser, QVBoxLayout, QWidget,
 )
 
 from core.i18n import tr
@@ -185,6 +185,7 @@ class MeasurementReportDialog(QDialog):
         self._report: dict | None = None
         self._ti3: Path | None = None
         self._trend_series: list = []
+        self._history: list = []
         self.setWindowTitle(tr("Measurement Report"))
         self.setMinimumSize(720, 640)
 
@@ -245,6 +246,14 @@ class MeasurementReportDialog(QDialog):
         self._pdf_btn.clicked.connect(self._export_pdf)
         self._pdf_btn.setEnabled(False)
         btn_row.addWidget(self._pdf_btn)
+        self._all_runs_check = QCheckBox(
+            tr("Include all measurement runs in the PDF"), self)
+        self._all_runs_check.setChecked(True)
+        self._all_runs_check.setToolTip(tr(
+            "When on, the PDF lists the data tables for every saved measurement "
+            "of this printer plus a side-by-side comparison — not only the run "
+            "shown here."))
+        btn_row.addWidget(self._all_runs_check)
         btn_row.addStretch(1)
         v.addLayout(btn_row)
 
@@ -253,14 +262,16 @@ class MeasurementReportDialog(QDialog):
         self._trend_label.setVisible(False)
         v.addWidget(self._trend_label)
         # Unlike-scaled metrics can't share one axis (Knut), so group them into
-        # three tabbed charts: ΔE00 accuracy, paper white/black, and the eight
-        # cube corners. Each is a _TrendChart fed its own metric set in _load.
+        # separate tabbed charts. Paper white (~L*100) and black (~L*10) are too
+        # far apart to read a trend on one axis, so they get a chart each.
         self._trend_tabs = QTabWidget(self)
         self._trend_de = _TrendChart(self)
-        self._trend_wb = _TrendChart(self)
+        self._trend_white = _TrendChart(self)
+        self._trend_black = _TrendChart(self)
         self._trend_corners = _TrendChart(self)
         self._trend_tabs.addTab(self._trend_de, tr("Colour accuracy (ΔE00)"))
-        self._trend_tabs.addTab(self._trend_wb, tr("Paper white / black"))
+        self._trend_tabs.addTab(self._trend_white, tr("Paper white (L*)"))
+        self._trend_tabs.addTab(self._trend_black, tr("Darkest black (L*)"))
         self._trend_tabs.addTab(self._trend_corners, tr("Cube corners"))
         self._trend_tabs.setVisible(False)
         v.addWidget(self._trend_tabs)
@@ -312,6 +323,7 @@ class MeasurementReportDialog(QDialog):
                 history.append(json.loads(p.read_text()))
             except Exception:  # noqa: BLE001
                 continue
+        self._history = history                 # every saved run, for the PDF
         comparison = None
         for older in reversed(history):
             if older.get("created") != self._report.get("created"):
@@ -338,12 +350,15 @@ class MeasurementReportDialog(QDialog):
                 (tr("Average"), QColor("#56d6a5"), lambda pt: pt.get("mean")),
                 (tr("Worst"),   QColor("#e0864b"), lambda pt: pt.get("max")),
             ], None, 1),
-            # White sits near L*100 and black near L*10 — pin the axis to the full
-            # L* range so both read on one scale and black's rise (fade) is clear.
-            (self._trend_wb, tr("Paper white / black (L*)"), [
-                (tr("Paper white L*"), QColor("#b0b0b0"), lambda pt: pt.get("white_L")),
-                (tr("Black L*"),       QColor("#505050"), lambda pt: pt.get("black_L")),
-            ], 100.0, 0),
+            # White (~L*100) and black (~L*10) are too far apart to share an axis
+            # (Knut), so each is its own auto-scaled chart — a small drift in
+            # either is then actually visible.
+            (self._trend_white, tr("Paper white (L*)"), [
+                (tr("Paper white L*"), QColor("#8a8a8a"), lambda pt: pt.get("white_L")),
+            ], None, 1),
+            (self._trend_black, tr("Darkest black (L*)"), [
+                (tr("Black L*"), QColor("#505050"), lambda pt: pt.get("black_L")),
+            ], None, 1),
             (self._trend_corners, tr("Cube corners (ΔE00 per ink)"),
              corner_metrics, None, 1),
         ]
@@ -384,7 +399,15 @@ class MeasurementReportDialog(QDialog):
                 doc.addResource(QTextDocument.ResourceType.ImageResource, url, img)
                 charts_html += (f"<h3>{html.escape(title)}</h3>"
                                 f"<img src='chart://{i}' width='680'>")
-        doc.setHtml(self._pdf_html(self._report, charts_html))
+        # All saved runs of this printer, or just the loaded one (Knut's checkbox).
+        # The loaded run is normally already among the saved history; we use the
+        # history as-is (each with its own saved date) rather than the freshly
+        # built current report, so a run is never listed twice.
+        if self._all_runs_check.isChecked() and self._history:
+            runs = list(self._history)
+        else:
+            runs = [self._report]
+        doc.setHtml(self._pdf_html(runs, charts_html))
 
         writer = QPdfWriter(str(path))
         writer.setPageSize(QPageSize(QPageSize.PageSizeId.A4))
@@ -399,19 +422,58 @@ class MeasurementReportDialog(QDialog):
         doc.print(writer)
         self._pdf_btn.setText(tr("Saved: {name}").format(name=Path(path).name))
 
-    def _pdf_html(self, r: dict, charts_html: str) -> str:
-        """The printable report: the on-screen data, the trend charts, and a
-        plain-language guide to what each part means and how to read it (Knut)."""
-        body = self._report_html(r, None, title=False)   # the PDF has its own header
+    def _comparison_table_html(self, runs: list) -> str:
+        """A side-by-side table of each metric across every run — the at-a-glance
+        drift view Knut asked for (columns = dated runs, rows = metrics)."""
+        def cell(v, dec=2):
+            return f"{v:.{dec}f}" if isinstance(v, (int, float)) else "—"
+        dates = [str(r.get("created") or "")[:10] for r in runs]
+        head = ("<tr><th align='left'>" + tr("Metric") + "</th>"
+                + "".join(f"<th>{html.escape(d)}</th>" for d in dates) + "</tr>")
+        rows = [head]
+
+        def metric_row(label, fn, dec=2):
+            cells = "".join(f"<td align='right'>{cell(fn(r), dec)}</td>" for r in runs)
+            rows.append(f"<tr><td style='color:#555'>{html.escape(label)}</td>{cells}</tr>")
+
+        de = lambda r: (r.get("de00") or {})
+        metric_row(tr("Average ΔE00"), lambda r: de(r).get("mean"))
+        metric_row(tr("Worst ΔE00"), lambda r: de(r).get("max"))
+        metric_row(tr("Paper white L*"),
+                   lambda r: (r.get("paper_white") or {}).get("lab", [None])[0], 1)
+        metric_row(tr("Black L*"),
+                   lambda r: (r.get("max_black") or {}).get("lab", [None])[0], 1)
+        for code in ("W", "K", "R", "G", "B", "C", "M", "Y"):
+            lbl = tr("{corner} ΔE00").format(corner=_CORNER_LABELS[code]())
+
+            def corner_de(r, c=code):
+                for cc in (r.get("corners") or []):
+                    if cc.get("name") == c:
+                        return cc.get("de")
+                return None
+            metric_row(lbl, corner_de)
+        return ("<h2 style='color:#2a2a2a'>" + tr("Side-by-side comparison") + "</h2>"
+                "<table cellpadding='4' cellspacing='0' "
+                "style='border-collapse:collapse;font-size:11px'>"
+                + "".join(rows) + "</table>")
+
+    def _pdf_html(self, runs: list, charts_html: str) -> str:
+        """The printable report (Knut's order): a printer-level header, the
+        how-to-read guide, the trend charts, a side-by-side comparison, then the
+        full detailed data for every run below."""
+        first = runs[0] if runs else self._report
+        span = ""
+        if len(runs) > 1:
+            span = (" &nbsp;·&nbsp; " + tr("{n} measurements").format(n=len(runs))
+                    + f" ({str(runs[0].get('created') or '')[:10]} – "
+                    f"{str(runs[-1].get('created') or '')[:10]})")
         header = (
             "<table width='100%' cellpadding='0' cellspacing='0'>"
             "<tr><td style='border-bottom:2px solid #56d6a5;padding-bottom:6px'>"
             f"<span style='font-size:22px;font-weight:bold;color:#2a2a2a'>"
             f"{html.escape(tr('Measurement Report'))}</span><br>"
-            f"<span style='font-size:12px;color:#777'>{html.escape(r['chart'])}"
-            f" &nbsp;·&nbsp; {html.escape(r['created'])}"
-            f" &nbsp;·&nbsp; {r['patches']} " + html.escape(tr('patches'))
-            + "</span></td></tr></table><br>")
+            f"<span style='font-size:12px;color:#777'>{html.escape(first['chart'])}"
+            + span + "</span></td></tr></table><br>")
         guide = (
             "<h2>" + tr("How to read this report") + "</h2>"
             "<p>" + tr(
@@ -442,8 +504,19 @@ class MeasurementReportDialog(QDialog):
                    + "</h2>" + charts_html) if charts_html else "")
         guide_box = ("<table width='100%' cellpadding='12' cellspacing='0'>"
                      "<tr><td style='background:#f4f7f6'>" + guide + "</td></tr></table>")
+        comparison = self._comparison_table_html(runs) if len(runs) > 1 else ""
+        # Full detailed data for every run, below the overview (Knut).
+        details = "<h2 style='color:#2a2a2a'>" + tr("Detailed data per measurement") + "</h2>"
+        for run in runs:
+            details += (
+                "<h3 style='color:#2a2a2a;border-bottom:1px solid #ddd'>"
+                f"{html.escape(str(run.get('created') or ''))} &nbsp;·&nbsp; "
+                f"{run.get('patches', 0)} " + html.escape(tr('patches')) + "</h3>"
+                + self._report_html(run, None, title=False))
+        # Knut's order: how-to-read first, then charts, then comparison, then data.
         return ("<div style='font-family:sans-serif;color:#333;font-size:12px'>"
-                + header + body + "<br>" + charts + "<br>" + guide_box + "</div>")
+                + header + guide_box + "<br>" + charts + "<br>" + comparison
+                + "<br>" + details + "</div>")
 
     def _update_trends(self, series: list, dark: bool) -> None:
         """Feed the three grouped trend charts their own metric sets (#40, Knut)."""
