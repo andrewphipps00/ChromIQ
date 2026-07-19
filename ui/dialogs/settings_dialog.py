@@ -1002,12 +1002,16 @@ class SettingsDialog(QDialog):
         self._tabs.addTab(self._scroll_wrap(general_page), tr("General"))
         self._tabs.addTab(self._scroll_wrap(self._build_margin_thresholds_tab()),
                           tr("Instrument Limits"))
-        self._tabs.addTab(self._build_chart_layout_tab(), tr("Chart Layout"))
+        self._chart_layout_tab_widget = self._build_chart_layout_tab()
+        self._tabs.addTab(self._chart_layout_tab_widget, tr("Chart Layout"))
         self._tabs.addTab(self._scroll_wrap(self._build_scanner_tab()),
                           tr("Scanner Limits"))
         self._tabs.addTab(self._scroll_wrap(self._build_paths_tab()),
                           tr("Paths"))
         self._tabs.addTab(self._scroll_wrap(self._beta_page), tr("Beta"))
+        # Run the (deferred) Chart Layout estimate the first time that tab is
+        # actually opened — it's suspended during build to keep the window quick.
+        self._tabs.currentChanged.connect(self._on_settings_tab_changed)
         # Six tabs don't fit at the global 130px min-width / 20px padding, so
         # trim this tab bar's tabs enough that they all show without a scroller.
         self._tabs.tabBar().setStyleSheet(
@@ -2153,10 +2157,22 @@ class SettingsDialog(QDialog):
         # up and run it exactly once at the end, so opening Preferences is quick
         # (Basti: the window was slow to load).
         self._suspend_layout_calc = True
+        # Populating the combos fires their change signals, each of which would
+        # load a recipe into the panel and re-render the clip-strip preview image
+        # — several times, all but the last discarded. Skip those redundant loads
+        # during the build and do a single load for the final selection.
+        self._building_layout_tab = True
         self._on_layout_instr_changed()      # populate paper+mode for the default
         self._preselect_layout_combo()       # then jump to the active combo (#93)
-        self._suspend_layout_calc = False
-        self._update_layout_calc()           # one estimate for the final selection
+        self._building_layout_tab = False
+        self._load_layout_combo()            # load the final selection once
+        # Leave the estimate suspended: it's the expensive part (font-measured
+        # layout math) and the Chart Layout tab isn't the tab Preferences opens
+        # on, so there's nothing to show yet. It runs the first time the user
+        # actually switches to this tab (see _on_settings_tab_changed), keeping
+        # the window quick to open (Basti). The suspend flag stays False after,
+        # so every later edit recomputes the estimate live as before.
+        self._layout_estimate_pending = True
 
         # Re-home the printtarg (old-engine) i1Pro options here, greyed when the
         # ChromIQ engine is active (they have no effect then) (Knut #93).
@@ -2166,6 +2182,21 @@ class SettingsDialog(QDialog):
             self._i1pro_grp.setTitle(tr("i1Pro Chart Defaults (printtarg engine)"))
             page.layout().addWidget(self._i1pro_grp)
         return self._scroll_wrap(page)
+
+    def _on_settings_tab_changed(self, _index: int) -> None:
+        """Run the Chart Layout estimate the first time that tab is opened.
+
+        The estimate (font-measured layout math) is suspended while the dialog
+        is built, so opening Preferences stays quick. The moment the user
+        switches to the Chart Layout tab, compute it once and re-enable live
+        recomputation. Guarded so it runs at most once and only for that tab."""
+        if not getattr(self, "_layout_estimate_pending", False):
+            return
+        w = getattr(self, "_chart_layout_tab_widget", None)
+        if w is not None and self._tabs.currentWidget() is w:
+            self._layout_estimate_pending = False
+            self._suspend_layout_calc = False
+            self._update_layout_calc()
 
     # Underline-mode options shared with the Create Chart panel (key → label),
     # so the two stay in sync (Knut #93).
@@ -2399,6 +2430,8 @@ class SettingsDialog(QDialog):
                 self._layout_mode.currentData() or "default")
 
     def _load_layout_combo(self) -> None:
+        if getattr(self, "_building_layout_tab", False):
+            return                           # one load at the end of the build
         inst, paper, mode = self._layout_selection()
         recipe = self._layout_store.get(inst, paper, mode)
         self._loading_layout = True
