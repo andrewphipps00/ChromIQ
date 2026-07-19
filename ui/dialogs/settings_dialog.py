@@ -689,6 +689,39 @@ class SettingsDialog(QDialog):
         _cr_row.addWidget(chartread_engine_tip)
         _beta.addLayout(_cr_row)
 
+        # Patch-reading error limit (#126, Knut): the ΔE at which a just-measured
+        # patch gets the red warning outline in the live split-patch preview.
+        self._patch_warn_spin = NoScrollDoubleSpinBox(self)
+        self._patch_warn_spin.setRange(1.0, 100.0)
+        self._patch_warn_spin.setSingleStep(1.0)
+        self._patch_warn_spin.setDecimals(1)
+        self._patch_warn_spin.setSuffix(" ΔE")
+        self._patch_warn_spin.setFixedWidth(110)
+        _pw_row = QHBoxLayout()
+        _pw_row.addWidget(QLabel(tr("Flag a patch when its colour error reaches:"), self))
+        _pw_row.addWidget(self._patch_warn_spin)
+        _pw_row.addStretch()
+        _pw_row.addWidget(TooltipButton(
+            tr("Patch-reading error limit"),
+            tr("While you measure with the ChromIQ chart-reading engine, each "
+            "patch you read is shown split against the colour the chart expected "
+            "there. When a patch comes out further from its expected colour than "
+            "this limit, ChromIQ draws a bright red outline around it, so a "
+            "likely misread — a smudge, a skipped row, the strip swiped the "
+            "wrong way — jumps out at you straight away.\n\n"
+            "The number is a colour difference (ΔE): 0 would be a perfect match, "
+            "1–2 is a barely-visible difference, and 10+ is clearly wrong. The "
+            "default of 20 is deliberately generous — it flags only patches that "
+            "are almost certainly a reading mistake, not the normal small "
+            "differences you always get between screen and paper.\n\n"
+            "Lower it (say to 10) if you want to be warned about smaller "
+            "differences and don't mind a few false alarms; raise it if you only "
+            "want the very worst patches flagged. It changes only the red "
+            "outline in the preview — never your measurements.\n\n"
+            "Default: 20 ΔE"),
+            self))
+        _beta.addLayout(_pw_row)
+
         # Measurement report auto-save (#126, Knut).
         self._save_report_check = QCheckBox(
             tr("Save a measurement report after each measurement"), self)
@@ -1766,6 +1799,8 @@ class SettingsDialog(QDialog):
             str(s.get("chartread_engine", "argyll")) == "chromiq")
         self._save_report_check.setChecked(
             bool(s.get("save_measurement_report", False)))
+        self._patch_warn_spin.setValue(
+            float(s.get("patch_read_warn_de", 20.0)))
         self._native_print_check.setChecked(bool(s.get("use_native_print_dialog", False)))
         self._pdf_fallback_check.setChecked(bool(s.get("pdf_print_fallback", False)))
         self._confirm_print_check.setChecked(bool(s.get("confirm_before_printing", True)))
@@ -2434,6 +2469,7 @@ class SettingsDialog(QDialog):
         s.set("chartread_engine",
               "chromiq" if self._chartread_engine_check.isChecked() else "argyll")
         s.set("save_measurement_report", self._save_report_check.isChecked())
+        s.set("patch_read_warn_de", float(self._patch_warn_spin.value()))
         s.set("use_native_print_dialog",   self._native_print_check.isChecked())
         s.set("pdf_print_fallback",        self._pdf_fallback_check.isChecked())
         s.set("confirm_before_printing",   self._confirm_print_check.isChecked())

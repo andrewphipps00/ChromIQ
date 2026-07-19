@@ -163,6 +163,10 @@ DEFAULTS: dict[str, Any] = {
     # run's reports/ folder after every measurement, so reports of the same
     # chart accrue and can be compared over time (ink/printer/instrument drift).
     "save_measurement_report":   False,
+    # Patch-reading error limit (#126, Knut): the ΔE at which a just-measured
+    # patch gets the red warning outline in the engine's live split-patch
+    # preview. Generous by default so only near-certain misreads are flagged.
+    "patch_read_warn_de":        20.0,
     # "Read again & average" — master switch. OFF (default) restores the classic
     # behaviour: a finished full read proceeds straight to Build Profile. ON adds
     # the post-read completion dialog offering measure-again / average.

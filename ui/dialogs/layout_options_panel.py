@@ -1196,7 +1196,10 @@ class LayoutOptionsPanel(QWidget):
         add_row(ccg, 0, tr("Content:"), self.clip_content_mode,
                 tip=TooltipButton(
                     tr("Clip-border content"),
-                    tr("Fills the blank strip down the left edge that the scanner "
+                    tr("Available only when Clip border is turned On (in the "
+                       "Layout section above) — with it Off there is no clip "
+                       "strip to fill, so these options do nothing.\n\n"
+                       "Fills the blank strip down the left edge that the scanner "
                        "clip reserves. Custom text accepts the same "
                        "{project}/{date}/… tokens as the sheet text; Notes box "
                        "prints a ready-made record — chart facts filled in "

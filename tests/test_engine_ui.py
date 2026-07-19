@@ -179,6 +179,30 @@ def test_strip_measured_splits_only_real_patch_boxes(monkeypatch):
     assert items[3][0] == QRect(20, 30, 4, 18)     # B4's exact box
 
 
+def test_patch_warn_threshold_comes_from_settings():
+    """The ΔE at which a patch gets the red warn outline is the user-set
+    'patch_read_warn_de' limit, not a hard-coded constant (Knut)."""
+    tab = _make_tab()
+    tab._page_stripe_rects = [[QRect(0, 0, 210, 20)]]
+    tab._strips_per_page = [1]
+    tab._engine_strips = [{"strip": "A"}]
+    tab._patch_boxes = [{"A1": QRect(0, 0, 4, 18), "A2": QRect(6, 0, 4, 18)}]
+    ev = {"strip": "A", "patches": [
+        {"id": "1", "loc": "A1", "xyz": [50, 50, 50], "exyz": [50, 50, 50], "de": 12.0},
+        {"id": "2", "loc": "A2", "xyz": [50, 50, 50], "exyz": [50, 50, 50], "de": 3.0}]}
+
+    tab._settings.set("patch_read_warn_de", 10.0)      # de 12 warns, 3 doesn't
+    tab._on_strip_measured(ev)
+    items = tab._preview._patch_overlay.get(0)
+    assert items[0][3] is True and items[1][3] is False
+
+    tab._preview.clear_patch_overlay()
+    tab._settings.set("patch_read_warn_de", 25.0)      # now neither warns
+    tab._on_strip_measured(ev)
+    items = tab._preview._patch_overlay.get(0)
+    assert items[0][3] is False and items[1][3] is False
+
+
 def test_preview_click_maps_page_index_to_letter_and_sends_goto(monkeypatch):
     tab = _make_tab()
     tab._strips_per_page = [2, 2]

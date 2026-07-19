@@ -4923,6 +4923,9 @@ class TabMeasure(QWidget):
             return
 
         from PyQt6.QtGui import QColor as _QC
+        # The ΔE at which a patch gets the red warning outline is user-settable
+        # (Settings → Beta), defaulting to _PATCH_WARN_DE (Knut).
+        warn_de = float(self._settings.get("patch_read_warn_de", _PATCH_WARN_DE))
         items = []
         for p in patches:
             box = boxes.get(str(p.get("loc", "")))
@@ -4930,9 +4933,9 @@ class TabMeasure(QWidget):
                 continue
             # Outline only the individual patch that looks off (a likely
             # misread), not the whole strip — points straight at what to
-            # re-measure. _PATCH_WARN_DE ≈ Argyll's own "unexpected response"
-            # band; normal print drift (a few ΔE) never trips it.
-            warn = float(p.get("de", 0)) >= _PATCH_WARN_DE
+            # re-measure. The limit ≈ Argyll's own "unexpected response" band;
+            # normal print drift (a few ΔE) never trips it.
+            warn = float(p.get("de", 0)) >= warn_de
             items.append((box,
                           _QC(*_xyz_d50_to_srgb8(p.get("exyz", [0, 0, 0]))),
                           _QC(*_xyz_d50_to_srgb8(p.get("xyz", [0, 0, 0]))),
