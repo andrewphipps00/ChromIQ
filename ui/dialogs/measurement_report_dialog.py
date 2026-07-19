@@ -98,13 +98,42 @@ class _TrendChart(QWidget):
             for q in poly:
                 p.drawEllipse(q, 2.6, 2.6)
 
-        # X labels: first and last report date (YYYY-MM-DD from the ISO stamp).
+        # X axis: a tick under EVERY measurement point plus as many dated labels
+        # (YYYY-MM-DD) as fit without overlapping — always the first and last —
+        # so you can read at WHICH date each change happened, not just the range
+        # (Knut). Ticks mark every point even where the date label is skipped.
+        axis_y = self.height() - B
+        p.setPen(QPen(grid, 1.0))
+        for i in range(n):
+            x = L + (w * i / (n - 1))
+            p.drawLine(QPointF(x, axis_y), QPointF(x, axis_y + 3))
         p.setPen(QPen(fg, 1.0))
-        for i, align in ((0, Qt.AlignmentFlag.AlignLeft),
-                         (n - 1, Qt.AlignmentFlag.AlignRight)):
-            d = str(pts[i].get("created") or "")[:10]
-            p.drawText(QRectF(L, self.height() - B + 4, w, 16),
-                       align | Qt.AlignmentFlag.AlignTop, d)
+        fm = p.fontMetrics()
+
+        def _lab(i: int) -> str:
+            return str(pts[i].get("created") or "")[:10]
+
+        def _draw_date(left: float, text: str) -> None:
+            p.drawText(QRectF(left, axis_y + 4, fm.horizontalAdvance(text) + 6, 16),
+                       Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop, text)
+
+        # Reserve the first (flush-left) and last (flush-right) dates, then fill
+        # in as many intermediate dates as fit without overlapping either those
+        # or each other — so the ends never collide (Knut).
+        d0, dn = _lab(0), _lab(n - 1)
+        w0, wn = fm.horizontalAdvance(d0), fm.horizontalAdvance(dn)
+        last_left = L + w - wn
+        _draw_date(L, d0)
+        _draw_date(last_left, dn)
+        occupied = [(L, L + w0), (last_left, last_left + wn)]
+        for i in range(1, n - 1):
+            d = _lab(i)
+            tw = fm.horizontalAdvance(d)
+            left = L + (w * i / (n - 1)) - tw / 2.0
+            right = left + tw
+            if all(right < a - 8 or left > b + 8 for a, b in occupied):
+                _draw_date(left, d)
+                occupied.append((left, right))
 
         # Legend.
         lx = L + 4
