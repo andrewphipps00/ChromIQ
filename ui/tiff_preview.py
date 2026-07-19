@@ -1496,21 +1496,34 @@ class TiffPreview(QWidget):
             for i in range(n):
                 if read_map.get(i, False):
                     continue
-                col = _bounds(i)                       # this column's PATCH bounds
-                top = col.y() - pad
-                bot = col.y() + col.height() + pad
-                # Horizontally cover the column's own patches (``col`` already
-                # includes the ±¼-patch hex stagger overhang) AND reach the gap
-                # midpoint to each neighbour so the inter-column gap is hidden —
+                # Use the column's RAW patch boxes, NOT _hover_patch_bounds: that
+                # helper grows the box by edge_spacer_px (for the swipe outline,
+                # #43), and on a SpectroScan hex chart with a leader spacer that
+                # growth reached up into the label band, so the fill wiped the
+                # column labels (Knut). Raw boxes keep the fill on the patches.
+                cp = [b for b in allb
+                      if rects[i].left() <= b.x() + b.width() / 2 <= rects[i].right()]
+                if not cp:
+                    continue
+                # Hexagons overshoot their box by ~h/6 top and bottom — cover that
+                # apex so no colour peeks above/below the blank; rectangles just
+                # need the small row-spacer pad.
+                apex = (cp[0].height() / 6.0 + 2.0) if self._hex_zigzag else 0.0
+                vpad = max(pad, apex)
+                top = min(b.y() for b in cp) - vpad
+                bot = max(b.y() + b.height() for b in cp) + vpad
+                # Horizontally cover the column's own patches (min-left / max-right
+                # already include the ±¼-patch hex stagger overhang) AND reach the
+                # gap midpoint to each neighbour so the inter-column gap is hidden —
                 # whichever is further. At the row's OUTER edge there is no
-                # neighbour, so we stop a hairline past the last patch: that is
-                # what keeps the fill from bleeding into the right-margin caption
-                # on a ragged/partial last page (Knut). Adjacent unread columns
-                # overlap in white ⇒ seamless, nothing to alias (Sebastian).
-                left = col.left() - 2.0
+                # neighbour, so we stop a hairline past the last patch: that keeps
+                # the fill from bleeding into the right-margin caption on a
+                # ragged/partial last page (Knut). Adjacent unread columns overlap
+                # in white ⇒ seamless, nothing to alias (Sebastian).
+                left = min(b.left() for b in cp) - 2.0
                 if i > 0:
                     left = min(left, (rects[i - 1].right() + rects[i].left()) / 2.0)
-                right = col.right() + 2.0
+                right = max(b.right() + 1 for b in cp) + 2.0
                 if i < n - 1:
                     right = max(right, (rects[i].right() + rects[i + 1].left()) / 2.0)
                 painter.fillRect(
