@@ -1,5 +1,13 @@
 # Changelog
 
+## v3.13.12-beta.14
+
+- **Re-measuring a strip refreshes its live preview instead of doubling it.** When
+  you read a strip again (for example re-measuring a chart that was already
+  finished), its expected-vs-measured split patches now update in place rather
+  than stacking a second copy on top — so the preview always shows the latest
+  reading, with no leftover warning outline.
+
 ## v3.13.12-beta.13
 
 - **Regenerating a chart no longer leaves a stale PDF behind.** Creating a new
