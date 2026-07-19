@@ -1,5 +1,12 @@
 # Changelog
 
+## v3.13.12-beta.13
+
+- **Regenerating a chart no longer leaves a stale PDF behind.** Creating a new
+  chart under the same name now clears the old vector PDF (and the `.cie` and
+  `.strips.json` sidecars) from the working folder, along with the other chart
+  files it already cleaned up.
+
 ## v3.13.12-beta.12
 
 Measure-tab chart-reading-engine polish (Knut/Basti).
