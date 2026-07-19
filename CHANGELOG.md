@@ -1,5 +1,20 @@
 # Changelog
 
+## v3.13.12-beta.11
+
+Two follow-up fixes.
+
+- **The pointer ruler now follows your mouse.** "Show measurement coordinates
+  on pointer" drew its cross-hair well off to the side of the pointer and
+  lagged behind it. It now sits exactly under the pointer and tracks it
+  instantly, with the millimetre / inch readout right beside it.
+- **SpectroScan charts default to a proper grid.** The SpectroScan is a flatbed
+  that reads a fixed grid, but the generic layout default could collapse its
+  chart into a single column of thin full-width bands. It now defaults to the
+  patch-size-first layout (and the By-columns/rows method), so you get a proper
+  grid of hexagons or squares straight away. Choosing "Prioritise chart area"
+  with an explicit column/row count still works exactly as before.
+
 ## v3.13.12-beta.10
 
 Knut's full SpectroScan-hexagonal + follow-up wish list.
