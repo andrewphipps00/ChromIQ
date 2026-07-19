@@ -1366,6 +1366,11 @@ class LayoutOptionsPanel(QWidget):
         self._sync_spacer_swatches()
         self._update_clip_visibility()
         self._sync_layout_mode()
+        # Re-run the instrument-specific visibility now that every widget exists
+        # (the selectors-block init sync ran before cm_stagger_cb / clip_enable
+        # were built, so they were left visible for non-ColorMunki instruments).
+        if self.instr is not None:
+            self._sync_instrument_widgets(self.instr.currentData() or "i1")
 
     def _browse_cal(self) -> None:
         from pathlib import Path
@@ -1421,6 +1426,28 @@ class LayoutOptionsPanel(QWidget):
             self._loading = False
             self._emit()
 
+    def _sync_instrument_widgets(self, inst: str) -> None:
+        """Show/hide the instrument-specific layout controls for *inst*.
+
+        Called from :meth:`_on_instr_changed` and at the end of ``__init__``.
+        The init sync fired from the selectors block runs *before* these widgets
+        are constructed, so without the end-of-init call they were born visible
+        for every instrument — e.g. "Offset every second strip" (a ColorMunki-
+        only option) showed for SpectroScan / i1Pro / DTP41 / DTP51 until the
+        user manually changed the instrument (Knut)."""
+        # The extra clip-border On/Off selector — and its tooltip — are for CM/SS
+        # only (i1/p3 use their Mode selector for the clip border).
+        if hasattr(self, "clip_enable"):
+            is_band = inst in ("CM", "SS")
+            self.clip_enable.setVisible(is_band)
+            self._clip_enable_lbl.setVisible(is_band)
+            self._clip_enable_tip.setVisible(is_band)
+            self._sync_clip_enable_display()
+        # "Offset every second strip" is a ColorMunki-only option.
+        if hasattr(self, "cm_stagger_cb"):
+            self.cm_stagger_cb.setVisible(inst == "CM")
+            self._cm_stagger_tip.setVisible(inst == "CM")
+
     def _on_instr_changed(self, *_a) -> None:
         from workflow.layout_engine import papers
         if self.instr is None:
@@ -1455,18 +1482,7 @@ class LayoutOptionsPanel(QWidget):
         # Mode tooltip describes only the option this instrument actually has.
         if getattr(self, "_mode_tip", None) is not None:
             self._mode_tip.set_content(*self.mode_tooltip_for(inst))
-        # The extra clip-border On/Off selector — and its tooltip — are for CM/SS
-        # only (i1/p3 use their Mode selector for the clip border).
-        if hasattr(self, "clip_enable"):
-            is_band = inst in ("CM", "SS")
-            self.clip_enable.setVisible(is_band)
-            self._clip_enable_lbl.setVisible(is_band)
-            self._clip_enable_tip.setVisible(is_band)
-            self._sync_clip_enable_display()
-        # "Offset every second strip" is a ColorMunki-only option.
-        if hasattr(self, "cm_stagger_cb"):
-            self.cm_stagger_cb.setVisible(inst == "CM")
-            self._cm_stagger_tip.setVisible(inst == "CM")
+        self._sync_instrument_widgets(inst)
         # Picking the SpectroScan defaults the layout to patch-first (a flatbed
         # reads a fixed grid; area-first + By-minimum-width collapses it to
         # useless full-width bands). Its area method also defaults to

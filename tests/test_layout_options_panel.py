@@ -597,3 +597,26 @@ def test_spectroscan_switch_defaults_patch_first(app):
     p3.instr.setCurrentIndex(p3.instr.findData("SS"))
     p3.instr.setCurrentIndex(p3.instr.findData("i1"))
     assert p3.get_recipe().instrument == "i1"
+
+
+def test_cm_stagger_only_visible_for_colormunki(app):
+    """'Offset every second strip' is a ColorMunki-only rig option. It must be
+    hidden for every other instrument from the moment the panel is built — not
+    only after the user manually changes the instrument combo (Knut: it showed
+    for SpectroScan / i1Pro / DTP41 / DTP51 because the init sync ran before the
+    checkbox was constructed)."""
+    from ui.dialogs.layout_options_panel import LayoutOptionsPanel
+    panel = LayoutOptionsPanel(with_selectors=True)
+    # Born hidden for the default (i1) instrument.
+    assert panel.instr.currentData() != "CM"
+    assert panel.cm_stagger_cb.isHidden()
+    # Hidden for every non-ColorMunki instrument, visible only for CM.
+    for code in ("i1", "p3", "41", "51", "SS", "CM"):
+        i = panel.instr.findData(code)
+        if i < 0:
+            continue
+        panel.instr.setCurrentIndex(i)
+        assert panel.cm_stagger_cb.isHidden() == (code != "CM"), code
+    # Loading a saved SpectroScan default keeps it hidden too.
+    panel.set_recipe(LayoutRecipe(instrument="SS", paper="A4"))
+    assert panel.cm_stagger_cb.isHidden()
