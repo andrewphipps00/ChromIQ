@@ -1,5 +1,30 @@
 # Changelog
 
+## v3.13.12-beta.21
+
+- **Measured-patch flagging is much smarter.** The live red outline compares a
+  patch to the chart's sRGB design, and a printer doesn't reproduce sRGB — so
+  vivid colours legitimately sit 30–40 ΔE away on a perfect print, which made a
+  good chart light up in red almost everywhere. A patch is now flagged only when
+  it is BOTH past the limit AND clearly stands out from the rest of its own strip
+  — a real misread stands out; ordinary print-vs-sRGB difference does not.
+- **Measurement report — compare across runs.** The PDF can now include every
+  saved measurement of the printer (a checkbox) with a per-run data table and a
+  side-by-side comparison of each metric; paper white and darkest black are now
+  their own charts (they're too far apart to share an axis); and the report is
+  ordered how-to-read → charts → detailed data. A new "Add another project's
+  runs…" button folds a second profile folder's measurements into the trend and
+  PDF, for the same printer kept in a different project.
+- **Misalignment safety net (opt-in, off by default).** Turn it on in
+  Settings → Beta and, after each strip, ChromIQ checks whether the reading
+  would fit dramatically better shifted by a patch (the reader locking a row one
+  patch off). If so it warns and offers to re-measure just that strip. It only
+  ever warns and never triggers on a normal good read.
+- **Hexagonal SpectroScan charts** — "Show only measured patches" no longer
+  wipes the column labels.
+- **ColorMunki offset charts** — the blank-cell grid now draws the left edge on
+  the top and bottom patches of the shifted columns.
+
 ## v3.13.12-beta.20
 
 - **Measurement report: the eight cube corners.** The report now keeps paper
