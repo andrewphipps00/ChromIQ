@@ -1,5 +1,22 @@
 # Changelog
 
+## v3.13.12-beta.8
+
+More of Knut's chart-reading-engine wish list (engine on).
+
+- **See your reading progress at a glance.** A new **Show only measured
+  patches** switch in the Measure tab blanks every patch you haven't read yet
+  to an empty cell, so the coloured, measured area growing down the chart shows
+  exactly how far you've got. It handles every layout, including ColorMunki
+  "offset every second strip".
+- **Set your own "misread" threshold.** Preferences → Beta now has a
+  **patch-reading error limit** (in ΔE, default 20): a just-measured patch gets
+  the red warning outline only when it comes out further than this from the
+  colour the chart expected. Lower it to be warned about smaller differences,
+  raise it to flag only the worst.
+- The **Clip-border content** help now says these options are available only
+  when the clip border is turned on.
+
 ## v3.13.12-beta.7
 
 A small polish to the chart-reading engine's live preview (engine on).
