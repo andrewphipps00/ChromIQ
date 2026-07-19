@@ -804,6 +804,33 @@ class TiffPreview(QWidget):
         path.closeSubpath()
         return path
 
+    @staticmethod
+    def _patch_hexagon(b: QRect, s: float, ox: float, oy: float) -> "QPainterPath":
+        """A closed hexagon outline for a single SpectroScan patch box, matching
+        the same pointy-top/flat-side geometry the strip zigzag uses. Used to
+        draw unread hex patches as their true shape in "Show only measured
+        patches" (Knut) — a rectangle grid there is wrong for a hex chart."""
+        left, right = b.left(), b.right() + 1
+        cx = b.x() + b.width() / 2.0
+        y0, h = b.y(), b.height()
+        t6 = h / 6.0
+
+        def X(v: float) -> float:
+            return v * s + ox
+
+        def Y(v: float) -> float:
+            return v * s + oy
+
+        path = QPainterPath()
+        path.moveTo(X(cx), Y(y0 - t6))               # top apex
+        path.lineTo(X(right), Y(y0 + t6))            # upper right
+        path.lineTo(X(right), Y(y0 + 5 * t6))        # lower right
+        path.lineTo(X(cx), Y(y0 + h + t6))           # bottom apex
+        path.lineTo(X(left), Y(y0 + 5 * t6))         # lower left
+        path.lineTo(X(left), Y(y0 + t6))             # upper left
+        path.closeSubpath()
+        return path
+
     def _hover_patch_bounds(self, strip_rect: QRect) -> "QRect | None":
         """Bounding box of just the patches of the strip at *strip_rect* on the
         current page, or None when no per-patch geometry is known.
@@ -1456,40 +1483,40 @@ class TiffPreview(QWidget):
                     continue
                 break
 
-            # Blank each MAXIMAL RUN of consecutive unread strips as ONE
-            # rectangle, extended to the GAP MIDPOINTS on the left/right (so the
-            # strip-gap next to a measured column is covered without touching it)
-            # and past the row spacer top/bottom. One rect per run, reaching the
-            # neighbouring structure ⇒ no chart edge peeks out and nothing to
-            # alias, at any zoom (Sebastian, hyper-critical).
-            i = 0
-            while i < n:
+            # Blank each unread strip as its OWN column: tight to that column's
+            # own patches vertically (± the row spacer) and reaching the GAP
+            # MIDPOINT to each neighbour horizontally, with only a hairline pad
+            # at the row's outer edge. Adjacent unread columns abut exactly at
+            # the midpoints ⇒ one seamless white area with no internal gaps to
+            # alias (Sebastian), while NO single giant rectangle overshoots. The
+            # old per-run bounding box reached the tallest column's bottom and
+            # padded its outer edge by a whole row-gap, which on a ragged/partial
+            # LAST page wiped the right-margin caption sitting just past the short
+            # columns (Knut). Per-column bounds never leave the actual patch grid.
+            for i in range(n):
                 if read_map.get(i, False):
-                    i += 1
                     continue
-                j = i
-                while j < n and not read_map.get(j, False):
-                    j += 1
-                bl = [_bounds(k) for k in range(i, j)]
-                miny = min(b.y() for b in bl) - pad
-                maxy = max(b.y() + b.height() for b in bl) + pad
-                # left edge: midpoint of the gap to the measured strip on the
-                # left, or a pad past this run's left when it starts the row.
+                col = _bounds(i)                       # this column's PATCH bounds
+                top = col.y() - pad
+                bot = col.y() + col.height() + pad
+                # Horizontally cover the column's own patches (``col`` already
+                # includes the ±¼-patch hex stagger overhang) AND reach the gap
+                # midpoint to each neighbour so the inter-column gap is hidden —
+                # whichever is further. At the row's OUTER edge there is no
+                # neighbour, so we stop a hairline past the last patch: that is
+                # what keeps the fill from bleeding into the right-margin caption
+                # on a ragged/partial last page (Knut). Adjacent unread columns
+                # overlap in white ⇒ seamless, nothing to alias (Sebastian).
+                left = col.left() - 2.0
                 if i > 0:
-                    left = (rects[i - 1].right() + rects[i].left()) / 2.0
-                else:
-                    left = rects[i].left() - pad
-                # right edge: midpoint of the gap to the measured strip on the
-                # right, or a pad past this run's right when it ends the row.
-                if j < n:
-                    right = (rects[j - 1].right() + rects[j].left()) / 2.0
-                else:
-                    right = rects[j - 1].right() + pad
+                    left = min(left, (rects[i - 1].right() + rects[i].left()) / 2.0)
+                right = col.right() + 2.0
+                if i < n - 1:
+                    right = max(right, (rects[i].right() + rects[i + 1].left()) / 2.0)
                 painter.fillRect(
-                    QRectF(left * s + ox, miny * s + oy,
-                           (right - left) * s, (maxy - miny) * s),
+                    QRectF(left * s + ox, top * s + oy,
+                           (right - left) * s, (bot - top) * s),
                     white)
-                i = j
 
             # On the clean white background, draw a thin cell grid so each unread
             # patch reads as its own empty cell (Knut). Each patch gets its
@@ -1518,6 +1545,15 @@ class TiffPreview(QWidget):
                 # the left column of an unread run, or the page edge). So the
                 # boundary between any two neighbouring unread patches is drawn
                 # exactly once — never two lines side by side.
+                if self._hex_zigzag:
+                    # SpectroScan hexagonal chart: draw each unread patch as its
+                    # true hexagon, not a rectangle (Knut). The hexagons tessellate
+                    # edge-to-edge so per-patch outlines already read as one clean
+                    # honeycomb; no dedup needed the way rectangles need it.
+                    painter.setBrush(Qt.BrushStyle.NoBrush)
+                    for b in pats:
+                        painter.drawPath(self._patch_hexagon(b, s, ox, oy))
+                    continue
                 left_is_border = (i == 0) or read_map.get(i - 1, False)
                 for idx, b in enumerate(pats):
                     x0 = b.x() * s + ox
@@ -1531,6 +1567,45 @@ class TiffPreview(QWidget):
                     if left_is_border:
                         painter.drawLine(QPointF(x0, y0), QPointF(x0, y1))  # left
         for rect, c_exp, c_meas, warn in items:
+            if self._hex_zigzag:
+                # SpectroScan hexagonal chart: the measured/expected patch must
+                # follow the hexagon and its ±¼-patch zigzag, not a rectangle
+                # (Knut). Fill the same hexagon the unread outline uses; the
+                # split mode clips the corner-to-corner diagonal to the hexagon.
+                b = (rect if isinstance(rect, QRect)
+                     else QRect(int(rect.x()), int(rect.y()),
+                                int(rect.width()), int(rect.height())))
+                hexp = self._patch_hexagon(b, s, ox, oy)
+                painter.save()
+                if self._overlay_mode == "expected":
+                    painter.fillPath(hexp, c_exp)
+                elif self._overlay_mode == "measured":
+                    painter.fillPath(hexp, c_meas)
+                else:
+                    painter.setClipPath(hexp)
+                    br = hexp.boundingRect()
+                    painter.fillRect(br, c_meas)          # measured ◢
+                    tri = _QP()
+                    tri.moveTo(br.left(), br.top())
+                    tri.lineTo(br.right(), br.top())
+                    tri.lineTo(br.left(), br.bottom())
+                    tri.closeSubpath()
+                    painter.fillPath(tri, c_exp)          # expected ◤
+                painter.restore()
+                if warn:
+                    painter.setBrush(Qt.BrushStyle.NoBrush)
+                    rw = max(1.8, s * 2.2)
+                    halo = QPen(QColor(255, 255, 255, 235))
+                    halo.setWidthF(rw + 2.6)
+                    halo.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+                    painter.setPen(halo)
+                    painter.drawPath(hexp)
+                    red = QPen(QColor("#ff2b2b"))
+                    red.setWidthF(rw)
+                    red.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+                    painter.setPen(red)
+                    painter.drawPath(hexp)
+                continue
             # Round BOTH edges to whole pixels so the split covers exactly the
             # same span as the printed patch — flooring each of x/y/w/h
             # separately (the old int() calls) shifted every patch up-left by
