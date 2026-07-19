@@ -389,6 +389,12 @@ class MeasurementReportDialog(QDialog):
         writer = QPdfWriter(str(path))
         writer.setPageSize(QPageSize(QPageSize.PageSizeId.A4))
         writer.setPageMargins(QMarginsF(14, 14, 14, 14), QPageLayout.Unit.Millimeter)
+        # QPdfWriter defaults to a very high resolution, but the document is laid
+        # out in ~96-dpi pixels (font px, the img width=680), so at the default
+        # the content filled only a fraction of the page. Match the writer to the
+        # document's 96-dpi coordinate space so it fills the page; text stays
+        # vector-crisp regardless of this number.
+        writer.setResolution(96)
         doc.setPageSize(QSizeF(writer.width(), writer.height()))
         doc.print(writer)
         self._pdf_btn.setText(tr("Saved: {name}").format(name=Path(path).name))
@@ -396,7 +402,16 @@ class MeasurementReportDialog(QDialog):
     def _pdf_html(self, r: dict, charts_html: str) -> str:
         """The printable report: the on-screen data, the trend charts, and a
         plain-language guide to what each part means and how to read it (Knut)."""
-        body = self._report_html(r, None)
+        body = self._report_html(r, None, title=False)   # the PDF has its own header
+        header = (
+            "<table width='100%' cellpadding='0' cellspacing='0'>"
+            "<tr><td style='border-bottom:2px solid #56d6a5;padding-bottom:6px'>"
+            f"<span style='font-size:22px;font-weight:bold;color:#2a2a2a'>"
+            f"{html.escape(tr('Measurement Report'))}</span><br>"
+            f"<span style='font-size:12px;color:#777'>{html.escape(r['chart'])}"
+            f" &nbsp;·&nbsp; {html.escape(r['created'])}"
+            f" &nbsp;·&nbsp; {r['patches']} " + html.escape(tr('patches'))
+            + "</span></td></tr></table><br>")
         guide = (
             "<h2>" + tr("How to read this report") + "</h2>"
             "<p>" + tr(
@@ -423,10 +438,12 @@ class MeasurementReportDialog(QDialog):
                 "out at a glance. Save a report after each measurement to build "
                 "that history. Screen and print colours here are approximate; the "
                 "numbers come from your measurement file and are exact.") + "</p>")
-        charts = (("<h2>" + tr("Trend over time (this printer)") + "</h2>" + charts_html)
-                  if charts_html else "")
-        return ("<div style='font-family:sans-serif'>"
-                + body + charts + "<hr>" + guide + "</div>")
+        charts = (("<h2 style='color:#2a2a2a'>" + tr("Trend over time (this printer)")
+                   + "</h2>" + charts_html) if charts_html else "")
+        guide_box = ("<table width='100%' cellpadding='12' cellspacing='0'>"
+                     "<tr><td style='background:#f4f7f6'>" + guide + "</td></tr></table>")
+        return ("<div style='font-family:sans-serif;color:#333;font-size:12px'>"
+                + header + body + "<br>" + charts + "<br>" + guide_box + "</div>")
 
     def _update_trends(self, series: list, dark: bool) -> None:
         """Feed the three grouped trend charts their own metric sets (#40, Knut)."""
@@ -447,7 +464,7 @@ class MeasurementReportDialog(QDialog):
                 + html.escape(tr("Could not read this measurement: {msg}")
                               .format(msg=msg)) + "</div>")
 
-    def _report_html(self, r: dict, comparison: "dict | None") -> str:
+    def _report_html(self, r: dict, comparison: "dict | None", title: bool = True) -> str:
         def sw(hexc: str) -> str:
             # Qt's rich-text engine ignores display:inline-block width/height on
             # an empty span (the swatches came out invisible), but it DOES honour
@@ -459,10 +476,12 @@ class MeasurementReportDialog(QDialog):
                     f"border:1px solid #999'>&nbsp;&nbsp;&nbsp;</span>")
 
         de = r.get("de00")
-        parts = [f"<h2 style='margin:0 0 2px'>{html.escape(r['chart'])}</h2>",
-                 f"<div style='color:#888;font-size:12px'>"
-                 f"{html.escape(r['created'])} · {r['patches']} "
-                 + tr("patches") + "</div>"]
+        parts = []
+        if title:
+            parts += [f"<h2 style='margin:0 0 2px'>{html.escape(r['chart'])}</h2>",
+                      f"<div style='color:#888;font-size:12px'>"
+                      f"{html.escape(r['created'])} · {r['patches']} "
+                      + tr("patches") + "</div>"]
 
         if de:
             parts.append("<h3>" + tr("Colour accuracy (ΔE00 vs the chart's design)") + "</h3>")
