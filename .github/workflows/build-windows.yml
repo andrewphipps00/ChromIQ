@@ -86,13 +86,13 @@ jobs:
           powershell -Command "Get-ChildItem -Recurse libwdi-src -Filter *.vcxproj | ForEach-Object { (Get-Content $_.FullName) -replace '<PlatformToolset>v\d+</PlatformToolset>', '<PlatformToolset>$(DefaultPlatformToolset)</PlatformToolset>' | Set-Content $_.FullName }"
 
           REM All prerequisites go inside libwdi-src\ — embedder resolves paths from libwdi-src\libwdi\
-          curl -fsSL -o wdk-redist.msi "https://go.microsoft.com/fwlink/p/?LinkID=253170"
+          curl -fsSL --retry 5 --retry-all-errors --retry-delay 3 -o wdk-redist.msi "https://go.microsoft.com/fwlink/p/?LinkID=253170"
           msiexec /a wdk-redist.msi /qn TARGETDIR=%CD%\libwdi-src\wdk
 
-          curl -fsSL -o libusb0.zip "https://github.com/mcuee/libusb-win32/releases/download/release_1.4.0.0/libusb-win32-bin-1.4.0.0.zip"
+          curl -fsSL --retry 5 --retry-all-errors --retry-delay 3 -o libusb0.zip "https://github.com/mcuee/libusb-win32/releases/download/release_1.4.0.0/libusb-win32-bin-1.4.0.0.zip"
           7z x libusb0.zip -o"libwdi-src"
 
-          curl -fsSL -o libusbk.7z "https://github.com/mcuee/libusbk/releases/download/V3.1.0.0/libusbK-3.1.0.0-bin.7z"
+          curl -fsSL --retry 5 --retry-all-errors --retry-delay 3 -o libusbk.7z "https://github.com/mcuee/libusbk/releases/download/V3.1.0.0/libusbK-3.1.0.0-bin.7z"
           7z x libusbk.7z -o"libwdi-src"
 
           cd libwdi-src
@@ -107,7 +107,9 @@ jobs:
       - name: Download Zadig (fallback USB driver installer)
         shell: bash
         run: |
-          curl -fsSL -o assets/zadig.exe \
+          # --retry-all-errors so a transient HTTP 503 from the download CDN is
+          # retried instead of failing the whole build (it flaked a beta once).
+          curl -fsSL --retry 5 --retry-all-errors --retry-delay 3 -o assets/zadig.exe \
             "https://github.com/pbatard/libwdi/releases/download/v1.5.1/zadig-2.9.exe"
 
       # Bit-exact gamut-mapping helper — ArgyllCMS's real gamut mapper compiled
