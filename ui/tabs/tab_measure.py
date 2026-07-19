@@ -143,10 +143,35 @@ log = get_logger(__name__)
 
 
 
-# Per-patch ΔE at/above which the split-patch overlay draws a warning outline
-# (a likely misread worth re-measuring). Matches Argyll chartread's own
-# "unexpected response" territory; ordinary print drift stays well below it.
+# Absolute FLOOR ΔE for the split-patch warning outline: a patch is never
+# flagged below this, whatever its strip looks like. It is only half the test —
+# see _strip_outlier_fence(). The design "expected" is the chart's sRGB values,
+# and a printer does NOT reproduce sRGB, so vivid patches legitimately sit at
+# 30-40+ ΔE with a perfect print (verified on a real i1Pro read). An absolute
+# threshold alone therefore flags most saturated patches on a good chart, which
+# is just noise — so we ALSO require the patch to be an outlier within its own
+# strip (a real misread stands out from its neighbours; uniform sRGB deviation
+# does not).
 _PATCH_WARN_DE = 20.0
+
+
+def _strip_outlier_fence(des: "list[float]") -> float:
+    """Tukey upper fence (Q3 + 1.5·IQR) of a strip's per-patch ΔEs — the level
+    above which a patch is an outlier *for this strip*, adapting to how vivid the
+    strip is. Returns 0.0 for strips too short to judge a spread (then only the
+    absolute floor applies)."""
+    if len(des) < 4:
+        return 0.0
+    s = sorted(des)
+
+    def pct(p: float) -> float:
+        k = (len(s) - 1) * p
+        f = int(k)
+        c = min(f + 1, len(s) - 1)
+        return s[f] + (s[c] - s[f]) * (k - f)
+
+    q1, q3 = pct(0.25), pct(0.75)
+    return q3 + 1.5 * (q3 - q1)
 
 
 def _xyz_d50_to_srgb8(xyz: "list[float]") -> tuple[int, int, int]:
@@ -5119,16 +5144,21 @@ class TabMeasure(QWidget):
         # The ΔE at which a patch gets the red warning outline is user-settable
         # (Settings → Beta), defaulting to _PATCH_WARN_DE (Knut).
         warn_de = float(self._settings.get("patch_read_warn_de", _PATCH_WARN_DE))
+        # A patch is flagged only if it is BOTH above the absolute floor AND an
+        # outlier within this strip (Tukey fence). Vivid patches that all sit
+        # high against sRGB stay unflagged (they're the strip's norm, not an
+        # outlier); a genuine misread — a smudge, a skipped row — spikes above
+        # its neighbours and is caught. This can only REDUCE flags versus the
+        # floor alone, so it never adds false alarms (Nelson/pharmacist: a good
+        # print was flagged almost everywhere against sRGB).
+        fence = _strip_outlier_fence([float(p.get("de", 0)) for p in patches])
         items = []
         for p in patches:
             box = boxes.get(str(p.get("loc", "")))
             if box is None:
                 continue
-            # Outline only the individual patch that looks off (a likely
-            # misread), not the whole strip — points straight at what to
-            # re-measure. The limit ≈ Argyll's own "unexpected response" band;
-            # normal print drift (a few ΔE) never trips it.
-            warn = float(p.get("de", 0)) >= warn_de
+            de_p = float(p.get("de", 0))
+            warn = de_p >= warn_de and de_p >= fence
             items.append((box,
                           _QC(*_xyz_d50_to_srgb8(p.get("exyz", [0, 0, 0]))),
                           _QC(*_xyz_d50_to_srgb8(p.get("xyz", [0, 0, 0]))),
