@@ -10,8 +10,7 @@ from typing import Optional
 from PIL import Image
 from PyQt6 import sip
 from PyQt6.QtCore import QPoint, QPointF, QRect, QRectF, QSize, Qt, QTimer, pyqtSignal
-from PyQt6.QtGui import (QColor, QFont, QPainter, QPainterPath, QPixmap,
-                         QPolygonF)
+from PyQt6.QtGui import QColor, QFont, QPainter, QPainterPath, QPixmap
 from PyQt6.QtWidgets import (
     QHBoxLayout,
     QLabel,
@@ -757,50 +756,53 @@ class TiffPreview(QWidget):
         col.sort(key=lambda b: b.y())
         return col
 
-    @staticmethod
-    def _hexagon_polygon(b: QRect) -> QPolygonF:
-        """The six vertices of the drawn SpectroScan hexagon for patch box *b*
-        (image px). Mirrors ``raster._hexagon_points``: pointed top and bottom,
-        flat vertical sides, apexes reaching ⅙·height beyond the box top/bottom.
-        The box already carries the ±¼-width row stagger, so the hexagon lands
-        exactly where it's printed."""
-        from PyQt6.QtCore import QPointF
-        left, right = b.left(), b.right() + 1
-        cx = b.x() + b.width() / 2.0
-        y0, h = b.y(), b.height()
-        t6 = h / 6.0
-        return QPolygonF([
-            QPointF(cx, y0 - t6),            # top apex
-            QPointF(right, y0 + t6),         # upper-right
-            QPointF(right, y0 + 5 * t6),     # lower-right
-            QPointF(cx, y0 + h + t6),        # bottom apex
-            QPointF(left, y0 + 5 * t6),      # lower-left
-            QPointF(left, y0 + t6),          # upper-left
-        ])
-
     def _strip_zigzag_path(self, strip_rect: QRect, s: float,
                            ox: float, oy: float) -> "QPainterPath | None":
-        """A closed outline that follows the actual hexagonal patches of a strip.
-
-        Builds the union of the column's hexagon polygons (each reconstructed
-        from its patch box via :meth:`_hexagon_polygon`) so the drawn outline
-        traces the real hex shape and the column's ±¼-patch zigzag, rather than
-        a straight rect that spills into the neighbouring column. Returns None
-        when the strip exposes no per-patch geometry."""
+        """A single closed outline following the actual hexagonal patches of a
+        strip and their ±¼-patch zigzag — one frame for the whole column, not a
+        straight rect that spills into the neighbour (nor a frame per patch).
+        Returns None when the strip exposes no per-patch geometry."""
         col = self._strip_patches(strip_rect)
         if not col:
             return None
-        union = QPainterPath()
-        for b in col:
-            sub = QPainterPath()
-            sub.addPolygon(self._hexagon_polygon(b))
-            sub.closeSubpath()
-            union = sub if union.isEmpty() else union.united(sub)
-        if union.isEmpty():
-            return None
-        # Scale image-px path into the displayed canvas coordinates.
-        from PyQt6.QtGui import QTransform
-        return QTransform().translate(ox, oy).scale(s, s).map(union)
+        # The hexagons tessellate edge-to-edge (zero overlap area), so a boolean
+        # union can't merge them — it leaves each as its own closed loop, drawing
+        # little frames around patch pairs (Basti). Trace the column's OUTER
+        # boundary by hand instead: down every hexagon's left edge, across the
+        # last hexagon's bottom apex, up every right edge, and close over the
+        # first hexagon's top apex. The intermediate apexes are internal seams,
+        # correctly omitted, so it's a single clean hexagon-zigzag outline.
+        def verts(b: QRect):
+            left, right = b.left(), b.right() + 1
+            cx = b.x() + b.width() / 2.0
+            y0, h = b.y(), b.height()
+            t6 = h / 6.0
+            return {
+                "top": (cx, y0 - t6), "ur": (right, y0 + t6),
+                "lr": (right, y0 + 5 * t6), "bot": (cx, y0 + h + t6),
+                "ll": (left, y0 + 5 * t6), "ul": (left, y0 + t6),
+            }
+
+        def X(v: float) -> float:
+            return v * s + ox
+
+        def Y(v: float) -> float:
+            return v * s + oy
+
+        path = QPainterPath()
+        first, last = verts(col[0]), verts(col[-1])
+        path.moveTo(X(first["top"][0]), Y(first["top"][1]))
+        for b in col:                                   # left side, top → bottom
+            v = verts(b)
+            path.lineTo(X(v["ul"][0]), Y(v["ul"][1]))
+            path.lineTo(X(v["ll"][0]), Y(v["ll"][1]))
+        path.lineTo(X(last["bot"][0]), Y(last["bot"][1]))
+        for b in reversed(col):                         # right side, bottom → top
+            v = verts(b)
+            path.lineTo(X(v["lr"][0]), Y(v["lr"][1]))
+            path.lineTo(X(v["ur"][0]), Y(v["ur"][1]))
+        path.closeSubpath()
+        return path
 
     def _hover_patch_bounds(self, strip_rect: QRect) -> "QRect | None":
         """Bounding box of just the patches of the strip at *strip_rect* on the

@@ -32,30 +32,26 @@ def _staggered_column(x0=100, w=80, h=60, y0=100, n=10, page=0):
     return boxes
 
 
-def test_hexagon_polygon_has_pointed_apexes_beyond_box(app):
-    box = QRect(100, 200, 80, 60)
-    poly = TiffPreview._hexagon_polygon(box)
-    assert poly.count() == 6
-    ys = [poly.at(i).y() for i in range(6)]
-    # Top and bottom apexes overshoot the box by ~h/6 (pointed top/bottom).
-    assert min(ys) < box.top()
-    assert max(ys) > box.bottom()
-    xs = [poly.at(i).x() for i in range(6)]
-    assert min(xs) <= box.left() + 0.5 and max(xs) >= box.right() - 0.5
+def _subpaths(path) -> int:
+    return sum(1 for i in range(path.elementCount())
+               if path.elementAt(i).isMoveTo())
 
 
-def test_strip_outline_follows_zigzag_not_a_straight_rect(app):
+def test_strip_outline_is_one_frame_for_the_whole_column(app):
     p = TiffPreview()
     boxes = _staggered_column()
     p.set_page_patch_boxes({0: boxes})
     strip = QRect(100, 80, 80, 10 * 60)     # nominal (un-staggered) column span
     path = p._strip_zigzag_path(strip, 1.0, 0.0, 0.0)
     assert path is not None and not path.isEmpty()
+    # ONE outline for the whole strip — not a frame per patch (the union of the
+    # edge-tessellating hexagons would have left 10 closed sub-loops).
+    assert _subpaths(path) == 1
     br = path.boundingRect()
-    # The outline spans the full staggered width (box width + the ±¼ overhang on
-    # both sides) — strictly wider than one un-staggered box.
+    # Spans the full staggered width (box width + the ±¼ overhang on both sides),
+    # strictly wider than one un-staggered box…
     assert br.width() > 80 + 2 * (80 // 4) - 2
-    # …and reaches above/below the boxes for the hex apexes.
+    # …and reaches above/below the boxes for the pointed hex apexes.
     assert br.top() < 100
     assert br.bottom() > 100 + 10 * 60
 
