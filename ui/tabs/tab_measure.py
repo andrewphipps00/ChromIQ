@@ -2838,6 +2838,12 @@ class TabMeasure(QWidget):
         # Grow the strip-hover frame over the edge spacers, when the chart's own
         # geometry says it has them (#43).
         self._preview.set_edge_spacer_px(edge_spacer_px_from_sidecar(self._ti1_path))
+        # SpectroScan hexagonal charts: the strip highlight follows the column's
+        # zigzag (staggered hexagons) instead of a straight rect that would spill
+        # into the neighbouring column, and the swipe arrow is hidden — an XY
+        # table reads patch-by-patch, so there's nothing to swipe (Knut/Basti).
+        from workflow.hex_support import chart_is_hexagonal
+        self._preview.set_hex_zigzag(chart_is_hexagonal(self._ti1_path))
 
         engine = self._engine_stripe_rects()
         if engine is not None:

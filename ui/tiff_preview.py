@@ -10,7 +10,8 @@ from typing import Optional
 from PIL import Image
 from PyQt6 import sip
 from PyQt6.QtCore import QPoint, QPointF, QRect, QRectF, QSize, Qt, QTimer, pyqtSignal
-from PyQt6.QtGui import QColor, QFont, QPainter, QPainterPath, QPixmap
+from PyQt6.QtGui import (QColor, QFont, QPainter, QPainterPath, QPixmap,
+                         QPolygonF)
 from PyQt6.QtWidgets import (
     QHBoxLayout,
     QLabel,
@@ -346,6 +347,10 @@ class TiffPreview(QWidget):
         self._show_only_measured: bool = False
         self.stripe_clicked_page = -1  # last emit bookkeeping (tests)
         self._stripe_arrow_mode: str = "base"
+        # SpectroScan hexagonal charts: the strip highlight traces the column's
+        # zigzag (staggered hexagons) instead of a straight rect, and the swipe
+        # arrow is hidden (an XY table reads patch-by-patch — nothing to swipe).
+        self._hex_zigzag: bool = False
         self._pixmap: QPixmap | None = None
         self._frame_color = QColor(Qt.GlobalColor.white)   # the margin around the image
         # Opt-in zoom/pan (soft-proof tool). Off elsewhere so the measure-tab
@@ -730,6 +735,72 @@ class TiffPreview(QWidget):
         chart has none — used to grow the strip-hover frame over the spacers that
         bracket each strip (#43). Read from the chart geometry by the caller."""
         self._edge_spacer_px = max(0, int(px or 0))
+
+    def set_hex_zigzag(self, on: bool) -> None:
+        """Enable the hexagonal-column highlight mode (SpectroScan hex charts):
+        the strip outline follows the staggered hexagon zigzag and the swipe
+        arrow is suppressed. No-op change is ignored to avoid needless repaints."""
+        on = bool(on)
+        if on != self._hex_zigzag:
+            self._hex_zigzag = on
+            self._repaint_label()
+
+    def _strip_patches(self, strip_rect: QRect) -> "list[QRect]":
+        """The current page's patch boxes belonging to *strip_rect*, top→bottom.
+
+        Membership is by centre-x (a patch belongs to the column its centre sits
+        in), so the staggered hex patches — which overhang ±¼ patch on alternate
+        rows — are still assigned to the right column."""
+        boxes = self._page_patch_boxes.get(self._current) or []
+        col = [b for b in boxes
+               if strip_rect.left() <= b.x() + b.width() / 2 <= strip_rect.right()]
+        col.sort(key=lambda b: b.y())
+        return col
+
+    @staticmethod
+    def _hexagon_polygon(b: QRect) -> QPolygonF:
+        """The six vertices of the drawn SpectroScan hexagon for patch box *b*
+        (image px). Mirrors ``raster._hexagon_points``: pointed top and bottom,
+        flat vertical sides, apexes reaching ⅙·height beyond the box top/bottom.
+        The box already carries the ±¼-width row stagger, so the hexagon lands
+        exactly where it's printed."""
+        from PyQt6.QtCore import QPointF
+        left, right = b.left(), b.right() + 1
+        cx = b.x() + b.width() / 2.0
+        y0, h = b.y(), b.height()
+        t6 = h / 6.0
+        return QPolygonF([
+            QPointF(cx, y0 - t6),            # top apex
+            QPointF(right, y0 + t6),         # upper-right
+            QPointF(right, y0 + 5 * t6),     # lower-right
+            QPointF(cx, y0 + h + t6),        # bottom apex
+            QPointF(left, y0 + 5 * t6),      # lower-left
+            QPointF(left, y0 + t6),          # upper-left
+        ])
+
+    def _strip_zigzag_path(self, strip_rect: QRect, s: float,
+                           ox: float, oy: float) -> "QPainterPath | None":
+        """A closed outline that follows the actual hexagonal patches of a strip.
+
+        Builds the union of the column's hexagon polygons (each reconstructed
+        from its patch box via :meth:`_hexagon_polygon`) so the drawn outline
+        traces the real hex shape and the column's ±¼-patch zigzag, rather than
+        a straight rect that spills into the neighbouring column. Returns None
+        when the strip exposes no per-patch geometry."""
+        col = self._strip_patches(strip_rect)
+        if not col:
+            return None
+        union = QPainterPath()
+        for b in col:
+            sub = QPainterPath()
+            sub.addPolygon(self._hexagon_polygon(b))
+            sub.closeSubpath()
+            union = sub if union.isEmpty() else union.united(sub)
+        if union.isEmpty():
+            return None
+        # Scale image-px path into the displayed canvas coordinates.
+        from PyQt6.QtGui import QTransform
+        return QTransform().translate(ox, oy).scale(s, s).map(union)
 
     def _hover_patch_bounds(self, strip_rect: QRect) -> "QRect | None":
         """Bounding box of just the patches of the strip at *strip_rect* on the
@@ -1276,7 +1347,7 @@ class TiffPreview(QWidget):
                             (label_size.width() - _cw) / 2 + B,
                             (label_size.height() - _ch) / 2 + B)
 
-        if self._active_stripe >= 0 and self._stripe_rects:
+        if self._active_stripe >= 0 and self._stripe_rects and not self._hex_zigzag:
             # sx/sy: device pixels per original image pixel
             sx = scaled.width()  / self._pixmap.width()
             sy = scaled.height() / self._pixmap.height()
@@ -1517,16 +1588,23 @@ class TiffPreview(QWidget):
             # Hug only the patches of the hovered strip (never the label band or
             # the white paper around them). Fall back to the full strip rect
             # when the chart exposes no per-patch geometry (Basti, #126).
-            r = self._hover_patch_bounds(self._stripe_rects[self._hover_stripe]) \
-                or self._stripe_rects[self._hover_stripe]
+            strip_rect = self._stripe_rects[self._hover_stripe]
             pen = QPen(QColor("#56d6a5"))
             pen.setWidthF(2.5)
+            pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
             painter.setPen(pen)
-            x0 = round(r.x() * s + ox)
-            y0 = round(r.y() * s + oy)
-            x1 = round((r.x() + r.width()) * s + ox)
-            y1 = round((r.y() + r.height()) * s + oy)
-            painter.drawRect(x0, y0, x1 - x0, y1 - y0)
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            zig = (self._strip_zigzag_path(strip_rect, s, ox, oy)
+                   if self._hex_zigzag else None)
+            if zig is not None:
+                painter.drawPath(zig)             # follow the hex column's zigzag
+            else:
+                r = self._hover_patch_bounds(strip_rect) or strip_rect
+                x0 = round(r.x() * s + ox)
+                y0 = round(r.y() * s + oy)
+                x1 = round((r.x() + r.width()) * s + ox)
+                y1 = round((r.y() + r.height()) * s + oy)
+                painter.drawRect(x0, y0, x1 - x0, y1 - y0)
 
         if items and self._pixmap is not None:
             # Legend chip — text reflects the current view (Knut). No split
