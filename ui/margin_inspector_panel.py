@@ -32,6 +32,7 @@ class MarginInspectorPanel(QGroupBox):
 
     guides_toggled = pyqtSignal(bool)
     measured_guides_toggled = pyqtSignal(bool)
+    coords_toggled = pyqtSignal(bool)
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(tr("Measured from Preview"), parent)
@@ -132,6 +133,10 @@ class MarginInspectorPanel(QGroupBox):
             tr("Show margin guide lines on preview (long dotted lines)"), self)
         self._measured_check.toggled.connect(self.measured_guides_toggled.emit)
         checks.addWidget(self._measured_check)
+        self._coord_check = QCheckBox(
+            tr("Show measurement coordinates on pointer"), self)
+        self._coord_check.toggled.connect(self.coords_toggled.emit)
+        checks.addWidget(self._coord_check)
         bottom.addLayout(checks)
         bottom.addStretch()
         bottom.addWidget(TooltipButton(
@@ -176,7 +181,16 @@ class MarginInspectorPanel(QGroupBox):
                "measured margins — right where the patch area meets the white "
                "paper. It's an easy way to double-check that the numbers above "
                "really sit where the patches end. You can turn both sets of "
-               "lines on together if you like."),
+               "lines on together if you like.\n\n"
+               "The third checkbox, 'Show measurement coordinates on pointer', "
+               "turns your mouse into a ruler. Tick it and, wherever you move "
+               "the pointer over the chart, a thin cross-hair marks the exact "
+               "spot and its position is shown right next to it — measured from "
+               "the top-left corner of the paper itself (not the preview's "
+               "outer edge). The top line is in millimetres (one decimal), the "
+               "line below it in inches (three decimals). It's the easiest way "
+               "to check a real distance on screen: hover over the edge of a "
+               "patch, or a margin, and read off exactly where it sits."),
             self))
         v.addLayout(bottom)
 
@@ -197,6 +211,12 @@ class MarginInspectorPanel(QGroupBox):
 
     def set_measured_guides_checked(self, on: bool) -> None:
         self._measured_check.setChecked(bool(on))
+
+    def coords_enabled(self) -> bool:
+        return self._coord_check.isChecked()
+
+    def set_coords_checked(self, on: bool) -> None:
+        self._coord_check.setChecked(bool(on))
 
     def show_placeholder(self) -> None:
         """No preview yet (or measurement failed) — hide the numbers."""

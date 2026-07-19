@@ -303,6 +303,11 @@ class TiffPreview(QWidget):
         # Measured-margin guide lines: (axis, frac) at the actual patch-area
         # edges, drawn as long purple/blue dots (a separate toggle).
         self._measured_guides: list[tuple[str, float]] = []
+        # Coordinate readout on the pointer (#29, Knut): a cross-hair + the
+        # cursor position in paper mm/inch, measured from the paper top-left.
+        self._coord_readout: bool = False
+        self._coord_dpi: float = 300.0
+        self._coord_pos: "QPoint | None" = None   # label-space cursor position
         self._mode: str = "dark"
         self._refresh_timer = QTimer(self)
         self._refresh_timer.setSingleShot(True)
@@ -452,6 +457,38 @@ class TiffPreview(QWidget):
         self._measured_guides = list(guides or [])
         if self._pixmap:
             self._repaint_label()
+
+    def set_coord_readout(self, on: bool, dpi: float | None = None) -> None:
+        """Turn the pointer coordinate readout on/off (#29, Knut). *dpi* is the
+        render resolution of the shown page, so image pixels convert to paper
+        millimetres. The chart TIFF spans the whole sheet (printtarg -M), so
+        image pixel (0, 0) is the paper's top-left corner."""
+        self._coord_readout = bool(on)
+        if dpi and dpi > 0:
+            self._coord_dpi = float(dpi)
+        if not self._coord_readout:
+            self._coord_pos = None
+        # Mouse tracking so the readout follows the pointer without a button held.
+        self.setMouseTracking(True)
+        if self._img_label is not None and not sip.isdeleted(self._img_label):
+            self._img_label.setMouseTracking(True)
+        if self._pixmap:
+            self._repaint_label()
+
+    def _coord_mm_at(self, label_pos) -> "tuple[float, float] | None":
+        """Paper (x, y) in mm at a label-space position, from the paper's
+        top-left corner. Uses the current fit/zoom/pan transform; values may be
+        negative or past the sheet when the pointer is off the paper — that is
+        intentional, so the ruler still reads there."""
+        if self._paint_geom is None or self._coord_dpi <= 0:
+            return None
+        scale, ox, oy = self._paint_geom
+        if scale <= 0:
+            return None
+        ix = (label_pos.x() - ox) / scale      # image pixels (may be off-sheet)
+        iy = (label_pos.y() - oy) / scale
+        k = 25.4 / self._coord_dpi
+        return ix * k, iy * k
 
     def set_navigation_visible(self, visible: bool) -> None:
         """Hide the page count + Prev/Next bar for single-image use (e.g. the
@@ -1193,6 +1230,9 @@ class TiffPreview(QWidget):
                               (scaled.width() / dpr) / max(1, self._pixmap.width()),
                               B, B)
 
+        if self._coord_readout:
+            self._draw_coord_readout(painter)
+
         painter.end()
         self._img_label.setPixmap(canvas)
 
@@ -1486,6 +1526,57 @@ class TiffPreview(QWidget):
 
         painter.setPen(Qt.PenStyle.SolidLine)
 
+    def _draw_coord_readout(self, painter: QPainter) -> None:
+        """Cross-hair at the pointer + its paper (x, y) in mm and inch (#29).
+
+        A thin hairline cross marks the exact spot; the position — measured
+        from the paper's top-left corner — is drawn just to its right in a small
+        legible box (mm on top with one decimal, inch below with three), so it
+        never hides behind the pointer or under a patch colour."""
+        from PyQt6.QtGui import QPen, QFont, QFontMetrics
+        if self._coord_pos is None:
+            return
+        mm = self._coord_mm_at(self._coord_pos)
+        if mm is None:
+            return
+        cx, cy = self._coord_pos.x(), self._coord_pos.y()
+        arm = 8               # cross arm length (logical px)
+        # White halo then a dark hairline, so the cross reads on any colour.
+        for pen_col, w in ((QColor(255, 255, 255, 230), 2.4),
+                           (QColor(20, 20, 20), 0.8)):
+            pen = QPen(pen_col); pen.setWidthF(w); painter.setPen(pen)
+            painter.drawLine(int(cx - arm), int(cy), int(cx + arm), int(cy))
+            painter.drawLine(int(cx), int(cy - arm), int(cx), int(cy + arm))
+
+        x_mm, y_mm = mm
+        line_mm = tr("X {x:.1f}   Y {y:.1f} mm").format(x=x_mm, y=y_mm)
+        line_in = tr("X {x:.3f}   Y {y:.3f} in").format(
+            x=x_mm / 25.4, y=y_mm / 25.4)
+        font = QFont("Menlo"); font.setPixelSize(11)
+        painter.setFont(font)
+        fm = QFontMetrics(font)
+        tw = max(fm.horizontalAdvance(line_mm), fm.horizontalAdvance(line_in))
+        pad = 4
+        bw = tw + 2 * pad
+        bh = 2 * fm.height() + 2 * pad
+        # Default to the pointer's right; flip left / up near the widget edge.
+        bx = cx + arm + 4
+        by = cy - bh / 2
+        lbl_w = self._img_label.width() if self._img_label is not None else bx + bw
+        lbl_h = self._img_label.height() if self._img_label is not None else by + bh
+        if bx + bw > lbl_w:
+            bx = cx - arm - 4 - bw            # flip to the pointer's left
+        bx = max(2.0, min(bx, lbl_w - bw - 2))
+        by = max(2.0, min(by, lbl_h - bh - 2))
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QColor(0, 0, 0, 165))
+        painter.drawRoundedRect(int(bx), int(by), int(bw), int(bh), 3, 3)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.setPen(QColor(255, 255, 255))
+        ty = by + pad + fm.ascent()
+        painter.drawText(int(bx + pad), int(ty), line_mm)
+        painter.drawText(int(bx + pad), int(ty + fm.height()), line_in)
+
     def _repaint_interactive(self) -> None:
         """Fit-to-window at zoom 1, then scale + pan within the viewport. The
         canvas fills the whole viewport (so the margin shows around a zoomed
@@ -1527,8 +1618,10 @@ class TiffPreview(QWidget):
         painter.drawPixmap(int(x), int(y), scaled)
         # #126 engine overlays (split patches, hover outline, legend)
         self._draw_cq_overlay(painter, scale, x, y)
-        painter.end()
         self._paint_geom = (scale, x, y)   # for the cursor→image mapping (#72)
+        if self._coord_readout:
+            self._draw_coord_readout(painter)
+        painter.end()
         self._img_label.setPixmap(canvas)
 
     def wheelEvent(self, event) -> None:  # type: ignore[override]
@@ -1582,7 +1675,17 @@ class TiffPreview(QWidget):
                     self.setToolTip("")
                 self._schedule_refresh()
         self._update_ink_readout(event)   # per-ink cursor readout (#72)
+        if self._coord_readout and self._pixmap is not None:
+            self._coord_pos = self._img_label.mapFrom(
+                self, event.position().toPoint())
+            self._schedule_refresh()
         super().mouseMoveEvent(event)
+
+    def leaveEvent(self, event) -> None:  # type: ignore[override]
+        if self._coord_readout and self._coord_pos is not None:
+            self._coord_pos = None
+            self._schedule_refresh()
+        super().leaveEvent(event)
 
     def mouseReleaseEvent(self, event) -> None:  # type: ignore[override]
         if self._panning:

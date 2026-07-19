@@ -1358,6 +1358,8 @@ class TabChart(QWidget):
             bool(self._settings.get("margin_guides_show", False)))
         self._margin_panel.set_measured_guides_checked(
             bool(self._settings.get("margin_measured_guides_show", False)))
+        self._margin_panel.set_coords_checked(
+            bool(self._settings.get("margin_coords_show", False)))
         self._margin_panel.setVisible(
             bool(self._settings.get("margin_inspector_show", True)))
         self._layout_info_panel.setVisible(
@@ -1367,6 +1369,11 @@ class TabChart(QWidget):
         self._margin_panel.guides_toggled.connect(self._on_margin_guides_toggled)
         self._margin_panel.measured_guides_toggled.connect(
             self._on_margin_measured_guides_toggled)
+        self._margin_panel.coords_toggled.connect(self._on_margin_coords_toggled)
+        # Restore the coordinate readout state on the preview (dpi = render res).
+        if self._margin_panel.coords_enabled():
+            self._preview.set_coord_readout(
+                True, float(self._settings.get("printtarg_dpi", 300) or 300))
         # Re-measure when the user pages through a multi-page chart so the
         # inspector + guides always describe the page on screen (#83).
         self._preview.page_changed.connect(lambda _i: self._update_margin_inspector())
@@ -8009,6 +8016,11 @@ class TabChart(QWidget):
     def _on_margin_measured_guides_toggled(self, on: bool) -> None:
         self._settings.set("margin_measured_guides_show", bool(on))
         self._update_margin_inspector()
+
+    def _on_margin_coords_toggled(self, on: bool) -> None:
+        self._settings.set("margin_coords_show", bool(on))
+        self._preview.set_coord_readout(
+            bool(on), float(self._settings.get("printtarg_dpi", 300) or 300))
 
     def _active_instrument_flag(self) -> str:
         """The instrument the chart in the preview was built with. In Manual mode

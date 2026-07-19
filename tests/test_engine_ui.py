@@ -74,6 +74,27 @@ def test_preview_click_emits_stripe_for_hit_and_nothing_for_miss():
     assert hits == [(0, 1)]
 
 
+def test_coord_readout_maps_pointer_to_paper_mm():
+    """#29: the pointer coordinate readout converts a label position to paper
+    millimetres from the sheet's top-left corner (image px 0,0), via the paint
+    transform and the render dpi."""
+    pv = _make_preview()
+    pv.set_coord_readout(True, dpi=200.0)          # 200 px per inch
+    s, ox, oy = pv._paint_geom
+    # A label position corresponding to image pixel (100, 50).
+    lbl = QPoint(int(ox + 100 * s), int(oy + 50 * s))
+    x_mm, y_mm = pv._coord_mm_at(lbl)
+    assert abs(x_mm - 100 * 25.4 / 200) < 0.1      # = 12.7 mm
+    assert abs(y_mm - 50 * 25.4 / 200) < 0.1       # = 6.35 mm
+    # Off-sheet to the left → negative X (the ruler still reads there).
+    left = QPoint(int(ox - 40 * s), int(oy + 10 * s))
+    assert pv._coord_mm_at(left)[0] < 0
+    # Turning it off clears the tracked position.
+    pv.set_coord_readout(False)
+    assert pv._coord_pos is None
+    assert pv._coord_readout is False
+
+
 def test_patch_overlay_accumulates_and_clears():
     pv = _make_preview()
     items = [(QRect(10, 10, 20, 20), QColor("red"), QColor("blue"), False)]
