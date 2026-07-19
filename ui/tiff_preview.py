@@ -1290,21 +1290,44 @@ class TiffPreview(QWidget):
             gpen.setWidthF(1.0)
             painter.setPen(gpen)
             for i, srect in enumerate(self._stripe_rects):
-                if read_map.get(i, False):
-                    continue
                 pats = [b for b in allb
                         if srect.left() <= b.x() + b.width() / 2 <= srect.right()]
+                if not pats:
+                    continue
                 pats.sort(key=lambda b: b.y())
+                if read_map.get(i, False):
+                    # Read strip: keep its real spacers, but still draw the OUTER
+                    # top and bottom edge of the column, so the top row's top and
+                    # the bottom row's bottom are separated like every other cell
+                    # edge (Sebastian).
+                    tb = pats[0]
+                    bb = pats[-1]
+                    painter.drawLine(QPointF(tb.x() * s + ox, tb.y() * s + oy),
+                                     QPointF((tb.x() + tb.width()) * s + ox,
+                                             tb.y() * s + oy))
+                    painter.drawLine(
+                        QPointF(bb.x() * s + ox, (bb.y() + bb.height()) * s + oy),
+                        QPointF((bb.x() + bb.width()) * s + ox,
+                                (bb.y() + bb.height()) * s + oy))
+                    continue
+                # True dedup grid (Knut): every patch draws RIGHT + BOTTOM; the
+                # TOP edge only on the topmost patch of the strip; the LEFT edge
+                # only when the strip to the left is NOT also unread (i.e. this is
+                # the left column of an unread run, or the page edge). So the
+                # boundary between any two neighbouring unread patches is drawn
+                # exactly once — never two lines side by side.
+                left_is_border = (i == 0) or read_map.get(i - 1, False)
                 for idx, b in enumerate(pats):
                     x0 = b.x() * s + ox
                     y0 = b.y() * s + oy
                     x1 = (b.x() + b.width()) * s + ox
                     y1 = (b.y() + b.height()) * s + oy
                     painter.drawLine(QPointF(x1, y0), QPointF(x1, y1))   # right
-                    painter.drawLine(QPointF(x0, y0), QPointF(x0, y1))   # left
                     painter.drawLine(QPointF(x0, y1), QPointF(x1, y1))   # bottom
                     if idx == 0:
                         painter.drawLine(QPointF(x0, y0), QPointF(x1, y0))  # top
+                    if left_is_border:
+                        painter.drawLine(QPointF(x0, y0), QPointF(x0, y1))  # left
         for rect, c_exp, c_meas, warn in items:
             # Round BOTH edges to whole pixels so the split covers exactly the
             # same span as the printed patch — flooring each of x/y/w/h
