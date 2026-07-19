@@ -1212,18 +1212,21 @@ class TiffPreview(QWidget):
         if self._show_only_measured:
             boxes = self._page_patch_boxes.get(self._current) or []
             if boxes:
-                pen = QPen(QColor(180, 180, 180))
+                # Use float QRectF (not per-edge rounding) so every box is the
+                # exact same size on screen and no column's outline renders a
+                # pixel wider than the rest (Sebastian). A cosmetic 1px pen keeps
+                # the outline hairline at any zoom.
+                pen = QPen(QColor(170, 170, 170))
+                pen.setCosmetic(True)
                 pen.setWidthF(1.0)
-                painter.setPen(pen)
+                white = QColor(255, 255, 255)
                 for b in boxes:
-                    bx0 = round(b.x() * s + ox)
-                    by0 = round(b.y() * s + oy)
-                    bx1 = round((b.x() + b.width()) * s + ox)
-                    by1 = round((b.y() + b.height()) * s + oy)
-                    painter.fillRect(bx0, by0, max(1, bx1 - bx0),
-                                     max(1, by1 - by0), QColor(255, 255, 255))
-                    painter.drawRect(bx0, by0, max(1, bx1 - bx0),
-                                     max(1, by1 - by0))
+                    r = QRectF(b.x() * s + ox, b.y() * s + oy,
+                               b.width() * s, b.height() * s)
+                    painter.fillRect(r, white)
+                    painter.setPen(pen)
+                    painter.setBrush(Qt.BrushStyle.NoBrush)
+                    painter.drawRect(r)
         for rect, c_exp, c_meas, warn in items:
             # Round BOTH edges to whole pixels so the split covers exactly the
             # same span as the printed patch — flooring each of x/y/w/h
