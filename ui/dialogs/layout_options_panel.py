@@ -1369,8 +1369,12 @@ class LayoutOptionsPanel(QWidget):
         # Re-run the instrument-specific visibility now that every widget exists
         # (the selectors-block init sync ran before cm_stagger_cb / clip_enable
         # were built, so they were left visible for non-ColorMunki instruments).
-        if self.instr is not None:
-            self._sync_instrument_widgets(self.instr.currentData() or "i1")
+        # Works for BOTH configs: with selectors the instrument comes from the
+        # combo; without them (the embedded Preferences → Chart Layout panel,
+        # driven by set_recipe) it comes from the last-known _inst.
+        self._sync_instrument_widgets(
+            (self.instr.currentData() if self.instr is not None else self._inst)
+            or "i1")
 
     def _browse_cal(self) -> None:
         from pathlib import Path
@@ -2468,6 +2472,12 @@ class LayoutOptionsPanel(QWidget):
         self._sync_seed_enabled()
         self._inst, self._clip = r.instrument, r.clip_border
         self._update_clip_visibility()
+        # Gate the instrument-specific controls (cm_stagger / clip_enable) for the
+        # loaded instrument. This is the ONLY place it happens for the embedded
+        # Preferences → Chart Layout panel (no instr combo of its own, driven by
+        # set_recipe) — without it "Offset every second strip" showed for every
+        # instrument there, not just the ColorMunki (Knut).
+        self._sync_instrument_widgets(r.instrument)
         self._loading = False
         # Final pass with loading off: computes the real conflict state for
         # the values just loaded (during loading only the clean-up runs).

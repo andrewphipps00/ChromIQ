@@ -620,3 +620,19 @@ def test_cm_stagger_only_visible_for_colormunki(app):
     # Loading a saved SpectroScan default keeps it hidden too.
     panel.set_recipe(LayoutRecipe(instrument="SS", paper="A4"))
     assert panel.cm_stagger_cb.isHidden()
+
+
+def test_cm_stagger_gated_without_selectors_via_set_recipe(app):
+    """The Preferences → Chart Layout tab embeds this panel WITHOUT its own
+    instrument combo and drives it purely through set_recipe (its instrument
+    picker lives in the settings dialog). "Offset every second strip" must still
+    be gated to the ColorMunki there — the earlier fix only covered the
+    with-selectors panel, so it stayed visible for every instrument in
+    Preferences (Knut)."""
+    from ui.dialogs.layout_options_panel import LayoutOptionsPanel
+    panel = LayoutOptionsPanel()          # no selectors — the Preferences config
+    assert panel.instr is None
+    assert panel.cm_stagger_cb.isHidden()     # born hidden (default i1)
+    for inst in ("i1", "p3", "SS", "41", "51", "CM"):
+        panel.set_recipe(LayoutRecipe(instrument=inst, paper="A4"))
+        assert panel.cm_stagger_cb.isHidden() == (inst != "CM"), inst
