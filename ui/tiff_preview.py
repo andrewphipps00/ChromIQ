@@ -1209,25 +1209,43 @@ class TiffPreview(QWidget):
         # white with a thin outline first, so unread patches read as empty; the
         # measured split-patch items then draw on top, leaving only the read
         # ones coloured — an at-a-glance progress view.
-        if self._show_only_measured:
-            boxes = self._page_patch_boxes.get(self._current) or []
-            if boxes:
-                # Blank the WHOLE patch area with ONE flat rectangle, then draw
-                # the measured split patches on top. Filling per patch left the
-                # spacer gaps between cells showing the printed chart, and that
-                # gap-vs-fill grid beat against the pixel grid when the chart is
-                # scaled to fit — making stray white/coloured lines appear at a
-                # few column edges and wander with the zoom (Sebastian). A single
-                # rectangle has no internal edges, so there is nothing to alias.
-                # A faint tint (vs the white paper) shows the patch-area extent.
-                minx = min(b.x() for b in boxes)
-                miny = min(b.y() for b in boxes)
-                maxx = max(b.x() + b.width() for b in boxes)
-                maxy = max(b.y() + b.height() for b in boxes)
+        if self._show_only_measured and self._stripe_rects:
+            # Blank the UNREAD strips (whole columns) to paper-white; leave the
+            # measured strips exactly as they normally look. We blank per strip
+            # (not per patch) and use the paper colour, so there are NO fine
+            # gaps and NO contrast edges to alias when the chart is scaled to fit
+            # the window — the endless moiré that per-patch outlines/fills kept
+            # producing (Sebastian). Reading progress is still obvious: measured
+            # columns are coloured, unread ones are blank.
+            read_map = self._stripe_read_map or {}
+            white = QColor(255, 255, 255)
+            n = len(self._stripe_rects)
+
+            def _bounds(k):
+                return (self._hover_patch_bounds(self._stripe_rects[k])
+                        or self._stripe_rects[k])
+            # Blank each MAXIMAL RUN of consecutive unread strips as ONE
+            # rectangle, so the strip-gaps between blanked columns are covered
+            # too (a per-strip blank left those gaps showing the chart as faint
+            # hairlines). One rect per run ⇒ no internal edges to alias.
+            i = 0
+            while i < n:
+                if read_map.get(i, False):
+                    i += 1
+                    continue
+                j = i
+                while j < n and not read_map.get(j, False):
+                    j += 1
+                bl = [_bounds(k) for k in range(i, j)]
+                minx = min(b.x() for b in bl)
+                miny = min(b.y() for b in bl)
+                maxx = max(b.x() + b.width() for b in bl)
+                maxy = max(b.y() + b.height() for b in bl)
                 painter.fillRect(
                     QRectF(minx * s + ox, miny * s + oy,
                            (maxx - minx) * s, (maxy - miny) * s),
-                    QColor(249, 249, 249))
+                    white)
+                i = j
         for rect, c_exp, c_meas, warn in items:
             # Round BOTH edges to whole pixels so the split covers exactly the
             # same span as the printed patch — flooring each of x/y/w/h
