@@ -318,6 +318,22 @@ def test_live_preview_options_saved_in_manual_preset():
     assert tab._m_only_measured.isChecked() is False
 
 
+def test_session_map_enables_click_jump_in_guided_too():
+    """Click-to-jump works in BOTH modules now (Basti): the engine handles goto
+    the same way in guided as in manual, so hovering + clicking a strip is
+    enabled for a guided read as well."""
+    tab = _make_tab()
+    tab._page_stripe_rects = [[QRect(0, 0, 100, 20), QRect(0, 30, 100, 20)]]
+    tab._strips_per_page = [2]
+    tab._switch_mode("guided")
+    tab._on_session_map([
+        {"strip": "A", "sheet": 1, "read": True},
+        {"strip": "B", "sheet": 1, "read": False},
+    ])
+    assert tab._preview._stripe_click_enabled
+    assert tab._preview._stripe_read_map == {0: True, 1: False}
+
+
 def test_strip_measured_splits_only_real_patch_boxes(monkeypatch):
     """The overlay must land on each patch's OWN box (looked up by loc), and
     draw nothing when the chart exposes no per-patch geometry."""

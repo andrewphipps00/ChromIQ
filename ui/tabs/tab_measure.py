@@ -5051,12 +5051,14 @@ class TabMeasure(QWidget):
         # Autosave reassurance shows on the preview for both modes (autosave
         # protects guided reads too).
         self._set_autosave_banner()
-        if is_manual:
-            read_map = {}
-            for s in strips:
-                _pg, li, _r = self._locate_strip(s.get("strip", "A"))
-                read_map[li] = bool(s.get("read"))
-            self._preview.set_stripe_click_enabled(True, read_map)
+        # Click-to-jump: hover + click a strip in the preview to jump to it —
+        # in BOTH modules now (Basti). The engine handles `goto` the same way in
+        # guided as in manual, and autosave makes jumping non-destructive.
+        read_map = {}
+        for s in strips:
+            _pg, li, _r = self._locate_strip(s.get("strip", "A"))
+            read_map[li] = bool(s.get("read"))
+        self._preview.set_stripe_click_enabled(True, read_map)
         if any(not s.get("verifiable", True) for s in strips):
             self._log.appendPlainText(
                 tr("[Engine] Note: some rows of this chart are too similar "

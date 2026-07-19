@@ -1,5 +1,25 @@
 # Changelog
 
+## v3.13.12-beta.12
+
+Measure-tab chart-reading-engine polish (Knut/Basti).
+
+- **The live-preview view controls have their own section now.** "Each patch
+  shows" (expected / measured / split) and "Show only measured patches" sit in
+  a **Live preview** group that is always visible in both the Guided and Manual
+  modules, stays usable **while you measure** (they only change the preview,
+  never your readings), and is saved as defaults and in presets. The two
+  modules keep their own independent view settings.
+- **The left panel scrolls while measuring again.** Starting a measurement
+  locks the parameters (as before) but no longer freezes scrolling, so every
+  option stays reachable.
+- **Clearer wording.** The old "Show:" selector is now "Each patch shows:", with
+  plain-language choices.
+- **The strip-hover highlight is snappy and complete.** Hovering a strip to jump
+  to it now follows the pointer without delay, and its mint frame includes the
+  strip's edge spacers (detected from the chart's own geometry) so it matches
+  the whole swiped strip.
+
 ## v3.13.12-beta.11
 
 Two follow-up fixes.
