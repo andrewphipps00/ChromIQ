@@ -1212,11 +1212,12 @@ class TiffPreview(QWidget):
         if self._show_only_measured:
             boxes = self._page_patch_boxes.get(self._current) or []
             if boxes:
-                # Use float QRectF (not per-edge rounding) so every box is the
-                # exact same size on screen and no column's outline renders a
-                # pixel wider than the rest (Sebastian). A cosmetic 1px pen keeps
-                # the outline hairline at any zoom.
-                pen = QPen(QColor(170, 170, 170))
+                # Blank each unread patch to white, then draw its outline INSET
+                # 1px inside the white fill. The inset keeps neighbouring boxes'
+                # outlines from ever touching, and a light-grey hairline keeps
+                # the contrast low — together they stop the downscaling moiré
+                # that made every few column-edges look pixel-thick (Sebastian).
+                pen = QPen(QColor(205, 205, 205))
                 pen.setCosmetic(True)
                 pen.setWidthF(1.0)
                 white = QColor(255, 255, 255)
@@ -1226,7 +1227,7 @@ class TiffPreview(QWidget):
                     painter.fillRect(r, white)
                     painter.setPen(pen)
                     painter.setBrush(Qt.BrushStyle.NoBrush)
-                    painter.drawRect(r)
+                    painter.drawRect(r.adjusted(1.0, 1.0, -1.0, -1.0))
         for rect, c_exp, c_meas, warn in items:
             # Round BOTH edges to whole pixels so the split covers exactly the
             # same span as the printed patch — flooring each of x/y/w/h
