@@ -382,6 +382,39 @@ def patch_boxes_from_sidecar(ti2_path: Path, n_pages: int
     return out
 
 
+def edge_spacer_px_from_sidecar(ti2_path: "Path | None") -> int:
+    """Height (image px) of a leader/trailer edge spacer for this chart, or 0
+    when the chart has none (#43, Basti). Edge spacers bracket each strip (one
+    spacer-width above the first patch, one below the last) but aren't in the
+    recorded patch geometry, so the strip-hover frame must add them back.
+
+    Read straight from the chart's own geometry so it is always accurate: the
+    channels.json recipe's ``edge_spacers`` flag says whether they exist, and
+    the engine geometry gives their height (the patch spacing ``pspa``, the same
+    value the margin inspector uses for edge spacers, #18)."""
+    if ti2_path is None:
+        return 0
+    import json
+    channels = Path(ti2_path).with_suffix(".channels.json")
+    if not channels.is_file():
+        return 0
+    try:
+        layout = json.loads(channels.read_text()).get("layout") or {}
+        recipe = layout.get("recipe") or {}
+        if not recipe.get("edge_spacers"):
+            return 0
+        from dataclasses import fields as _fields
+        from workflow.layout_engine import instruments
+        from workflow.layout_engine.presets import LayoutRecipe
+        valid = {f.name for f in _fields(LayoutRecipe)}
+        rc = LayoutRecipe(**{k: v for k, v in recipe.items() if k in valid})
+        geom = instruments.geom_from_build_kwargs(rc.build_kwargs())
+        dpi = float(layout.get("dpi") or 300) or 300.0
+        return max(0, round(geom.pspa * dpi / 25.4))
+    except Exception:  # noqa: BLE001 — a hover nicety must never break loading
+        return 0
+
+
 def _apply_hex_stagger(ti2_path: Path, pages: "list[dict[str, QRect]]") -> None:
     """SpectroScan hexagons are DRAWN with a ±¼-width horizontal zigzag by row
     (raster._hexagon_points), but the recorded boxes hold only the slot x. So the
@@ -847,11 +880,37 @@ class TabMeasure(QWidget):
             self._guided_btn.setChecked(False)
             self._manual_btn.setChecked(True)
         self._calm_outer.setVisible(mode == "guided")
+        # The two modules keep INDEPENDENT "Live preview" settings; apply the
+        # now-active module's view state to the shared preview so switching
+        # module shows that module's chosen view (Basti). Guarded for build time.
+        self._apply_active_view_settings()
         # The two modes have separate resume checkboxes; reflect the active
         # one's state on the shared Start button. Guarded because _switch_mode
         # is also reachable during UI build before _start_btn exists.
         if hasattr(self, "_start_btn"):
             self._refresh_start_button_label()
+
+    def _apply_active_view_settings(self) -> None:
+        """Push the active module's independent Live-preview controls to the
+        shared preview (called on module switch and after restore) (#44)."""
+        if getattr(self, "_preview", None) is None:
+            return                       # called during UI build — nothing yet
+        prefix = "g" if self._current_mode() == "guided" else "m"
+        combo = getattr(self, f"_{prefix}_overlay_mode", None)
+        only = getattr(self, f"_{prefix}_only_measured", None)
+        if combo is not None:
+            self._preview.set_overlay_mode(combo.currentData())
+        if only is not None:
+            self._preview.set_show_only_measured(only.isChecked())
+
+    def _on_view_control_changed(self, prefix: str) -> None:
+        """A Live-preview control changed. Only the ACTIVE module's controls
+        drive the shared preview, so the two modules stay independent (#44) —
+        e.g. restoring the manual defaults while Guided is showing must not
+        change the guided view."""
+        active = "g" if self._current_mode() == "guided" else "m"
+        if prefix == active:
+            self._apply_active_view_settings()
 
     def _current_mode(self) -> str:
         return "guided" if self._stack.currentIndex() == 0 else "manual"
@@ -1335,7 +1394,103 @@ class TabMeasure(QWidget):
         ll.addStretch(1)
 
         scroll.setWidget(left)
-        return scroll
+        # The scroll's inner content — disabled during a measurement while the
+        # scroll AREA stays live, so the panel is still scrollable (#42).
+        self._g_options = left
+        # Wrap the scroll so the guided module gets the same always-visible
+        # "Live preview" group below it (#44, Basti) — usable while a read runs.
+        container = QWidget()
+        gcl = QVBoxLayout(container)
+        gcl.setContentsMargins(0, 0, 0, 0)
+        gcl.setSpacing(0)
+        gcl.addWidget(scroll, stretch=1)
+        # Inset the group by the same 16 px the scrolling sections use (their
+        # content carries it), so it doesn't run edge-to-edge and look too wide.
+        _vg_wrap = QWidget()
+        _vg_wl = QVBoxLayout(_vg_wrap)
+        _vg_wl.setContentsMargins(16, 0, 16, 8)
+        _vg_wl.addWidget(self._make_live_preview_group("g"))
+        gcl.addWidget(_vg_wrap)
+        self._g_view_grp.setVisible(self._engine_selected())
+        return container
+
+    def _make_live_preview_group(self, prefix: str) -> QGroupBox:
+        """The engine's "Live preview" view controls, shared by the Manual and
+        Guided modules (#126, Knut/Basti). *prefix* is "m" or "g"; each module
+        gets its own combo + checkbox (independent widgets that both drive the
+        one shared chart preview). Built as a self-contained group placed OUTSIDE
+        the scrolling parameter area, so it stays visible and usable while a
+        measurement locks the parameters, and its state saves as defaults / in a
+        preset. Stores self._{prefix}_view_grp / _engine_row / _overlay_mode /
+        _only_measured."""
+        grp = QGroupBox(tr("Live preview"), self)
+        grp.setFlat(True)
+        gv = QVBoxLayout(grp)
+        gv.setContentsMargins(8, 6, 8, 8)
+        gv.setSpacing(6)
+        row = QWidget(grp)
+        v = QVBoxLayout(row)
+        v.setContentsMargins(0, 0, 0, 0)
+        v.setSpacing(6)
+
+        show_row = QHBoxLayout()
+        show_row.setContentsMargins(0, 0, 0, 0)
+        show_row.setSpacing(6)
+        show_row.addWidget(QLabel(tr("Each patch shows:"), row))
+        combo = NoScrollComboBox(row)
+        combo.setObjectName("compact_input")
+        combo.setMinimumWidth(210)
+        combo.addItem(tr("Expected & measured (split)"), "both")
+        combo.addItem(tr("Expected colour only"), "expected")
+        combo.addItem(tr("Measured colour only"), "measured")
+        combo.currentIndexChanged.connect(
+            lambda _i, p=prefix: self._on_view_control_changed(p))
+        show_row.addWidget(combo)
+        show_row.addStretch(1)
+        show_row.addWidget(TooltipButton(
+            tr("What each patch shows"),
+            tr("Choose what the coloured patches in the preview show:\n\n"
+            "  • Expected & measured (split) — each patch is split diagonally: "
+            "the colour the chart expected in the upper-left, what the "
+            "instrument actually measured in the lower-right. Differences jump "
+            "out at the seam.\n"
+            "  • Expected colour only — every patch shows the colour the chart "
+            "was supposed to have.\n"
+            "  • Measured colour only — every patch shows what your instrument "
+            "read; patches you haven't read yet keep their expected colour.\n\n"
+            "You can switch between these at any time, during a measurement "
+            "or after it's finished — it only changes the preview, never your "
+            "readings. (Screen colours are approximate; the numbers in your "
+            "file are exact.)"),
+            row))
+        v.addLayout(show_row)
+
+        only = QCheckBox(tr("Show only measured patches"), row)
+        only.toggled.connect(
+            lambda _on, p=prefix: self._on_view_control_changed(p))
+        om_row = QHBoxLayout()
+        om_row.setContentsMargins(0, 0, 0, 0)
+        om_row.addWidget(only)
+        om_row.addStretch(1)
+        om_row.addWidget(TooltipButton(
+            tr("Show only measured patches"),
+            tr("Turn this on to see your progress through the chart at a glance: "
+            "every patch you have already read keeps its colour (or split), and "
+            "every patch you have NOT read yet is blanked to white with a thin "
+            "outline.\n\nAs you work down the strips, the white area shrinks and "
+            "the coloured, measured area grows — so it's instantly clear how far "
+            "you've come and which rows are still to do. Turn it off to see the "
+            "whole printed chart again. It only changes the preview, never your "
+            "readings."),
+            row))
+        v.addLayout(om_row)
+
+        gv.addWidget(row)
+        setattr(self, f"_{prefix}_view_grp", grp)
+        setattr(self, f"_{prefix}_engine_row", row)
+        setattr(self, f"_{prefix}_overlay_mode", combo)
+        setattr(self, f"_{prefix}_only_measured", only)
+        return grp
 
     # ------------------------------------------------------------------
     # Manual panel
@@ -1348,7 +1503,7 @@ class TabMeasure(QWidget):
         cl.setSpacing(0)
 
         # Presets group
-        presets_grp = QGroupBox(tr("Presets"), container)
+        presets_grp = self._m_presets_grp = QGroupBox(tr("Presets"), container)
         presets_row = QHBoxLayout(presets_grp)
         presets_row.setContentsMargins(8, 4, 8, 8)
         presets_row.addWidget(QLabel(tr("Select preset:"), container))
@@ -1512,73 +1667,10 @@ class TabMeasure(QWidget):
         m_resume_row.addWidget(self._m_resume_tip)
         mcg.addLayout(m_resume_row)
 
-        # --- ChromIQ chart-reading engine: view toggle (#126) ------------
-        # Shown only while the engine is active. There is no "go to strip"
-        # control by design (Knut): you jump by clicking a strip directly in
-        # the chart preview. The "Show" combo matches the other compact
-        # Measure-tab selectors; its help icon sits at the panel's right edge.
-        self._m_engine_row = QWidget(left)
-        _engine_v = QVBoxLayout(self._m_engine_row)
-        _engine_v.setContentsMargins(0, 0, 0, 0)
-        _engine_v.setSpacing(6)
-        _show_row = QHBoxLayout()
-        _show_row.setContentsMargins(0, 0, 0, 0)
-        _show_row.setSpacing(6)
-        _show_row.addWidget(QLabel(tr("Show:"), self._m_engine_row))
-        self._m_overlay_mode = NoScrollComboBox(self._m_engine_row)
-        self._m_overlay_mode.setObjectName("compact_input")   # match Strip recognition
-        self._m_overlay_mode.setMinimumWidth(210)
-        self._m_overlay_mode.addItem(tr("Both (split)"), "both")
-        self._m_overlay_mode.addItem(tr("Expected"), "expected")
-        self._m_overlay_mode.addItem(tr("Measured"), "measured")
-        self._m_overlay_mode.currentIndexChanged.connect(
-            lambda _i: self._preview.set_overlay_mode(
-                self._m_overlay_mode.currentData()))
-        _show_row.addWidget(self._m_overlay_mode)
-        _show_row.addStretch(1)                                # push the tip icon right
-        _show_row.addWidget(TooltipButton(
-            tr("Expected / measured view"),
-            tr("Choose what the coloured patches in the preview show:\n\n"
-            "  • Both (split) — each patch is split diagonally: the colour "
-            "the chart expected in the upper-left, what the instrument "
-            "actually measured in the lower-right. Differences jump out at "
-            "the seam.\n"
-            "  • Expected — every patch shows the colour the chart was "
-            "supposed to have.\n"
-            "  • Measured — every patch shows what your instrument read; "
-            "patches you haven't read yet keep their expected colour.\n\n"
-            "You can switch between these at any time, during a measurement "
-            "or after it's finished — it only changes the preview, never your "
-            "readings. (Screen colours are approximate; the numbers in your "
-            "file are exact.)"),
-            self._m_engine_row))
-        _engine_v.addLayout(_show_row)
-
-        # "Show only measured patches" (Knut): unread patches are drawn white
-        # with a thin outline, so how far you've got through the chart is
-        # obvious at a glance.
-        self._m_only_measured = QCheckBox(
-            tr("Show only measured patches"), self._m_engine_row)
-        self._m_only_measured.toggled.connect(
-            lambda on: self._preview.set_show_only_measured(on))
-        _om_row = QHBoxLayout()
-        _om_row.setContentsMargins(0, 0, 0, 0)
-        _om_row.addWidget(self._m_only_measured)
-        _om_row.addStretch(1)
-        _om_row.addWidget(TooltipButton(
-            tr("Show only measured patches"),
-            tr("Turn this on to see your progress through the chart at a glance: "
-            "every patch you have already read keeps its colour (or split), and "
-            "every patch you have NOT read yet is blanked to white with a thin "
-            "outline.\n\nAs you work down the strips, the white area shrinks and "
-            "the coloured, measured area grows — so it's instantly clear how far "
-            "you've come and which rows are still to do. Turn it off to see the "
-            "whole printed chart again. It only changes the preview, never your "
-            "readings."),
-            self._m_engine_row))
-        _engine_v.addLayout(_om_row)
-        mcg.addWidget(self._m_engine_row)
-        self._m_engine_row.setVisible(False)
+        # The engine "Live preview" view controls (patch-colour mode + show-only-
+        # measured) are built as a shared group by _make_live_preview_group and
+        # placed OUTSIDE this scrolling area (see the panel tail), so they stay
+        # visible and usable while a measurement locks the parameters (#126).
         # The autosave reassurance lives on the preview itself (as a banner
         # under the caption), not here — see _set_autosave_banner().
         # The click-a-strip tip lives at the BOTTOM of the manual options
@@ -1733,7 +1825,15 @@ class TabMeasure(QWidget):
         ll.addStretch(1)
 
         scroll.setWidget(left)
+        self._m_options = left          # scroll content — locked during a read
         cl.addWidget(scroll, stretch=1)
+
+        # "Live preview" view controls — their own group BELOW the scroll, so
+        # they stay visible + usable while a measurement locks the parameters,
+        # and save as defaults / in a preset (#126 follow-up, Knut/Basti).
+        cl.addWidget(self._make_live_preview_group("m"))
+        # Only meaningful with the chart-reading engine on; hidden otherwise.
+        self._m_view_grp.setVisible(self._engine_selected())
         return container
 
     # ------------------------------------------------------------------
@@ -1768,6 +1868,10 @@ class TabMeasure(QWidget):
             "nocal":      self._m_nocal_cb.isChecked(),
             "pbp":        self._m_pbp_cb.isChecked(),
             "verify":     self._m_verify_cb.isChecked(),
+            # "Live preview" view controls (#126) — preview-only, but saved so a
+            # preset restores the whole workspace look the user prefers.
+            "overlay_mode":  self._m_overlay_mode.currentData(),
+            "only_measured": self._m_only_measured.isChecked(),
         }
         for opt in self._m_chartread_opts:
             if opt.checkbox:
@@ -1791,6 +1895,10 @@ class TabMeasure(QWidget):
         self._m_nocal_cb.setChecked(bool(data.get("nocal", False)))
         self._m_pbp_cb.setChecked(bool(data.get("pbp", False)))
         self._m_verify_cb.setChecked(bool(data.get("verify", False)))
+        _om = self._m_overlay_mode.findData(data.get("overlay_mode", "both"))
+        if _om >= 0:
+            self._m_overlay_mode.setCurrentIndex(_om)
+        self._m_only_measured.setChecked(bool(data.get("only_measured", False)))
         for opt in self._m_chartread_opts:
             if opt.checkbox:
                 opt.checkbox.setChecked(bool(data.get(f"{opt.key}_enabled", False)))
@@ -1825,6 +1933,10 @@ class TabMeasure(QWidget):
             self._m_suppress_cb.setChecked(bool(s.get("manual2_chartread_suppress", True)))
             self._m_nocal_cb.setChecked(bool(s.get("manual2_chartread_nocal", False)))
             self._m_pbp_cb.setChecked(bool(s.get("manual2_chartread_pbp", False)))
+            _om = self._m_overlay_mode.findData(s.get("manual2_overlay_mode", "both"))
+            if _om >= 0:
+                self._m_overlay_mode.setCurrentIndex(_om)
+            self._m_only_measured.setChecked(bool(s.get("manual2_only_measured", False)))
             for opt in self._m_chartread_opts:
                 if opt.checkbox:
                     opt.checkbox.setChecked(bool(s.get(f"manual2_chartread_{opt.key}_enabled", False)))
@@ -2723,6 +2835,9 @@ class TabMeasure(QWidget):
         # outline can hug just a strip's patches, on every page (Basti, #126).
         self._preview.set_page_patch_boxes({
             pg: list(d.values()) for pg, d in enumerate(self._patch_boxes)})
+        # Grow the strip-hover frame over the edge spacers, when the chart's own
+        # geometry says it has them (#43).
+        self._preview.set_edge_spacer_px(edge_spacer_px_from_sidecar(self._ti1_path))
 
         engine = self._engine_stripe_rects()
         if engine is not None:
@@ -2776,7 +2891,15 @@ class TabMeasure(QWidget):
             self._ti1_path.with_suffix(".channels.json"), len(self._tiff_pages))
 
     def _set_settings_enabled(self, enabled: bool) -> None:
-        self._stack.setEnabled(enabled)
+        # Lock the measurement PARAMETERS during a read, but NOT the scroll areas
+        # (so the panel stays scrollable, #42) nor the "Live preview" view group
+        # (its controls only change the preview, so they stay usable, #41).
+        # Disabling the scrolls' inner content greys the options exactly as
+        # before, while the scroll widgets themselves remain interactive.
+        for w in (getattr(self, "_g_options", None), getattr(self, "_m_options", None),
+                  getattr(self, "_m_presets_grp", None)):
+            if w is not None:
+                w.setEnabled(enabled)
         self._file_grp.setEnabled(enabled)
         self._save_defaults_btn.setEnabled(enabled)
 
@@ -4203,7 +4326,8 @@ class TabMeasure(QWidget):
         # split-patch overlay stays so the finished chart can be inspected.
         self._preview.set_stripe_click_enabled(False)
         self._preview.set_notice(None)
-        self._m_engine_row.setVisible(False)
+        # The view controls live in the always-visible "Live preview" group now
+        # (not hidden between reads); only the click-a-strip tip is transient.
         self._m_engine_tip.setVisible(False)
         self._key_watchdog.stop()
         self.measurement_active.emit(False)
@@ -4921,7 +5045,8 @@ class TabMeasure(QWidget):
         self._preview.clear_patch_overlay()
         self._patch_geom_warned = False
         is_manual = self._current_mode() == "manual"
-        self._m_engine_row.setVisible(is_manual)
+        # The view controls are always visible in the "Live preview" group now;
+        # only the transient click-a-strip tip appears while a manual read runs.
         self._m_engine_tip.setVisible(is_manual)
         # Autosave reassurance shows on the preview for both modes (autosave
         # protects guided reads too).
@@ -5148,6 +5273,8 @@ class TabMeasure(QWidget):
             s.set("measure_suppress_warnings", self._suppress_cb.isChecked())
             s.set("measure_no_cal",            self._nocal_cb.isChecked())
             s.set("measure_patch_by_patch",    self._pbp_cb.isChecked())
+            s.set("measure_overlay_mode",      self._g_overlay_mode.currentData())
+            s.set("measure_only_measured",     self._g_only_measured.isChecked())
             for opt in self._chartread_opts:
                 if opt.checkbox:
                     s.set(f"measure_{opt.key}_enabled", opt.checkbox.isChecked())
@@ -5163,6 +5290,8 @@ class TabMeasure(QWidget):
             s.set("manual2_chartread_suppress", self._m_suppress_cb.isChecked())
             s.set("manual2_chartread_nocal",    self._m_nocal_cb.isChecked())
             s.set("manual2_chartread_pbp",      self._m_pbp_cb.isChecked())
+            s.set("manual2_overlay_mode",       self._m_overlay_mode.currentData())
+            s.set("manual2_only_measured",      self._m_only_measured.isChecked())
             for opt in self._m_chartread_opts:
                 if opt.checkbox:
                     s.set(f"manual2_chartread_{opt.key}_enabled", opt.checkbox.isChecked())
@@ -5187,6 +5316,10 @@ class TabMeasure(QWidget):
         self._suppress_cb.setChecked(bool(s.get("measure_suppress_warnings", True)))
         self._nocal_cb.setChecked(bool(s.get("measure_no_cal", False)))
         self._pbp_cb.setChecked(bool(s.get("measure_patch_by_patch", False)))
+        _gom = self._g_overlay_mode.findData(s.get("measure_overlay_mode", "both"))
+        if _gom >= 0:
+            self._g_overlay_mode.setCurrentIndex(_gom)
+        self._g_only_measured.setChecked(bool(s.get("measure_only_measured", False)))
         for opt in self._chartread_opts:
             if opt.checkbox:
                 enabled = bool(s.get(f"measure_{opt.key}_enabled", False))
@@ -5218,6 +5351,10 @@ class TabMeasure(QWidget):
         self._m_suppress_cb.setChecked(bool(s.get("manual2_chartread_suppress", True)))
         self._m_nocal_cb.setChecked(bool(s.get("manual2_chartread_nocal", False)))
         self._m_pbp_cb.setChecked(bool(s.get("manual2_chartread_pbp", False)))
+        _om = self._m_overlay_mode.findData(s.get("manual2_overlay_mode", "both"))
+        if _om >= 0:
+            self._m_overlay_mode.setCurrentIndex(_om)
+        self._m_only_measured.setChecked(bool(s.get("manual2_only_measured", False)))
         for opt in self._m_chartread_opts:
             if opt.checkbox:
                 enabled = bool(s.get(f"manual2_chartread_{opt.key}_enabled", False))

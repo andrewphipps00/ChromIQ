@@ -227,6 +227,97 @@ def test_session_map_enables_click_jump_and_read_map(monkeypatch):
     assert tab._preview._stripe_read_map == {0: True, 1: False}
 
 
+def test_live_preview_group_always_visible_and_stays_enabled_while_reading():
+    """The engine view controls (Show mode + Show only measured) live in their
+    own always-visible 'Live preview' group, not hidden until a read starts. A
+    running measurement locks the parameters and presets, but the view group
+    stays enabled (it only changes the preview) and the scroll area is never
+    disabled, so the panel stays scrollable (#41/#42, Basti)."""
+    tab = _make_tab()
+    # The controls are parented into the view group, which is visible with the
+    # engine on (before any measurement).
+    assert not tab._m_view_grp.isHidden()
+    members = [tab._m_view_grp.layout().itemAt(i).widget()
+               for i in range(tab._m_view_grp.layout().count())]
+    assert tab._m_engine_row in members
+
+    tab._set_settings_enabled(False)                 # measurement starts
+    assert not tab._m_options.isEnabled()            # parameters locked
+    assert not tab._m_presets_grp.isEnabled()
+    assert tab._m_view_grp.isEnabled()               # view controls stay usable
+    assert tab._m_overlay_mode.isEnabled()
+    assert tab._m_only_measured.isEnabled()
+
+    tab._set_settings_enabled(True)                  # measurement ends
+    assert tab._m_options.isEnabled()
+
+
+def test_live_preview_independent_per_module():
+    """#44: Manual and Guided each have their own Live-preview controls. Only the
+    ACTIVE module drives the shared preview, and switching module applies that
+    module's independent view."""
+    tab = _make_tab()
+    assert tab._m_view_grp is not None and tab._g_view_grp is not None
+    assert tab._m_overlay_mode is not tab._g_overlay_mode
+
+    tab._switch_mode("guided")
+    tab._g_overlay_mode.setCurrentIndex(tab._g_overlay_mode.findData("expected"))
+    assert tab._preview.overlay_mode() == "expected"
+    # Changing the INACTIVE (manual) control must not touch the preview.
+    tab._m_overlay_mode.setCurrentIndex(tab._m_overlay_mode.findData("measured"))
+    assert tab._preview.overlay_mode() == "expected"
+    # Switching to Manual applies Manual's own independent value.
+    tab._switch_mode("manual")
+    assert tab._preview.overlay_mode() == "measured"
+
+
+def test_hover_frame_grows_over_edge_spacers():
+    """#43: with edge spacers, the strip-hover frame grows by one spacer height
+    above the first patch and below the last (they're part of the swiped strip)."""
+    from PyQt6.QtCore import QRect
+    pv = _make_preview()
+    pv.set_page_patch_boxes({0: [QRect(100, 50, 40, 40), QRect(100, 100, 40, 40)]})
+    pv._current = 0
+    strip = QRect(90, 0, 60, 300)
+    base = pv._hover_patch_bounds(strip)
+    pv.set_edge_spacer_px(8)
+    grown = pv._hover_patch_bounds(strip)
+    assert grown.y() == base.y() - 8
+    assert grown.height() == base.height() + 16
+    # No edge spacers → unchanged.
+    pv.set_edge_spacer_px(0)
+    assert pv._hover_patch_bounds(strip) == base
+
+
+def test_edge_spacer_px_reads_geometry(tmp_path):
+    """#43: the edge-spacer height comes from the chart's own geometry — nonzero
+    only when the recipe says the chart HAS edge spacers."""
+    import json
+    from ui.tabs.tab_measure import edge_spacer_px_from_sidecar
+    (tmp_path / "c.ti2").write_text("x")
+    (tmp_path / "c.channels.json").write_text(json.dumps(
+        {"layout": {"dpi": 200, "recipe": {"instrument": "i1", "edge_spacers": True}}}))
+    assert edge_spacer_px_from_sidecar(tmp_path / "c.ti2") > 0
+    (tmp_path / "c.channels.json").write_text(json.dumps(
+        {"layout": {"dpi": 200, "recipe": {"instrument": "i1", "edge_spacers": False}}}))
+    assert edge_spacer_px_from_sidecar(tmp_path / "c.ti2") == 0
+    assert edge_spacer_px_from_sidecar(None) == 0
+
+
+def test_live_preview_options_saved_in_manual_preset():
+    """#41: the view controls are part of the manual preset snapshot, so a
+    preset restores the user's preferred workspace look."""
+    tab = _make_tab()
+    tab._m_overlay_mode.setCurrentIndex(tab._m_overlay_mode.findData("measured"))
+    tab._m_only_measured.setChecked(True)
+    data = tab._m_collect_preset_data()
+    assert data["overlay_mode"] == "measured" and data["only_measured"] is True
+    # Apply a different snapshot and confirm the controls follow.
+    tab._m_apply_preset_data({"overlay_mode": "expected", "only_measured": False})
+    assert tab._m_overlay_mode.currentData() == "expected"
+    assert tab._m_only_measured.isChecked() is False
+
+
 def test_strip_measured_splits_only_real_patch_boxes(monkeypatch):
     """The overlay must land on each patch's OWN box (looked up by loc), and
     draw nothing when the chart exposes no per-patch geometry."""

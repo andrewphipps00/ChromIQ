@@ -333,6 +333,11 @@ class TiffPreview(QWidget):
         # charts whose every-second strip is offset. Empty ⇒ hover falls back to
         # the full strip rect.
         self._page_patch_boxes: dict[int, list[QRect]] = {}
+        # Leader/trailer edge-spacer height (px) for the strip-hover frame: a
+        # chart with edge spacers brackets each strip with one spacer above the
+        # first patch and one below the last, which the recorded patch geometry
+        # omits — so the hover frame adds it back (#43). 0 ⇒ no edge spacers.
+        self._edge_spacer_px: int = 0
         # Split-patch display: "both" (diagonal split), "expected" or
         # "measured" (whole patch one side). Switchable any time (#126, Knut).
         self._overlay_mode: str = "both"
@@ -711,6 +716,12 @@ class TiffPreview(QWidget):
         self._page_patch_boxes = dict(mapping or {})
         self._schedule_refresh()
 
+    def set_edge_spacer_px(self, px: int) -> None:
+        """Height of a leader/trailer edge spacer in image px, or 0 when the
+        chart has none — used to grow the strip-hover frame over the spacers that
+        bracket each strip (#43). Read from the chart geometry by the caller."""
+        self._edge_spacer_px = max(0, int(px or 0))
+
     def _hover_patch_bounds(self, strip_rect: QRect) -> "QRect | None":
         """Bounding box of just the patches of the strip at *strip_rect* on the
         current page, or None when no per-patch geometry is known.
@@ -730,6 +741,13 @@ class TiffPreview(QWidget):
             cx = b.x() + b.width() / 2
             if strip_rect.left() <= cx <= strip_rect.right():
                 union = b if union is None else union.united(b)
+        if union is not None and self._edge_spacer_px > 0:
+            # Grow over the leader/trailer edge spacers that bracket the strip
+            # (one spacer above the first patch, one below the last) — they're
+            # part of the swiped strip but absent from the patch geometry (#43).
+            sp = self._edge_spacer_px
+            union = QRect(union.x(), union.y() - sp,
+                          union.width(), union.height() + 2 * sp)
         return union
 
     def set_overlay_mode(self, mode: str) -> None:
@@ -1694,7 +1712,12 @@ class TiffPreview(QWidget):
                 else:
                     self.unsetCursor()
                     self.setToolTip("")
-                self._schedule_refresh()
+                # Repaint the hover highlight NOW, not via the 80 ms debounce:
+                # the highlight changes only when the pointer crosses into a new
+                # strip (not every pixel), and a full repaint is ~3 ms, so the
+                # jump-target highlight should track the pointer without lag
+                # (Basti). The debounce is kept for bulk changes elsewhere.
+                self._repaint_label()
         self._update_ink_readout(event)   # per-ink cursor readout (#72)
         if self._coord_readout and self._pixmap is not None:
             self._coord_pos = self._img_label.mapFrom(
