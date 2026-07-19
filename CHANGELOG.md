@@ -1,5 +1,19 @@
 # Changelog
 
+## v3.13.12-beta.15
+
+- **Faster instrument connection.** On some computers there was a long pause —
+  often around ten seconds — between pressing Start and the instrument asking to
+  be calibrated. It happened because, before finding your USB instrument, the
+  measuring engine spent a couple of seconds trying each of the computer's serial
+  ports in case an old serial instrument was attached — and on macOS (and
+  sometimes Linux) there's usually an invisible Bluetooth serial port that eats
+  that time for nothing. ChromIQ now skips those known-empty ports, so the
+  calibration prompt appears almost immediately (measured: ~11 s → under half a
+  second). A real serial instrument on a USB-to-serial adapter is always kept,
+  and nothing about your measurements changes. There's a new switch for it in
+  Preferences → Beta ("Faster instrument connection", on by default).
+
 ## v3.13.12-beta.14
 
 - **Re-measuring a strip refreshes its live preview instead of doubling it.** When
