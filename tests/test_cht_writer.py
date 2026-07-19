@@ -77,3 +77,50 @@ def test_build_chart_emits_cht(tmp_path):
     for line in (l for l in txt.splitlines() if l.strip().startswith("X ")):
         _, _, _, _, _, w, h, x, y, _, _ = line.split()
         assert 0 <= float(x) <= 210 and 0 <= float(y) <= 297
+
+
+def test_cht_boxes_track_colormunki_offset_stagger(tmp_path):
+    """#35 (Knut): a ColorMunki 'offset every second strip' chart must produce a
+    .cht whose boxes follow the vertical stagger — so the scanner selection grid
+    fits the printed patches exactly. Verified against the rendered TIFF: every
+    box centre lands on a coloured (non-white) patch, and adjacent strips are
+    y-offset (the boxes are staggered, not a flat regular grid)."""
+    import numpy as np
+    from PIL import Image
+    random.seed(9)
+    prog = [(random.random() * 100, random.random() * 100, random.random() * 100)
+            for _ in range(240)]
+    R.write_ti1(R.ChartSpec.new("CM", "A4"), prog, tmp_path / "s.ti1")
+    res = le_chart.build_chart(
+        str(tmp_path / "s.ti1"), tmp_path / "chart",
+        instrument="CM", paper="A4", dpi=150, randomize=False,
+        cm_stagger=True, layout_mode="patch_first")
+
+    from workflow.layout_engine import geometry, instruments, papers
+    kw = {"instrument": "CM", "paper": "A4", "cm_stagger": True,
+          "layout_mode": "patch_first",
+          "area_target_count": res.layout.total_patches}
+    geom = instruments.geom_from_build_kwargs(kw)
+    w_mm, h_mm = papers.dimensions_mm("A4")
+    rects = geometry.patch_rects_px(geom, w_mm, h_mm, res.layout, 150)
+    page0 = [r for r in rects if r["page"] == 0]
+
+    # Adjacent strips (columns) start at different y — the stagger.
+    from collections import defaultdict
+    first_y_by_col = {}
+    for r in page0:
+        first_y_by_col.setdefault(r["x"], r["y"])
+        first_y_by_col[r["x"]] = min(first_y_by_col[r["x"]], r["y"])
+    assert len(set(first_y_by_col.values())) > 1, "strips are not staggered"
+
+    boxes = cht_writer.boxes_from_patch_rects(page0, h_mm, 150, page=0)
+    img = np.asarray(Image.open(res.tiff_paths[0]).convert("RGB"))
+    H, W, _ = img.shape
+    s = 150 / 25.4
+    misses = 0
+    for b in boxes:
+        cx = int((b["x"] + b["w"] / 2) * s)
+        cy = int((b["y"] + b["h"] / 2) * s)
+        if not (0 <= cy < H and 0 <= cx < W and bool(np.any(img[cy, cx] < 235))):
+            misses += 1
+    assert misses == 0, f"{misses} CHT boxes missed their patch"
