@@ -584,8 +584,9 @@ class Run:
                     log.warning("Could not delete %s: %s", sub, exc)
         s = self.stem
         for name in (
-            f"{s}.ti1", f"{s}.ti2", f"{s}.cht", f"{s}.ps",
-            f"{s}.channels.json",
+            f"{s}.ti1", f"{s}.ti2", f"{s}.cht", f"{s}.cie", f"{s}.ps",
+            f"{s}.pdf",                  # vector-PDF export (was left stale, Basti)
+            f"{s}.channels.json", f"{s}.strips.json",
             f"{s}.ti3",                  # the measurement (chartread output)
             f"{s}.icc",                  # the profile (colprof output)
             "merged.ti3", "merged.icc",  # build-time refinement merge outputs

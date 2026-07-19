@@ -389,6 +389,11 @@ def test_reset_chart_artefacts_preserves_preconditioning_and_meta(tmp_path: Path
     r2.chart_ti2.write_text("TI2")
     (r2.dir / "P_01.tif").write_text("TIFF")
     r2.chart_channels_json.write_text("{}")
+    # The vector-PDF export, .cie and .strips.json used to survive a re-gen
+    # (Basti: a stale PDF lingered in the working folder).
+    (r2.dir / "P.pdf").write_text("PDF")
+    (r2.dir / "P.cie").write_text("CIE")
+    (r2.dir / "P.strips.json").write_text("{}")
     r2.measurement_ti3.write_text("MEASURED")
     r2.merged_ti3.write_text("MERGED")
     r2.profile_icc.write_text("ICC2")
@@ -399,6 +404,7 @@ def test_reset_chart_artefacts_preserves_preconditioning_and_meta(tmp_path: Path
 
     # Wiped:
     for name in ("P.ti1", "P.ti2", "P_01.tif", "P.channels.json",
+                 "P.strips.json", "P.pdf", "P.cie",
                  "P.ti3", "merged.ti3", "P.icc"):
         assert not (r2.dir / name).exists(), f"{name} should be wiped"
     assert not r2.reads_dir.exists()
