@@ -179,6 +179,25 @@ def test_strip_measured_splits_only_real_patch_boxes(monkeypatch):
     assert items[3][0] == QRect(20, 30, 4, 18)     # B4's exact box
 
 
+def test_show_only_measured_blanks_unread(monkeypatch):
+    """set_show_only_measured toggles the flag and repaints without error; the
+    Measure-tab checkbox drives it (Knut)."""
+    pv = _make_preview()
+    pv.set_page_patch_boxes({0: [QRect(10, 10, 20, 20), QRect(40, 10, 20, 20)]})
+    assert pv._show_only_measured is False
+    pv.set_show_only_measured(True)
+    assert pv._show_only_measured is True
+    pv._repaint_label()                    # white-out path paints without raising
+    pv.set_show_only_measured(False)
+    assert pv._show_only_measured is False
+
+    tab = _make_tab()
+    monkeypatch.setattr(tab, "_current_mode", lambda: "manual")
+    tab._on_session_map([{"strip": "A", "sheet": 1, "read": False}])
+    tab._m_only_measured.setChecked(True)
+    assert tab._preview._show_only_measured is True
+
+
 def test_patch_warn_threshold_comes_from_settings():
     """The ΔE at which a patch gets the red warn outline is the user-set
     'patch_read_warn_de' limit, not a hard-coded constant (Knut)."""

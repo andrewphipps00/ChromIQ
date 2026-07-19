@@ -1496,7 +1496,10 @@ class TabMeasure(QWidget):
         # the chart preview. The "Show" combo matches the other compact
         # Measure-tab selectors; its help icon sits at the panel's right edge.
         self._m_engine_row = QWidget(left)
-        _show_row = QHBoxLayout(self._m_engine_row)
+        _engine_v = QVBoxLayout(self._m_engine_row)
+        _engine_v.setContentsMargins(0, 0, 0, 0)
+        _engine_v.setSpacing(6)
+        _show_row = QHBoxLayout()
         _show_row.setContentsMargins(0, 0, 0, 0)
         _show_row.setSpacing(6)
         _show_row.addWidget(QLabel(tr("Show:"), self._m_engine_row))
@@ -1527,6 +1530,31 @@ class TabMeasure(QWidget):
             "readings. (Screen colours are approximate; the numbers in your "
             "file are exact.)"),
             self._m_engine_row))
+        _engine_v.addLayout(_show_row)
+
+        # "Show only measured patches" (Knut): unread patches are drawn white
+        # with a thin outline, so how far you've got through the chart is
+        # obvious at a glance.
+        self._m_only_measured = QCheckBox(
+            tr("Show only measured patches"), self._m_engine_row)
+        self._m_only_measured.toggled.connect(
+            lambda on: self._preview.set_show_only_measured(on))
+        _om_row = QHBoxLayout()
+        _om_row.setContentsMargins(0, 0, 0, 0)
+        _om_row.addWidget(self._m_only_measured)
+        _om_row.addStretch(1)
+        _om_row.addWidget(TooltipButton(
+            tr("Show only measured patches"),
+            tr("Turn this on to see your progress through the chart at a glance: "
+            "every patch you have already read keeps its colour (or split), and "
+            "every patch you have NOT read yet is blanked to white with a thin "
+            "outline.\n\nAs you work down the strips, the white area shrinks and "
+            "the coloured, measured area grows — so it's instantly clear how far "
+            "you've come and which rows are still to do. Turn it off to see the "
+            "whole printed chart again. It only changes the preview, never your "
+            "readings."),
+            self._m_engine_row))
+        _engine_v.addLayout(_om_row)
         mcg.addWidget(self._m_engine_row)
         self._m_engine_row.setVisible(False)
         # The autosave reassurance lives on the preview itself (as a banner

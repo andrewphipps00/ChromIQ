@@ -280,6 +280,9 @@ class TiffPreview(QWidget):
         # Split-patch display: "both" (diagonal split), "expected" or
         # "measured" (whole patch one side). Switchable any time (#126, Knut).
         self._overlay_mode: str = "both"
+        # "Show only measured patches" (#126, Knut): unread patches drawn white
+        # with a thin outline so reading progress is obvious.
+        self._show_only_measured: bool = False
         self.stripe_clicked_page = -1  # last emit bookkeeping (tests)
         self._stripe_arrow_mode: str = "base"
         self._pixmap: QPixmap | None = None
@@ -639,6 +642,18 @@ class TiffPreview(QWidget):
 
     def overlay_mode(self) -> str:
         return self._overlay_mode
+
+    def set_show_only_measured(self, on: bool) -> None:
+        """Blank unread patches to white (thin outline) so reading progress is
+        obvious; the measured split patches still draw on top (#126, Knut).
+        Applies immediately."""
+        on = bool(on)
+        if on != self._show_only_measured:
+            self._show_only_measured = on
+            if self._pixmap is not None:
+                self._repaint_label()
+            else:
+                self._schedule_refresh()
 
     def has_patch_overlay(self) -> bool:
         return bool(self._patch_overlay)
@@ -1190,6 +1205,25 @@ class TiffPreview(QWidget):
         from PyQt6.QtGui import QPen, QPainterPath as _QP
 
         items = self._patch_overlay.get(self._current, [])
+        # "Show only measured patches" (Knut): blank every patch on the page to
+        # white with a thin outline first, so unread patches read as empty; the
+        # measured split-patch items then draw on top, leaving only the read
+        # ones coloured — an at-a-glance progress view.
+        if self._show_only_measured:
+            boxes = self._page_patch_boxes.get(self._current) or []
+            if boxes:
+                pen = QPen(QColor(180, 180, 180))
+                pen.setWidthF(1.0)
+                painter.setPen(pen)
+                for b in boxes:
+                    bx0 = round(b.x() * s + ox)
+                    by0 = round(b.y() * s + oy)
+                    bx1 = round((b.x() + b.width()) * s + ox)
+                    by1 = round((b.y() + b.height()) * s + oy)
+                    painter.fillRect(bx0, by0, max(1, bx1 - bx0),
+                                     max(1, by1 - by0), QColor(255, 255, 255))
+                    painter.drawRect(bx0, by0, max(1, bx1 - bx0),
+                                     max(1, by1 - by0))
         for rect, c_exp, c_meas, warn in items:
             # Round BOTH edges to whole pixels so the split covers exactly the
             # same span as the printed patch — flooring each of x/y/w/h
