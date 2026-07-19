@@ -164,6 +164,53 @@ def list_reports(run_dir: str | Path) -> list[Path]:
     return sorted(reports.glob("report_*.json"))
 
 
+def list_project_reports(run_dir: str | Path) -> list[Path]:
+    """Every saved report across ALL runs of this project — the printer's full
+    measurement history (#40, Knut). *run_dir* is any run folder; its sibling
+    ``run*`` folders are the printer's other builds. Sorted oldest-first by the
+    report's ``created`` stamp (falling back to the filename). Falls back to the
+    single run's reports when the folder isn't a ``runs/runN`` layout."""
+    from core.file_manager import REPORTS_DIRNAME
+    run_dir = Path(run_dir)
+    runs_root = run_dir.parent
+    paths: list[Path] = []
+    if runs_root.is_dir() and run_dir.name.startswith("run"):
+        paths = list(runs_root.glob(f"*/{REPORTS_DIRNAME}/report_*.json"))
+    if not paths:                                   # not a runs/runN layout
+        paths = list_reports(run_dir)
+
+    def _created(p: Path) -> str:
+        try:
+            return str(json.loads(p.read_text()).get("created", "")) or p.name
+        except Exception:  # noqa: BLE001
+            return p.name
+    return sorted(paths, key=_created)
+
+
+def report_trend(reports: "list[dict]") -> "list[dict]":
+    """A time series for the trend chart from a list of report dicts (#40).
+
+    One point per report that carries at least one plottable metric, in the
+    input order (already oldest-first from :func:`list_project_reports`):
+    ``{"created", "chart", "mean", "max", "p95", "white_L", "black_L"}`` —
+    metric keys absent when the report lacks them (no design reference)."""
+    series: list[dict] = []
+    for r in reports:
+        pt: dict = {"created": r.get("created"), "chart": r.get("chart")}
+        de = r.get("de00") or {}
+        for k in ("mean", "max", "p95"):
+            if de.get(k) is not None:
+                pt[k] = float(de[k])
+        w, b = r.get("paper_white"), r.get("max_black")
+        if w and w.get("lab"):
+            pt["white_L"] = float(w["lab"][0])
+        if b and b.get("lab"):
+            pt["black_L"] = float(b["lab"][0])
+        if len(pt) > 2:                             # more than just created+chart
+            series.append(pt)
+    return series
+
+
 def compare_reports(older: dict, newer: dict) -> dict:
     """Summarise the change between two reports of the same chart — the drift
     signal Knut wants (ink/printer/instrument ageing over time)."""

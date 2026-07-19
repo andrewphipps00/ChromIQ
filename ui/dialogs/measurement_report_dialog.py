@@ -12,9 +12,10 @@ from __future__ import annotations
 import html
 from pathlib import Path
 
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import QPointF, QRectF, Qt
+from PyQt6.QtGui import QColor, QFont, QPainter, QPen
 from PyQt6.QtWidgets import (
-    QDialog, QHBoxLayout, QLabel, QPushButton, QTextBrowser, QVBoxLayout,
+    QDialog, QHBoxLayout, QLabel, QPushButton, QTextBrowser, QVBoxLayout, QWidget,
 )
 
 from core.i18n import tr
@@ -25,6 +26,95 @@ from ui.widgets import open_file_dialog, tint_dialog_primary
 log = get_logger(__name__)
 
 _TAB_COLOR = "#56d6a5"
+
+
+class _TrendChart(QWidget):
+    """A compact line chart of the printer's measurement history over time
+    (#40, Knut): mean and worst ΔE00 across every saved report, so drift —
+    ageing inks, a drifting printer or instrument — is visible at a glance.
+    Only the CHANGE over time is meaningful on a printer, which is exactly what
+    a trend shows. Hidden by the dialog until there are at least two points."""
+
+    _MEAN = QColor("#56d6a5")
+    _WORST = QColor("#e0864b")
+
+    def __init__(self, parent=None) -> None:
+        super().__init__(parent)
+        self._series: list[dict] = []
+        self._dark = True
+        self.setMinimumHeight(190)
+
+    def set_series(self, series: "list[dict]", dark: bool = True) -> None:
+        self._series = [p for p in (series or []) if "mean" in p or "max" in p]
+        self._dark = dark
+        self.setVisible(len(self._series) >= 2)
+        self.update()
+
+    def has_trend(self) -> bool:
+        return len(self._series) >= 2
+
+    def paintEvent(self, _ev) -> None:  # noqa: N802
+        pts = self._series
+        if len(pts) < 2:
+            return
+        fg = QColor(210, 210, 210) if self._dark else QColor(60, 60, 60)
+        grid = QColor(255, 255, 255, 28) if self._dark else QColor(0, 0, 0, 22)
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        font = QFont(); font.setPixelSize(10); p.setFont(font)
+
+        L, R, T, B = 40.0, 12.0, 24.0, 26.0
+        w = max(1.0, self.width() - L - R)
+        h = max(1.0, self.height() - T - B)
+        vals = [v for pt in pts for k in ("mean", "max") if (v := pt.get(k)) is not None]
+        vmax = max(vals + [1.0]) * 1.12
+        n = len(pts)
+
+        def xy(i: int, val: float):
+            x = L + (w * i / (n - 1))
+            y = T + h * (1.0 - val / vmax)
+            return QPointF(x, y)
+
+        # Y grid + labels (0, mid, top).
+        p.setPen(QPen(grid, 1.0))
+        for frac in (0.0, 0.5, 1.0):
+            yy = T + h * (1.0 - frac)
+            p.drawLine(QPointF(L, yy), QPointF(L + w, yy))
+            p.setPen(QPen(fg, 1.0))
+            p.drawText(QRectF(0, yy - 7, L - 4, 14),
+                       Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter,
+                       f"{vmax * frac:.1f}")
+            p.setPen(QPen(grid, 1.0))
+
+        # Two series.
+        for key, col in (("mean", self._MEAN), ("max", self._WORST)):
+            poly = [xy(i, pt[key]) for i, pt in enumerate(pts) if pt.get(key) is not None]
+            if len(poly) < 2:
+                continue
+            p.setPen(QPen(col, 2.0))
+            for a, b in zip(poly, poly[1:]):
+                p.drawLine(a, b)
+            p.setBrush(col); p.setPen(Qt.PenStyle.NoPen)
+            for q in poly:
+                p.drawEllipse(q, 2.6, 2.6)
+
+        # X labels: first and last report date (YYYY-MM-DD from the ISO stamp).
+        p.setPen(QPen(fg, 1.0))
+        for i, align in ((0, Qt.AlignmentFlag.AlignLeft),
+                         (n - 1, Qt.AlignmentFlag.AlignRight)):
+            d = str(pts[i].get("created") or "")[:10]
+            p.drawText(QRectF(L, self.height() - B + 4, w, 16),
+                       align | Qt.AlignmentFlag.AlignTop, d)
+
+        # Legend.
+        lx = L + 4
+        for lbl, col in ((tr("Average"), self._MEAN), (tr("Worst"), self._WORST)):
+            p.setBrush(col); p.setPen(Qt.PenStyle.NoPen)
+            p.drawEllipse(QPointF(lx + 4, T - 12), 3.0, 3.0)
+            p.setPen(QPen(fg, 1.0))
+            p.drawText(QPointF(lx + 12, T - 8), lbl)
+            lx += 26 + p.fontMetrics().horizontalAdvance(lbl)
+        p.end()
 
 
 class MeasurementReportDialog(QDialog):
@@ -68,6 +158,13 @@ class MeasurementReportDialog(QDialog):
             "signal of drift — ageing inks, a drifting printer, or a "
             "drifting instrument. Press “Save this report” after each "
             "measurement to build that history.\n\n"
+            "Trend over time: once you've saved two or more reports for a "
+            "printer, a small chart appears at the top plotting the average "
+            "and worst ΔE00 of every saved measurement across all of this "
+            "printer's builds — so a slow rise (drift) or a sudden jump (a "
+            "bad print or a misread) stands out at a glance. This is the "
+            "per-printer view: it gathers the whole history for this project, "
+            "which is one printer and paper.\n\n"
             "Screen colours are approximate; the numbers come from your "
             "measurement file and are exact."),
             self))
@@ -79,6 +176,14 @@ class MeasurementReportDialog(QDialog):
         btn_row.addWidget(self._open_btn)
         btn_row.addStretch(1)
         v.addLayout(btn_row)
+
+        self._trend_label = QLabel(tr("Trend over time (this printer)"), self)
+        self._trend_label.setStyleSheet("font-weight:bold;margin-top:2px")
+        self._trend_label.setVisible(False)
+        v.addWidget(self._trend_label)
+        self._trend = _TrendChart(self)
+        self._trend.setVisible(False)
+        v.addWidget(self._trend)
 
         self._view = QTextBrowser(self)
         self._view.setOpenExternalLinks(False)
@@ -108,7 +213,7 @@ class MeasurementReportDialog(QDialog):
 
     def _load(self, path: Path) -> None:
         from workflow.measurement_report import (
-            build_report, compare_reports, list_reports,
+            build_report, compare_reports, list_project_reports, report_trend,
         )
         import json
         try:
@@ -117,19 +222,26 @@ class MeasurementReportDialog(QDialog):
             self._view.setHtml(self._error_html(str(exc)))
             return
         self._ti3 = Path(path)
-        # Compare against the most recent prior saved report of this chart. The
-        # newest saved report is usually this very measurement (auto-saved), so
-        # compare against the one before it when present.
-        prior = [p for p in list_reports(self._ti3.parent)]
-        comparison = None
-        for p in reversed(prior):
+        # The printer's full history: every saved report across all runs of this
+        # project, oldest first (#40). The current measurement is usually the
+        # newest auto-saved one; compare against the report before it, and plot
+        # the whole series as a trend.
+        history: list[dict] = []
+        for p in list_project_reports(self._ti3.parent):
             try:
-                older = json.loads(p.read_text())
+                history.append(json.loads(p.read_text()))
             except Exception:  # noqa: BLE001
                 continue
+        comparison = None
+        for older in reversed(history):
             if older.get("created") != self._report.get("created"):
                 comparison = compare_reports(older, self._report)
                 break
+
+        from ui.theme import resolve_mode
+        dark = resolve_mode(self._settings.get("appearance", "auto")) != "light"
+        self._trend.set_series(report_trend(history), dark=dark)
+        self._trend_label.setVisible(self._trend.has_trend())
         self._view.setHtml(self._report_html(self._report, comparison))
 
     # ------------------------------------------------------------------

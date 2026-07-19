@@ -78,3 +78,50 @@ def test_save_list_and_compare(chart, tmp_path):
     assert "de00_mean_delta" in cmp
     assert cmp["de00_max_delta"] > 0          # it drifted worse
     assert "paper_white_de" in cmp
+
+
+def test_list_project_reports_gathers_across_runs(tmp_path: Path) -> None:
+    """#40: the printer's history spans every run of the project, oldest first."""
+    import json
+    from workflow.measurement_report import list_project_reports
+    from core.file_manager import REPORTS_DIRNAME
+    runs = tmp_path / "runs"
+    for run, created in (("run1", "2026-01-01T09:00:00"),
+                         ("run2", "2026-03-01T09:00:00"),
+                         ("run1", "2026-02-01T09:00:00")):
+        d = runs / run / REPORTS_DIRNAME
+        d.mkdir(parents=True, exist_ok=True)
+        (d / f"report_{created.replace(':', '-')}.json").write_text(
+            json.dumps({"created": created, "chart": "P"}))
+    got = list_project_reports(runs / "run2")           # any run dir
+    assert len(got) == 3
+    stamps = [json.loads(p.read_text())["created"] for p in got]
+    assert stamps == sorted(stamps)                     # oldest-first, cross-run
+
+
+def test_report_trend_series_extracts_plottable_metrics() -> None:
+    from workflow.measurement_report import report_trend
+    reports = [
+        {"created": "2026-01-01", "chart": "P",
+         "de00": {"mean": 3.0, "max": 7.0, "p95": 5.0},
+         "paper_white": {"lab": [96.0, 0, 0]}, "max_black": {"lab": [12.0, 0, 0]}},
+        {"created": "2026-02-01", "chart": "P",              # no reference
+         "paper_white": {"lab": [95.0, 0, 0]}, "max_black": {"lab": [12.5, 0, 0]}},
+        {"created": "2026-03-01", "chart": "P", "patches": 100},  # nothing plottable
+    ]
+    tr = report_trend(reports)
+    assert len(tr) == 2                                 # third has no metric
+    assert tr[0]["mean"] == 3.0 and tr[0]["white_L"] == 96.0
+    assert "mean" not in tr[1] and tr[1]["white_L"] == 95.0
+
+
+def test_trend_chart_widget_visibility(qapp) -> None:
+    from ui.dialogs.measurement_report_dialog import _TrendChart
+    w = _TrendChart()
+    w.set_series([{"created": "2026-01-01", "mean": 3.0}], dark=True)
+    assert not w.has_trend() and not w.isVisible()      # one point → hidden
+    w.set_series([{"created": "2026-01-01", "mean": 3.0},
+                  {"created": "2026-02-01", "mean": 2.5, "max": 6.0}], dark=True)
+    assert w.has_trend()
+    w.resize(400, 200)
+    w.grab()                                            # paints without error
