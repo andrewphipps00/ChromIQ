@@ -109,6 +109,37 @@ def test_patch_overlay_accumulates_and_clears():
     pv._repaint_label()
 
 
+def test_patch_boxes_hex_stagger_tracks_drawn_hexagons(tmp_path):
+    """#32 (Knut): the split-patch overlay boxes for a SpectroScan hexagonal
+    chart must follow the ±¼-width per-row zigzag the renderer draws, so a split
+    lands on its hexagon and not a quarter-patch off. Odd patch numbers shift
+    left, even ones right; a non-hex chart is untouched."""
+    import json
+    from ui.tabs.tab_measure import patch_boxes_from_sidecar
+    w = 40
+    patches = [                                        # one column, 4 rows
+        {"page": 0, "loc": "A1", "x": 100, "y": 10, "w": w, "h": 40},
+        {"page": 0, "loc": "A2", "x": 100, "y": 60, "w": w, "h": 40},
+        {"page": 0, "loc": "A3", "x": 100, "y": 110, "w": w, "h": 40},
+    ]
+    (tmp_path / "c.channels.json").write_text(json.dumps(
+        {"layout": {"patches": patches,
+                    "recipe": {"instrument": "SS", "hflag": True}}}))
+    (tmp_path / "c.ti2").write_text("x")
+    box = patch_boxes_from_sidecar(tmp_path / "c.ti2", 1)[0]
+    assert box["A1"].x() == 100 - round(w / 4)         # row 0 → left
+    assert box["A2"].x() == 100 + round(w / 4)         # row 1 → right
+    assert box["A3"].x() == 100 - round(w / 4)         # row 2 → left
+
+    # A rectangular SpectroScan chart is NOT staggered.
+    (tmp_path / "r.channels.json").write_text(json.dumps(
+        {"layout": {"patches": patches,
+                    "recipe": {"instrument": "SS", "hflag": False}}}))
+    (tmp_path / "r.ti2").write_text("x")
+    rbox = patch_boxes_from_sidecar(tmp_path / "r.ti2", 1)[0]
+    assert rbox["A1"].x() == 100 and rbox["A2"].x() == 100
+
+
 def test_hover_bounds_hug_patches_and_include_offset_overhang():
     """The click-to-jump hover outline must wrap only a strip's patches — not
     the label band above them, not the white paper beside them — and on a

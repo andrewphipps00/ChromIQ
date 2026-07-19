@@ -360,24 +360,46 @@ def patch_boxes_from_sidecar(ti2_path: Path, n_pages: int
                 continue
         return got
 
+    got = False
     strips_json = ti2_path.with_suffix(".strips.json")
     if strips_json.is_file():
         try:
             data = json.loads(strips_json.read_text())
-            if _ingest(data.get("patches") or []):
-                return out
+            got = _ingest(data.get("patches") or [])
         except Exception:
             pass
 
-    channels = ti2_path.with_suffix(".channels.json")
-    if channels.is_file():
-        try:
-            layout = json.loads(channels.read_text()).get("layout") or {}
-            if isinstance(layout, dict):
-                _ingest(layout.get("patches") or [])
-        except Exception:
-            pass
+    if not got:
+        channels = ti2_path.with_suffix(".channels.json")
+        if channels.is_file():
+            try:
+                layout = json.loads(channels.read_text()).get("layout") or {}
+                if isinstance(layout, dict):
+                    _ingest(layout.get("patches") or [])
+            except Exception:
+                pass
+    _apply_hex_stagger(ti2_path, out)
     return out
+
+
+def _apply_hex_stagger(ti2_path: Path, pages: "list[dict[str, QRect]]") -> None:
+    """SpectroScan hexagons are DRAWN with a ±¼-width horizontal zigzag by row
+    (raster._hexagon_points), but the recorded boxes hold only the slot x. So the
+    split overlay would sit a quarter-patch off the real hexagons on every row
+    (Knut #32). Shift each box to match the drawn hexagon: odd patch numbers
+    (1,3,5…) shift left, even ones right — exactly the renderer's step parity."""
+    import re
+    from workflow.hex_support import chart_is_hexagonal
+    if not chart_is_hexagonal(ti2_path):
+        return
+    for page in pages:
+        for loc, r in list(page.items()):
+            m = re.search(r"(\d+)\s*$", loc)
+            if not m:
+                continue
+            j = int(m.group(1)) - 1                    # 0-based row in the strip
+            dx = round(-r.width() / 4) if (j % 2 == 0) else round(r.width() / 4)
+            page[loc] = QRect(r.x() + dx, r.y(), r.width(), r.height())
 
 
 def engine_strip_rects_from_sidecar(sidecar: Path, n_pages: int):
