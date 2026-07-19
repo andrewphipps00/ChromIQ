@@ -1219,15 +1219,37 @@ class TiffPreview(QWidget):
             # columns are coloured, unread ones are blank.
             read_map = self._stripe_read_map or {}
             white = QColor(255, 255, 255)
-            n = len(self._stripe_rects)
+            rects = self._stripe_rects
+            n = len(rects)
 
             def _bounds(k):
-                return (self._hover_patch_bounds(self._stripe_rects[k])
-                        or self._stripe_rects[k])
+                return self._hover_patch_bounds(rects[k]) or rects[k]
+
+            # A small pad = the inter-row spacer, so the blank also covers the
+            # spacer just above the first row and below the last row (otherwise
+            # a chart hairline peeks out at the blank's top/bottom edge).
+            pad = 2.0
+            allb = self._page_patch_boxes.get(self._current) or []
+            _cols: dict = {}
+            for b in allb:
+                _cols.setdefault(b.x(), []).append(b)
+            for _bs in _cols.values():
+                _bs.sort(key=lambda b: b.y())
+                for _k in range(len(_bs) - 1):
+                    _g = _bs[_k + 1].y() - (_bs[_k].y() + _bs[_k].height())
+                    if _g > 0:
+                        pad = float(_g)
+                        break
+                else:
+                    continue
+                break
+
             # Blank each MAXIMAL RUN of consecutive unread strips as ONE
-            # rectangle, so the strip-gaps between blanked columns are covered
-            # too (a per-strip blank left those gaps showing the chart as faint
-            # hairlines). One rect per run ⇒ no internal edges to alias.
+            # rectangle, extended to the GAP MIDPOINTS on the left/right (so the
+            # strip-gap next to a measured column is covered without touching it)
+            # and past the row spacer top/bottom. One rect per run, reaching the
+            # neighbouring structure ⇒ no chart edge peeks out and nothing to
+            # alias, at any zoom (Sebastian, hyper-critical).
             i = 0
             while i < n:
                 if read_map.get(i, False):
@@ -1237,15 +1259,52 @@ class TiffPreview(QWidget):
                 while j < n and not read_map.get(j, False):
                     j += 1
                 bl = [_bounds(k) for k in range(i, j)]
-                minx = min(b.x() for b in bl)
-                miny = min(b.y() for b in bl)
-                maxx = max(b.x() + b.width() for b in bl)
-                maxy = max(b.y() + b.height() for b in bl)
+                miny = min(b.y() for b in bl) - pad
+                maxy = max(b.y() + b.height() for b in bl) + pad
+                # left edge: midpoint of the gap to the measured strip on the
+                # left, or a pad past this run's left when it starts the row.
+                if i > 0:
+                    left = (rects[i - 1].right() + rects[i].left()) / 2.0
+                else:
+                    left = rects[i].left() - pad
+                # right edge: midpoint of the gap to the measured strip on the
+                # right, or a pad past this run's right when it ends the row.
+                if j < n:
+                    right = (rects[j - 1].right() + rects[j].left()) / 2.0
+                else:
+                    right = rects[j - 1].right() + pad
                 painter.fillRect(
-                    QRectF(minx * s + ox, miny * s + oy,
-                           (maxx - minx) * s, (maxy - miny) * s),
+                    QRectF(left * s + ox, miny * s + oy,
+                           (right - left) * s, (maxy - miny) * s),
                     white)
                 i = j
+
+            # On the clean white background, draw a thin cell grid so each unread
+            # patch reads as its own empty cell (Knut). Each patch gets its
+            # left + right + bottom edge, and the TOP edge only on the topmost
+            # patch of its strip — so between two stacked patches there is a
+            # single line, never two side by side. Read strips are left alone,
+            # so their real spacers stay visible (Knut).
+            gpen = QPen(QColor(206, 206, 206))
+            gpen.setCosmetic(True)
+            gpen.setWidthF(1.0)
+            painter.setPen(gpen)
+            for i, srect in enumerate(self._stripe_rects):
+                if read_map.get(i, False):
+                    continue
+                pats = [b for b in allb
+                        if srect.left() <= b.x() + b.width() / 2 <= srect.right()]
+                pats.sort(key=lambda b: b.y())
+                for idx, b in enumerate(pats):
+                    x0 = b.x() * s + ox
+                    y0 = b.y() * s + oy
+                    x1 = (b.x() + b.width()) * s + ox
+                    y1 = (b.y() + b.height()) * s + oy
+                    painter.drawLine(QPointF(x1, y0), QPointF(x1, y1))   # right
+                    painter.drawLine(QPointF(x0, y0), QPointF(x0, y1))   # left
+                    painter.drawLine(QPointF(x0, y1), QPointF(x1, y1))   # bottom
+                    if idx == 0:
+                        painter.drawLine(QPointF(x0, y0), QPointF(x1, y0))  # top
         for rect, c_exp, c_meas, warn in items:
             # Round BOTH edges to whole pixels so the split covers exactly the
             # same span as the printed patch — flooring each of x/y/w/h
