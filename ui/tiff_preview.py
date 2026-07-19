@@ -1555,6 +1555,19 @@ class TiffPreview(QWidget):
                         painter.drawPath(self._patch_hexagon(b, s, ox, oy))
                     continue
                 left_is_border = (i == 0) or read_map.get(i - 1, False)
+                # The left edge is normally deduped against the unread column to
+                # the left (its right edge already draws that boundary). But that
+                # only holds when the neighbour's patches line up row-for-row. On
+                # a ColorMunki "offset every second strip" chart the neighbour is
+                # shifted half a patch, so it covers only the overlapping middle —
+                # the top and bottom patches would lose their left edge (Knut). So
+                # we dedup a patch's left edge ONLY when a left-neighbour patch
+                # fully spans it vertically; otherwise we draw it.
+                left_pats = []
+                if not left_is_border:
+                    lrect = self._stripe_rects[i - 1]
+                    left_pats = [b for b in allb
+                                 if lrect.left() <= b.x() + b.width() / 2 <= lrect.right()]
                 for idx, b in enumerate(pats):
                     x0 = b.x() * s + ox
                     y0 = b.y() * s + oy
@@ -1564,7 +1577,10 @@ class TiffPreview(QWidget):
                     painter.drawLine(QPointF(x0, y1), QPointF(x1, y1))   # bottom
                     if idx == 0:
                         painter.drawLine(QPointF(x0, y0), QPointF(x1, y0))  # top
-                    if left_is_border:
+                    covered = any(lb.y() <= b.y() + 1
+                                  and lb.y() + lb.height() >= b.y() + b.height() - 1
+                                  for lb in left_pats)
+                    if left_is_border or not covered:
                         painter.drawLine(QPointF(x0, y0), QPointF(x0, y1))  # left
         for rect, c_exp, c_meas, warn in items:
             if self._hex_zigzag:
