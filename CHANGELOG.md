@@ -7,7 +7,10 @@
   vivid colours legitimately sit 30–40 ΔE away on a perfect print, which made a
   good chart light up in red almost everywhere. A patch is now flagged only when
   it is BOTH past the limit AND clearly stands out from the rest of its own strip
-  — a real misread stands out; ordinary print-vs-sRGB difference does not.
+  — a real misread stands out; ordinary print-vs-sRGB difference does not. If you
+  had raised the flagging limit in an earlier beta to escape the old false
+  alarms, it is reset to the default — the higher value would now only hide real
+  misreads (a value you lowered is kept).
 - **Measurement report — compare across runs.** The PDF can now include every
   saved measurement of the printer (a checkbox) with a per-run data table and a
   side-by-side comparison of each metric; paper white and darkest black are now

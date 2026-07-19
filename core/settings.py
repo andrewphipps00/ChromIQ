@@ -477,7 +477,7 @@ def thresholds_for_combo(
 # Bump when a shipped default changes in a way that must reach users who have
 # the OLD default persisted. Settings → Save writes every key, so a stored
 # value otherwise pins a user to the old behaviour for good.
-SETTINGS_SCHEMA = 7
+SETTINGS_SCHEMA = 8
 
 # key → the old default(s) it must no longer be stuck on. Only a stored value
 # EQUAL to one of the old defaults is dropped (so it falls through to the new
@@ -539,11 +539,33 @@ class AppSettings:
                 dropped.append(key)
         if self._migrate_margin_landscape_jig():
             dropped.append("margin_thresholds[A4/Letter Landscape jig]")
+        if self._migrate_patch_warn_floor():
+            dropped.append("patch_read_warn_de (raised value now too high)")
         self._qs.setValue("settings_schema", SETTINGS_SCHEMA)
         if dropped:
             log.info("Settings migrated to schema %d; dropped stale defaults: %s",
                      SETTINGS_SCHEMA, ", ".join(dropped))
         return dropped
+
+    def _migrate_patch_warn_floor(self) -> bool:
+        """schema 8 (#49): the patch-read warning outline is now adaptive — a
+        patch is flagged only if it is BOTH past this limit AND an outlier within
+        its own strip. The false alarms that led people to RAISE the old absolute
+        limit (vivid patches sit far from sRGB on a good print) are now handled
+        automatically, so a raised value merely hides genuine misreads. Reset any
+        value ABOVE the default back to it (drop it → falls back to the default).
+        A value the user LOWERED, wanting more sensitivity, is left untouched."""
+        raw = self._qs.value("patch_read_warn_de", None)
+        if raw is None:
+            return False
+        try:
+            val = float(raw)
+        except (TypeError, ValueError):
+            return False
+        if val > 20.0 + 1e-9:              # 20.0 is the default floor
+            self._qs.remove("patch_read_warn_de")
+            return True
+        return False
 
     def _migrate_margin_landscape_jig(self) -> bool:
         """schema 7 (#125): give i1Pro / i1Pro 3+ A4 & Letter *Landscape* the jig
