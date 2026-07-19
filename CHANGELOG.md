@@ -1,5 +1,26 @@
 # Changelog
 
+## v3.13.12-beta.9
+
+More of Knut's chart-layout wish list.
+
+- **Chart Layout margins update the moment you switch instruments.** Picking a
+  different instrument now refreshes the per-side margin boxes right away, even
+  for instruments (like the SpectroScan) that don't carry their own fixed
+  margin minimums — the boxes fill from the chart's own layout instead of
+  staying stale.
+- **Read strips stay clean in "Show only measured patches".** With the switch
+  on, strips you've already measured are shown plainly, with no leftover grid
+  lines over them.
+- **Hexagonal charts explain themselves.** A chart built with the SpectroScan's
+  hexagonal patches can't be used by the scanner or camera tools — the
+  recognition file they rely on can only describe rectangular patches. ChromIQ
+  now tells you this clearly, right when it matters: a friendly heads-up if you
+  switch the patch shape to hexagonal while making a chart, and a plain
+  explanation (instead of a late failure) if you try to feed such a chart to
+  **Create scanner/camera target** or **Build profile with scanner/camera** —
+  along with how to make a chart that works.
+
 ## v3.13.12-beta.8
 
 More of Knut's chart-reading-engine wish list (engine on).
