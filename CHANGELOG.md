@@ -1,5 +1,26 @@
 # Changelog
 
+## v3.13.12-beta.17
+
+- **Instrument-specific measuring instructions.** The "calibrate the instrument"
+  and "how to measure" pop-ups now match the instrument your chart was made for:
+  a ColorMunki / i1Studio tells you to turn the dial to the calibration position
+  (the small gear icon); an i1Pro tells you to use its base and white tile; the
+  SpectroScan and any unknown instrument keep the general wording.
+- **The strip highlight follows hexagonal patches.** On SpectroScan hexagonal
+  charts the mint strip outline in the Measure preview now traces the column's
+  actual hexagons and their zigzag — one clean frame for the whole column,
+  instead of a straight box that reached into the next column. The swipe arrow is
+  also hidden for the SpectroScan, which reads patch-by-patch and isn't swiped.
+- **"Offset every second strip" is ColorMunki-only again.** In Preferences →
+  Chart Layout it was wrongly showing for the SpectroScan, i1Pro, DTP41 and
+  DTP51; it (and the ColorMunki/SpectroScan clip-border On/Off selector) is now
+  hidden for those instruments from the moment the window opens.
+- **Building your own chart from a ready-made preset works.** Loading a built-in
+  preset such as "TC9.18 extended greys by Pharmacist" and then switching on
+  "Use the ChromIQ layout engine" now reveals the engine's layout controls, so
+  you can adapt the layout instead of being stuck with the old page setup.
+
 ## v3.13.12-beta.16
 
 - **Save a shuffled copy of the patch set for i1Profiler.** When you hand a patch
