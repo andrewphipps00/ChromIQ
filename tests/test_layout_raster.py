@@ -72,6 +72,40 @@ def test_by_grid_loaded_patchset_honours_requested_rows(tmp_path):
         f"requested 15×16, got {n_cols}×{n_rows} (off-by-one row drop)"
 
 
+def test_hex_strip_count_matches_columns_not_interlock(tmp_path):
+    """Knut #30: on a SpectroScan hexagonal chart the interlocking rows LOOK
+    like an extra column between A and B, but that is the honeycomb tessellation
+    — it must NOT be counted as a separate strip. The number of strips (label
+    letters) must equal the number of patch columns, and columns × rows must
+    equal the patch count (no phantom strip)."""
+    import random
+    from workflow.layout_engine import chart as le_chart, instruments, papers
+    from workflow.layout_engine.presets import default_recipe
+    import workflow.ti2_relayout as R
+
+    random.seed(5)
+    prog = [(random.random() * 100,) * 3 for _ in range(300)]
+    R.write_ti1(R.ChartSpec.new("SS", "A4"), prog, tmp_path / "h.ti1")
+    rec = default_recipe("SS", "A4", mode="hex")     # hflag=True
+    rec.randomize = False
+    rec.layout_mode = "area_first"
+    rec.area_method = "by_grid"
+    rec.area_cols, rec.area_rows = 10, 20
+    kw = rec.build_kwargs(); kw["dpi"] = 150
+    res = le_chart.build_chart(str(tmp_path / "h.ti1"), tmp_path / "h", **kw)
+
+    kw["area_target_count"] = res.layout.total_patches
+    geom = instruments.geom_from_build_kwargs(kw)
+    w, h = papers.dimensions_mm("A4")
+    rects = geometry.patch_rects_px(geom, w, h, res.layout, 150)
+    page0 = [d for d in rects if d["page"] == 0]
+    n_cols = len({d["x"] for d in page0})            # slot columns (strip x's)
+    n_rows = len({d["y"] for d in page0})
+    n_letters = len({d["loc"][0] for d in page0})    # distinct strip labels
+    assert n_cols == n_letters == 10                 # not 2×-1 interlock columns
+    assert n_cols * n_rows == len(page0)             # no phantom strip
+
+
 def test_saved_tiff_colours_match_ti2_at_every_location(tmp_path):
     """The chartread-critical property end to end: every patch in the SAVED .tif
     must show the exact device colour the .ti2 records at that SAMPLE_LOC — so
