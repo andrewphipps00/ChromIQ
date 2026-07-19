@@ -1576,22 +1576,32 @@ class TiffPreview(QWidget):
                      else QRect(int(rect.x()), int(rect.y()),
                                 int(rect.width()), int(rect.height())))
                 hexp = self._patch_hexagon(b, s, ox, oy)
-                painter.save()
+                # Fill by PATH intersection, never a clip: a clip path is hard-
+                # edged and left a faint seam around every patch (Knut, zoomed in).
+                # A hairline stroke in the fill colour closes the sub-pixel gaps
+                # where antialiased neighbours meet, so the honeycomb reads solid.
                 if self._overlay_mode == "expected":
                     painter.fillPath(hexp, c_exp)
+                    _edge = c_exp
                 elif self._overlay_mode == "measured":
                     painter.fillPath(hexp, c_meas)
+                    _edge = c_meas
                 else:
-                    painter.setClipPath(hexp)
+                    painter.fillPath(hexp, c_meas)        # whole patch = measured ◢
                     br = hexp.boundingRect()
-                    painter.fillRect(br, c_meas)          # measured ◢
                     tri = _QP()
                     tri.moveTo(br.left(), br.top())
                     tri.lineTo(br.right(), br.top())
                     tri.lineTo(br.left(), br.bottom())
                     tri.closeSubpath()
-                    painter.fillPath(tri, c_exp)          # expected ◤
-                painter.restore()
+                    painter.fillPath(hexp.intersected(tri), c_exp)   # expected ◤
+                    _edge = c_meas
+                _seam = QPen(_edge)
+                _seam.setCosmetic(True)
+                _seam.setWidthF(1.0)
+                painter.setPen(_seam)
+                painter.setBrush(Qt.BrushStyle.NoBrush)
+                painter.drawPath(hexp)
                 if warn:
                     painter.setBrush(Qt.BrushStyle.NoBrush)
                     rw = max(1.8, s * 2.2)
