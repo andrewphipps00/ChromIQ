@@ -377,6 +377,23 @@ def test_clip_conflict_flags_locked_side_margin(app):
         assert p.margins[k].isEnabled()
 
 
+def test_margins_update_for_instrument_without_thresholds(app):
+    """Switching to an instrument with no Instrument-Limits entry (e.g.
+    SpectroScan) must still refresh the four margins to that instrument's own
+    defaults — never leave the previous instrument's values showing (Knut)."""
+    from ui.dialogs.layout_options_panel import LayoutOptionsPanel
+    p = LayoutOptionsPanel(with_selectors=True)
+    p.set_threshold_lookup(
+        lambda inst, paper: {"L": 26, "R": 9, "T": 38, "B": 10}
+        if inst == "i1" else None)
+    p.instr.setCurrentIndex(p.instr.findData("i1"))
+    p.use_instr_margins.setChecked(True)
+    assert p.margins["l"].value() == 26 and p.margins["t"].value() == 38
+    p.instr.setCurrentIndex(p.instr.findData("SS"))          # no thresholds
+    assert p.margins["l"].value() != 26        # not the stale i1 value
+    assert p.margins["t"].value() != 38
+
+
 def test_instrument_margins_refresh_inch_and_enable_state(app):
     """Filling the margins from instrument limits must refresh the inch readout
     next to each box — it fills with signals blocked, so the readout would

@@ -1639,6 +1639,24 @@ class LayoutOptionsPanel(QWidget):
                     v = thr.get(key)
                     if v not in (None, ""):
                         _set(k, v)
+            else:
+                # No user-defined Instrument-Limits entry for this instrument
+                # (e.g. SpectroScan): don't leave the PREVIOUS instrument's
+                # margins showing (Knut). Fall back to this instrument's own
+                # default margins from the engine geometry, so the four boxes
+                # always update the moment you pick a different instrument.
+                fb = {"t": 6.0, "r": 6.0, "b": 6.0, "l": 6.0}
+                try:
+                    from workflow.layout_engine import instruments as _ins
+                    g = _ins.geom_from_build_kwargs(
+                        {"instrument": inst, "paper": paper,
+                         "layout_mode": "patch_first"})
+                    fb = {"t": g.margin_t, "r": g.margin_r,
+                          "b": g.margin_b, "l": g.margin_l}
+                except Exception:
+                    pass
+                for k, v in fb.items():
+                    _set(k, v)
         else:
             saved = getattr(self, "_saved_margins", None)
             if saved is not None:        # restore what was there before ticking
