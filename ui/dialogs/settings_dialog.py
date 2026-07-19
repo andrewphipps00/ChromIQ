@@ -823,6 +823,32 @@ class SettingsDialog(QDialog):
         # so grey both options out.
         self._native_print_check.toggled.connect(self._sync_print_path_options)
 
+        self._declutter_check = QCheckBox(
+            tr("Declutter files when loading from legacy folders"), self)
+        declutter_tip = TooltipButton(
+            tr("Declutter Files When Loading From Legacy Folders"),
+            tr("Newer ChromIQ versions keep each project folder tidy by grouping "
+               "the extra paperwork into a few sub-folders — reports (quality "
+               "checks and measurement reports), exports (files for other "
+               "programs) and cache (temporary tool files). Older projects, made "
+               "before this tidy-up existed, keep everything loose in one folder.\n\n"
+               "When this option is ON (the default), opening a file from such an "
+               "old folder — a profile, a chart, a measurement, a scan target — "
+               "quietly sorts those loose ChromIQ files into the right sub-folders "
+               "first, creating them if needed, so the folder ends up as neat as a "
+               "brand-new project. Then the file you asked for opens as usual.\n\n"
+               "It is completely safe: only files ChromIQ itself made are moved, "
+               "and only into sub-folders — nothing is renamed, nothing is "
+               "deleted, your own files and the chart's core files are never "
+               "touched, and a folder with nothing to tidy is left exactly as it "
+               "was.\n\n"
+               "Turn it OFF if you'd rather ChromIQ never rearrange anything when "
+               "you open a file."),
+            self,
+            min_width=600,
+        )
+        self._declutter_tip = declutter_tip
+
         # Collect the options that apply on this platform, in order, then place
         # them two per row. Platform-specific options are simply omitted (rather
         # than hidden) so they leave no empty cell in the grid.
@@ -835,6 +861,7 @@ class SettingsDialog(QDialog):
             _bh_cell(self._cal_mode_check, cal_tip),
             _bh_cell(self._chromiq_refine_check, refine_tip),
             _bh_cell(self._averaging_check, averaging_tip),
+            _bh_cell(self._declutter_check, declutter_tip),
         ]
         if native_print_supported():
             bh_cells.append(_bh_cell(self._native_print_check, native_tip))
@@ -1788,6 +1815,7 @@ class SettingsDialog(QDialog):
             .findData(int(s.get("scanner_flank_min_cells", 8)))))
         self._chromiq_refine_check.setChecked(bool(s.get("chromiq_refinement", False)))
         self._averaging_check.setChecked(bool(s.get("averaging_enabled", False)))
+        self._declutter_check.setChecked(bool(s.get("declutter_on_load", True)))
         self._profile_engine_check.setChecked(bool(s.get("profile_engine_beta", False)))
         self._gammap_mode_combo.setCurrentIndex(
             max(0, self._gammap_mode_combo.findData(
@@ -2464,6 +2492,7 @@ class SettingsDialog(QDialog):
         s.set("calibration_mode",          self._cal_mode_check.isChecked())
         s.set("chromiq_refinement",        self._chromiq_refine_check.isChecked())
         s.set("averaging_enabled",         self._averaging_check.isChecked())
+        s.set("declutter_on_load",         self._declutter_check.isChecked())
         s.set("profile_engine_beta",       self._profile_engine_check.isChecked())
         s.set("gammap_mode",               self._gammap_mode_combo.currentData())
         s.set("chartread_engine",

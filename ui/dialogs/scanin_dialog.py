@@ -1675,7 +1675,8 @@ class ScannerProfileDialog(_ToolDialogBase):
         else:
             title, flt = tr("Choose the measured chart"), _TI3_FILTER
         path = open_file_dialog(self, title, flt,
-                                start_dir=str(_initial_dir(self._settings, self.TOOL_KEY)))
+                                start_dir=str(_initial_dir(self._settings, self.TOOL_KEY)),
+                                declutter_settings=self._settings)
         if not path:
             return
         self._set_chart(Path(path))
@@ -1864,7 +1865,8 @@ class ScannerProfileDialog(_ToolDialogBase):
         paths = open_files_dialog(
             self, tr("Pick the chart's .cht page file(s)"),
             tr("Chart geometry (*.cht);;All files (*)"),
-            start_dir=str(self._byo_base.parent))
+            start_dir=str(self._byo_base.parent),
+            declutter_settings=self._settings)
         if not paths:
             return
         cht_paths = sorted(Path(p) for p in paths)   # printtarg numbers _01…_NN
@@ -2136,7 +2138,8 @@ class ScannerProfileDialog(_ToolDialogBase):
     def _pick_cht(self) -> None:
         path = open_file_dialog(self, tr("Choose a .cht recognition file"),
                                 _CHT_FILTER,
-                                start_dir=str(_initial_dir(self._settings, self.TOOL_KEY)))
+                                start_dir=str(_initial_dir(self._settings, self.TOOL_KEY)),
+                                declutter_settings=self._settings)
         if not path:
             return
         self._cht_field.setText(path)
@@ -2152,7 +2155,8 @@ class ScannerProfileDialog(_ToolDialogBase):
     def _pick_ref(self) -> None:
         path = open_file_dialog(self, tr("Choose the target reference data"),
                                 _REF_FILTER,
-                                start_dir=str(_initial_dir(self._settings, self.TOOL_KEY)))
+                                start_dir=str(_initial_dir(self._settings, self.TOOL_KEY)),
+                                declutter_settings=self._settings)
         if not path:
             return
         p = Path(path)
@@ -2453,7 +2457,8 @@ class ScannerProfileDialog(_ToolDialogBase):
                     "“A standard target I own” above and load its .cht."))
             return
         path = open_file_dialog(self, tr("Choose the scan"), _SCAN_FILTER,
-                                start_dir=str(_initial_dir(self._settings, self.TOOL_KEY)))
+                                start_dir=str(_initial_dir(self._settings, self.TOOL_KEY)),
+                                declutter_settings=self._settings)
         if not path:
             return
         self._cur_shot()["path"] = Path(path)

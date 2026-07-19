@@ -756,6 +756,7 @@ class TabPrint(QWidget):
         path = open_file_dialog(
             self, "Select .ti2 file to load its chart", "ArgyllCMS target files (*.ti2)",
             extra_path=self._settings.get("custom_output_path", ""),
+            declutter_settings=self._settings,
         )
         if not path:
             return
@@ -784,6 +785,7 @@ class TabPrint(QWidget):
             "TIFF images (*.tif *.tiff)",
             extra_path=self._settings.get("custom_output_path", ""),
             preview=True,
+            declutter_settings=self._settings,
         )
         if not paths:
             return

@@ -350,7 +350,8 @@ class ScaninTargetDialog(_ToolDialogBase):
     def _pick_ti3(self) -> None:
         path = open_file_dialog(
             self, tr("Choose the chart's measurement"), _TI3_FILTER,
-            start_dir=str(_initial_dir(self._settings, self.TOOL_KEY)))
+            start_dir=str(_initial_dir(self._settings, self.TOOL_KEY)),
+            declutter_settings=self._settings)
         if not path:
             return
         if self._reject_if_hexagonal(_chart_base(Path(path))):
@@ -391,7 +392,8 @@ class ScaninTargetDialog(_ToolDialogBase):
         paths = open_files_dialog(
             self, tr("Choose the chart page(s) i1Profiler saved"), _TIFF_FILTER,
             start_dir=str(_initial_dir(self._settings, self.TOOL_KEY)),
-            preview=True)
+            preview=True,
+            declutter_settings=self._settings)
         if not paths:
             return
         # Page order matters; i1Profiler's …_1_2 / …_2_2 names sort correctly.
@@ -404,7 +406,8 @@ class ScaninTargetDialog(_ToolDialogBase):
     def _pick_meas(self) -> None:
         path = open_file_dialog(
             self, tr("Choose your measurement"), _MEAS_FILTER,
-            start_dir=str(_initial_dir(self._settings, self.TOOL_KEY)))
+            start_dir=str(_initial_dir(self._settings, self.TOOL_KEY)),
+            declutter_settings=self._settings)
         if not path:
             return
         if self._reject_if_hexagonal(_chart_base(Path(path))):

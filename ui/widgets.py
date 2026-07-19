@@ -803,6 +803,7 @@ def open_file_dialog(
     extra_path: str = "",
     extra_paths: tuple | list = (),
     preview: bool = False,
+    declutter_settings=None,
 ) -> str:
     """Open a Qt file dialog with sidebar shortcuts and proper file-type filtering.
 
@@ -811,6 +812,11 @@ def open_file_dialog(
     (for picking images). With the native-dialogs setting on, the OS dialog is
     used instead (its own Quick Access + preview pane; our custom sidebar and
     preview don't apply).
+
+    When ``declutter_settings`` is an AppSettings, the picked file's folder is
+    tidied into the v2 sub-folder layout before returning (#36, Knut), so a load
+    button opening a legacy flat project neatens it first. No-op when the
+    ``declutter_on_load`` preference is off or nothing matches.
 
     Returns the selected file path, or an empty string if cancelled.
     """
@@ -833,7 +839,11 @@ def open_file_dialog(
             _attach_image_preview(dlg)
     if dlg.exec() == QFileDialog.DialogCode.Accepted:
         files = dlg.selectedFiles()
-        return files[0] if files else ""
+        picked = files[0] if files else ""
+        if picked and declutter_settings is not None:
+            from core.file_manager import maybe_declutter_on_load
+            maybe_declutter_on_load(picked, declutter_settings)
+        return picked
     return ""
 
 
@@ -914,13 +924,15 @@ def open_files_dialog(
     extra_path: str = "",
     extra_paths: tuple | list = (),
     preview: bool = False,
+    declutter_settings=None,
 ) -> list[str]:
     """Multi-file variant of :func:`open_file_dialog`.
 
     Shares the same OS-correct sidebar shortcuts; when ``preview`` is True an
     image thumbnail of the highlighted file is shown beside the list (for
-    picking images). Returns the list of selected paths, or an empty list if
-    cancelled.
+    picking images). ``declutter_settings`` tidies the picked files' folder into
+    the v2 layout before returning (#36). Returns the list of selected paths, or
+    an empty list if cancelled.
     """
     native = _prefer_native_dialogs()
     dlg = QFileDialog(parent, title, start_dir or str(Path.home()))
@@ -940,7 +952,11 @@ def open_files_dialog(
         if preview:
             _attach_image_preview(dlg)
     if dlg.exec() == QFileDialog.DialogCode.Accepted:
-        return list(dlg.selectedFiles())
+        picked = list(dlg.selectedFiles())
+        if picked and declutter_settings is not None:
+            from core.file_manager import maybe_declutter_on_load
+            maybe_declutter_on_load(picked[0], declutter_settings)
+        return picked
     return []
 
 

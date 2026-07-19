@@ -207,3 +207,50 @@ def test_fresh_projects_are_schema_2(tmp_path: Path) -> None:
         encoding="utf-8"))
     assert on_disk["schema_version"] == SCHEMA_VERSION
     assert not proj.schema_too_new
+
+
+def test_declutter_folder_sorts_chromiq_files_only(tmp_path: Path) -> None:
+    """declutter_folder (#36) moves only the files ChromIQ writes into
+    reports/exports/cache; user files and the chart chain stay put; a name
+    clash is left in place; nothing is renamed or deleted."""
+    from core.file_manager import declutter_folder
+    d = tmp_path / "legacy"
+    d.mkdir()
+    files = {
+        "Quality_Check_1_Foo.txt": REPORTS_DIRNAME,
+        "Refine_Strips_Foo.txt": REPORTS_DIRNAME,
+        "report_2026-01-01.json": REPORTS_DIRNAME,
+        "Foo-colours.txt": EXPORTS_DIRNAME,
+        "Foo-i1profiler.pxf": EXPORTS_DIRNAME,
+        "Foo-patchbox.cht": CACHE_DIRNAME,
+        "scan-diag.tif": CACHE_DIRNAME,
+    }
+    stay = ("Foo.ti2", "Foo.icc", "Foo.cht", "Foo.cie", "my-notes.txt")
+    for name in list(files) + list(stay):
+        (d / name).write_text("x")
+
+    moved = declutter_folder(d)
+    assert moved == len(files)
+    for name, sub in files.items():
+        assert (d / sub / name).is_file()
+        assert not (d / name).exists()
+    for name in stay:                              # user files + chart chain untouched
+        assert (d / name).is_file()
+
+    # Idempotent: a second run moves nothing.
+    assert declutter_folder(d) == 0
+
+    # A folder with nothing to tidy gets no empty sub-folders.
+    empty = tmp_path / "plain"; empty.mkdir()
+    (empty / "photo.jpg").write_text("x")
+    assert declutter_folder(empty) == 0
+    assert not (empty / REPORTS_DIRNAME).exists()
+
+
+def test_declutter_name_clash_leaves_file(tmp_path: Path) -> None:
+    from core.file_manager import declutter_folder
+    d = tmp_path / "legacy2"; (d / REPORTS_DIRNAME).mkdir(parents=True)
+    (d / "Refine_Strips_Foo.txt").write_text("new")
+    (d / REPORTS_DIRNAME / "Refine_Strips_Foo.txt").write_text("existing")
+    assert declutter_folder(d) == 0                 # clash → skipped
+    assert (d / "Refine_Strips_Foo.txt").read_text() == "new"

@@ -3753,6 +3753,7 @@ class TabProfile(QWidget):
             self, "Load measurement data",
             "Measurement data (*.ti3 *.txt)",
             extra_path=self._settings.get("custom_output_path", ""),
+            declutter_settings=self._settings,
         )
         if not path:
             return

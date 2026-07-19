@@ -2549,6 +2549,7 @@ class TabMeasure(QWidget):
         path = open_file_dialog(
             self, tr("Load .ti2 file"), tr("TI2 files (*.ti2)"),
             extra_path=self._settings.get("custom_output_path", ""),
+            declutter_settings=self._settings,
         )
         if not path:
             return

@@ -3836,6 +3836,7 @@ class TabChart(QWidget):
             start_dir=start,
             extra_path=self._settings.get("custom_output_path", ""),
             extra_paths=icc_profile_paths(),
+            declutter_settings=self._settings,
         )
         if path:
             self._guided_precond_path.setText(path)
@@ -7371,6 +7372,7 @@ class TabChart(QWidget):
             self, "Load patch set",
             "Patch sets (*.ti1 *.pxf *.cgats *.txt)",
             extra_path=self._settings.get("custom_output_path", ""),
+            declutter_settings=self._settings,
         )
         if not path:
             return

@@ -103,6 +103,98 @@ def exports_subdir(folder: Path | str) -> Path:
     return Path(folder) / EXPORTS_DIRNAME
 
 
+# Declutter-on-load (#36, Knut): the exact families ChromIQ itself writes, keyed
+# to the v2 sub-folder they belong in. Deliberately narrow — only files matching
+# these patterns move; anything else (user files, the Argyll-coupled chart chain)
+# is left exactly where it is. The chart's OWN <name>.cht / <name>.cie never
+# match (the cache patterns all require a -patchbox/-sample/-aligned tail).
+_DECLUTTER_MAP = (
+    (REPORTS_DIRNAME, (
+        re.compile(r"^Quality_Check_\d+_.+\.txt$"),
+        re.compile(r"^Refine_Strips_.+\.txt$"),
+        re.compile(r"^Verify_Profile_\d+_.+\.txt$"),
+        re.compile(r"^Verify_Reference_\d+_.+\.txt$"),
+        re.compile(r"^report_.+\.json$"),
+    )),
+    (EXPORTS_DIRNAME, (
+        re.compile(r"^.+-colours\.txt$"),
+        re.compile(r"^.+-i1profiler\.(txt|pxf)$"),
+    )),
+    (CACHE_DIRNAME, (
+        re.compile(r"^.+-patchbox\.cht$"),
+        re.compile(r"^.+-patchbox-sample\.cht$"),
+        re.compile(r"^.+-sample\.cht$"),
+        re.compile(r"^.+-aligned\.cht$"),
+        re.compile(r"^.+-aligned-patchbox.*\.cht$"),
+        re.compile(r"^.+-diag\.tif$", re.IGNORECASE),
+    )),
+)
+
+
+def maybe_declutter_on_load(path: "Path | str | None", settings) -> int:
+    """Declutter the folder holding *path* when the user's ``declutter_on_load``
+    preference is on (#36). A no-op when the setting is off, *path* is falsy, or
+    nothing matches. Never raises — decluttering must not block a file load."""
+    if not path:
+        return 0
+    try:
+        if settings is not None and not settings.get("declutter_on_load", True):
+            return 0
+    except Exception:  # noqa: BLE001 — a settings hiccup must not block loading
+        pass
+    try:
+        return declutter_folder(Path(path).parent)
+    except Exception:  # noqa: BLE001
+        return 0
+
+
+def declutter_folder(folder: "Path | str") -> int:
+    """Tidy a legacy flat folder into the v2 sub-folder layout (#36, Knut).
+
+    Moves only the files ChromIQ itself writes — quality/verify reports and
+    measurement JSON into ``reports/``, hand-off sidecars into ``exports/``,
+    scanner-tool intermediates into ``cache/`` — creating the sub-folders as
+    needed. User files and the Argyll-coupled chart chain are never touched,
+    nothing is renamed or deleted, and a name clash leaves the file in place.
+    Safe on any folder: one with no matching files is left untouched (no empty
+    sub-folders created). Returns the number of files moved.
+
+    Called by the file-load flows when Preferences → "Declutter files when
+    loading from legacy folders" is on, so opening an old project tidies it.
+    """
+    folder = Path(folder)
+    if not folder.is_dir():
+        return 0
+    moved = 0
+    try:
+        entries = sorted(folder.iterdir())
+    except OSError:
+        return 0
+    for f in entries:
+        try:
+            if not f.is_file():
+                continue
+        except OSError:
+            continue
+        for dirname, patterns in _DECLUTTER_MAP:
+            if any(rx.match(f.name) for rx in patterns):
+                dst_dir = folder / dirname
+                try:
+                    dst_dir.mkdir(parents=True, exist_ok=True)
+                    dst = dst_dir / f.name
+                    if dst.exists():
+                        log.warning("declutter: %s already exists, leaving %s",
+                                    dst, f)
+                    else:
+                        shutil.move(str(f), str(dst))
+                        log.info("declutter: %s -> %s/", f.name, dirname)
+                        moved += 1
+                except OSError as exc:
+                    log.warning("declutter: could not move %s: %s", f, exc)
+                break
+    return moved
+
+
 def cache_subdir(folder: Path | str) -> Path:
     """``<folder>/cache`` — see :func:`reports_subdir`."""
     return Path(folder) / CACHE_DIRNAME
