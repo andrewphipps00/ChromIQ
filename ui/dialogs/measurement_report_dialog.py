@@ -352,12 +352,13 @@ class MeasurementReportDialog(QDialog):
         close_row.addWidget(close_btn)
         v.addLayout(close_row)
 
-        # Neutral control accents (checkbox / focus rings) like the Tools
-        # dialogs, replacing the global tab-accent; in dark mode match the report
-        # view to the input background so it isn't darker than the chrome.
+        # Controls take the window's own green accent (checked checkbox + focus
+        # rings), like the Ti1→i1Profiler tool uses its masthead accent, instead
+        # of the global tab cyan; in dark mode match the report view to the input
+        # background so it isn't darker than the chrome.
         mode = resolve_mode(self._settings.get("appearance", "auto"))
         from ui.dialogs.tools_dialogs import neutral_controls_qss
-        qss = neutral_controls_qss("#1c1b18" if mode == "light" else "#d0d0d0")
+        qss = neutral_controls_qss(SPEC_GREEN)
         if mode == "dark":
             qss += (f"QTextBrowser {{ background: {BG_INPUT}; color: {TEXT_MAIN};"
                     f" border: 1px solid {BORDER}; border-radius: 3px; }}")
