@@ -1510,7 +1510,18 @@ class TiffPreview(QWidget):
                 # need the small row-spacer pad.
                 apex = (cp[0].height() / 6.0 + 2.0) if self._hex_zigzag else 0.0
                 vpad = max(pad, apex)
-                top = min(b.y() for b in cp) - vpad
+                min_py = min(b.y() for b in cp)
+                top = min_py - vpad
+                # Never rise into the strip-label band. When this strip's rect
+                # extends ABOVE its patches its top sits at the rendered label-band
+                # bottom (grown there in engine_strip_rects_from_sidecar), so clamp
+                # the fill to it — otherwise the hex apex padding above reached up
+                # and wiped the column labels (A, B, C…) on a SpectroScan hex chart
+                # (Knut). With labels off the rect top == the patch top, so this is
+                # a no-op and the apex stays covered.
+                band_top = float(rects[i].top())
+                if band_top < min_py:
+                    top = max(top, band_top)
                 bot = max(b.y() + b.height() for b in cp) + vpad
                 # Horizontally cover the column's own patches (min-left / max-right
                 # already include the ±¼-patch hex stagger overhang) AND reach the

@@ -94,7 +94,7 @@ def _stats(vals: "list[float]") -> dict:
     }
 
 
-def build_report(ti3_path: str | Path, worst_n: int = 15) -> dict:
+def build_report(ti3_path: str | Path, worst_n: int = 16) -> dict:
     """Compute a measurement report from a measured ``.ti3``.
 
     Finds the sibling ``.ti2`` for the expected reference. Returns a JSON-able

@@ -170,7 +170,7 @@ DEFAULTS: dict[str, Any] = {
     # Patch-reading error limit (#126, Knut): the ΔE at which a just-measured
     # patch gets the red warning outline in the engine's live split-patch
     # preview. Generous by default so only near-certain misreads are flagged.
-    "patch_read_warn_de":        20.0,
+    "patch_read_warn_de":        50.0,
     # "Read again & average" — master switch. OFF (default) restores the classic
     # behaviour: a finished full read proceeds straight to Build Profile. ON adds
     # the post-read completion dialog offering measure-again / average.
@@ -477,7 +477,7 @@ def thresholds_for_combo(
 # Bump when a shipped default changes in a way that must reach users who have
 # the OLD default persisted. Settings → Save writes every key, so a stored
 # value otherwise pins a user to the old behaviour for good.
-SETTINGS_SCHEMA = 8
+SETTINGS_SCHEMA = 9
 
 # key → the old default(s) it must no longer be stuck on. Only a stored value
 # EQUAL to one of the old defaults is dropped (so it falls through to the new
@@ -501,6 +501,11 @@ _SUPERSEDED_DEFAULTS: dict[str, tuple[float, ...]] = {
     # aligned scan leaves at most 1 edge-flagged patch, so 2 warns earlier
     # without false alarms (his preference after testing).
     "scanner_flank_min_boxes": (3,),
+    # schema 9: the patch-read warning floor default moved 20 → 50 ΔE (Nelson's
+    # value — with the adaptive per-strip outlier test, 20 still lit up too many
+    # legitimately-vivid patches on a scanner/print workflow). A stored echo of
+    # the old 20 default falls through to 50; a value the user chose is kept.
+    "patch_read_warn_de": (20.0,),
 }
 
 # Keys removed outright — replaced by a new setting, so any stored value is
@@ -554,7 +559,10 @@ class AppSettings:
         limit (vivid patches sit far from sRGB on a good print) are now handled
         automatically, so a raised value merely hides genuine misreads. Reset any
         value ABOVE the default back to it (drop it → falls back to the default).
-        A value the user LOWERED, wanting more sensitivity, is left untouched."""
+        A value the user LOWERED, wanting more sensitivity, is left untouched.
+        schema 9: the default floor moved to 50 ΔE, so the reset threshold tracks
+        it (a stored echo of the old 20 default is dropped separately via
+        _SUPERSEDED_DEFAULTS)."""
         raw = self._qs.value("patch_read_warn_de", None)
         if raw is None:
             return False
@@ -562,7 +570,7 @@ class AppSettings:
             val = float(raw)
         except (TypeError, ValueError):
             return False
-        if val > 20.0 + 1e-9:              # 20.0 is the default floor
+        if val > 50.0 + 1e-9:              # 50.0 is the default floor
             self._qs.remove("patch_read_warn_de")
             return True
         return False

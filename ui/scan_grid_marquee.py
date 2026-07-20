@@ -297,7 +297,31 @@ class GridSpec:
                 if g > 0.5:                      # a real printed spacer
                     gaps.append(g)
             return sorted(gaps)[len(gaps) // 2] if gaps else 0.0
-        gx, gy = _gap("x", "w"), _gap("y", "h")
+
+        def _gap_within_columns(lo_key: str, size_key: str, other_key: str) -> float:
+            """The spacer along *lo_key* measured WITHIN each line of constant
+            *other_key* (e.g. within a column, for the row spacer). Robust to a
+            staggered chart: ColorMunki "offset every second column" interleaves
+            the global y-edges at half-pitch, so the edge-to-edge :func:`_gap`
+            sees no gap and the top/bottom spacer guide vanished (Knut). Grouping
+            by column first restores the true row spacer."""
+            lines: dict[float, list] = {}
+            for p in patches:
+                lines.setdefault(round(p[other_key], 1), []).append(p)
+            gaps = []
+            for grp in lines.values():
+                grp.sort(key=lambda p: p[lo_key])
+                for a, b in zip(grp, grp[1:]):
+                    g = b[lo_key] - (a[lo_key] + a[size_key])
+                    if g > 0.5:
+                        gaps.append(g)
+            return sorted(gaps)[len(gaps) // 2] if gaps else 0.0
+
+        # Columns keep a regular x even on a vertically-staggered chart, so the
+        # horizontal spacer is safe edge-to-edge; the vertical spacer must be read
+        # per column so the stagger doesn't hide it (Knut).
+        gx = _gap("x", "w")
+        gy = _gap_within_columns("y", "h", "x") or _gap("y", "h")
         ink = ((-gx / sw, -gy / sh, 1.0 + gx / sw, 1.0 + gy / sh)
                if (gx or gy) else None)
         return cls(rects, aspect=sw / sh, ncols=nc, nrows=nr, cells=cells,

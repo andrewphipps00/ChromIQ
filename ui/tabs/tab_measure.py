@@ -152,7 +152,7 @@ log = get_logger(__name__)
 # is just noise — so we ALSO require the patch to be an outlier within its own
 # strip (a real misread stands out from its neighbours; uniform sRGB deviation
 # does not).
-_PATCH_WARN_DE = 20.0
+_PATCH_WARN_DE = 50.0
 
 
 def _strip_outlier_fence(des: "list[float]") -> float:

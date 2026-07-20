@@ -64,9 +64,11 @@ class _TrendChart(QWidget):
         self._dark = True
         self._y_max: "float | None" = None
         self._dec = 1
+        self._auto = False
         self.setMinimumHeight(210)
 
-    def set_data(self, series, metrics, dark=True, y_max=None, dec=1) -> None:
+    def set_data(self, series, metrics, dark=True, y_max=None, dec=1,
+                 auto=False) -> None:
         def has_any(pt) -> bool:
             return any(acc(pt) is not None for _, _, acc in metrics)
         self._series = [p for p in (series or []) if has_any(p)]
@@ -74,6 +76,10 @@ class _TrendChart(QWidget):
         self._dark = dark
         self._y_max = y_max
         self._dec = dec
+        # auto: range the axis tightly around the data (rounded to 0.1) instead of
+        # anchoring at 0, so a small paper-white/black drift is actually visible
+        # (Knut). ΔE charts keep their 0-anchored axis.
+        self._auto = auto
         # NB: visibility is owned by the container (the tab widget), NOT the
         # chart — a per-widget setVisible here fought the tab stack and made all
         # three pages paint on top of each other before layout settled.
@@ -92,18 +98,28 @@ class _TrendChart(QWidget):
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         font = QFont(); font.setPixelSize(10); p.setFont(font)
 
+        import math
         L, R, T, B = 40.0, 12.0, 24.0, 26.0
         w = max(1.0, self.width() - L - R)
         h = max(1.0, self.height() - T - B)
         vals = [v for pt in pts for _, _, acc in self._metrics
                 if (v := acc(pt)) is not None]
-        vmax = self._y_max if self._y_max else max(vals + [1.0]) * 1.12
+        if self._auto and vals:
+            dmin, dmax = min(vals), max(vals)
+            pad = 0.3 if (dmax - dmin) < 1e-9 else (dmax - dmin) * 0.15
+            vmin = math.floor((dmin - pad) * 10.0) / 10.0
+            vmax = math.ceil((dmax + pad) * 10.0) / 10.0
+        else:
+            vmin = 0.0
+            vmax = self._y_max if self._y_max else max(vals + [1.0]) * 1.12
+        span = max(1e-6, vmax - vmin)
         n = len(pts)
 
         def xy(i: int, val: float):
-            return QPointF(L + (w * i / (n - 1)), T + h * (1.0 - val / vmax))
+            return QPointF(L + (w * i / (n - 1)),
+                           T + h * (1.0 - (val - vmin) / span))
 
-        # Y grid + labels (0, mid, top).
+        # Y grid + labels (bottom, mid, top of the actual range).
         p.setPen(QPen(grid, 1.0))
         for frac in (0.0, 0.5, 1.0):
             yy = T + h * (1.0 - frac)
@@ -111,7 +127,7 @@ class _TrendChart(QWidget):
             p.setPen(QPen(fg, 1.0))
             p.drawText(QRectF(0, yy - 7, L - 4, 14),
                        Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter,
-                       f"{vmax * frac:.{self._dec}f}")
+                       f"{vmin + span * frac:.{self._dec}f}")
             p.setPen(QPen(grid, 1.0))
 
         # One polyline per metric.
@@ -239,6 +255,8 @@ class MeasurementReportDialog(QDialog):
             self))
         v.addLayout(intro_row)
 
+        # Two rows so the (now five) controls never clip: sourcing on top,
+        # output below (Knut — beta.21 buttons were cut on both sides).
         btn_row = QHBoxLayout()
         self._open_btn = QPushButton(tr("Open another measurement (.ti3)…"), self)
         self._open_btn.clicked.connect(self._on_open)
@@ -251,10 +269,26 @@ class MeasurementReportDialog(QDialog):
         self._add_btn.clicked.connect(self._on_add_project)
         self._add_btn.setEnabled(False)
         btn_row.addWidget(self._add_btn)
+        btn_row.addStretch(1)
+        v.addLayout(btn_row)
+
+        out_row = QHBoxLayout()
         self._pdf_btn = QPushButton(tr("Save report as PDF…"), self)
         self._pdf_btn.clicked.connect(self._export_pdf)
         self._pdf_btn.setEnabled(False)
-        btn_row.addWidget(self._pdf_btn)
+        out_row.addWidget(self._pdf_btn)
+        self._reveal_btn = QPushButton(tr("Reveal folder"), self)
+        self._reveal_btn.clicked.connect(self._on_reveal)
+        self._reveal_btn.setEnabled(False)
+        out_row.addWidget(self._reveal_btn)
+        out_row.addWidget(TooltipButton(
+            tr("Reveal folder"),
+            tr("Opens the profile's folder in your file manager, so you can "
+               "browse to the reports folder and open any PDF you saved. When "
+               "“Include all measurement runs in the PDF” is on, reports are "
+               "written to a reports folder next to the profile's runs; when it "
+               "is off, they go in the loaded run's own reports folder."),
+            self))
         self._all_runs_check = QCheckBox(
             tr("Include all measurement runs in the PDF"), self)
         self._all_runs_check.setChecked(True)
@@ -262,9 +296,9 @@ class MeasurementReportDialog(QDialog):
             "When on, the PDF lists the data tables for every saved measurement "
             "of this printer plus a side-by-side comparison — not only the run "
             "shown here."))
-        btn_row.addWidget(self._all_runs_check)
-        btn_row.addStretch(1)
-        v.addLayout(btn_row)
+        out_row.addWidget(self._all_runs_check)
+        out_row.addStretch(1)
+        v.addLayout(out_row)
 
         self._trend_label = QLabel(tr("Trend over time (this printer)"), self)
         self._trend_label.setStyleSheet("font-weight:bold;margin-top:2px")
@@ -344,6 +378,7 @@ class MeasurementReportDialog(QDialog):
         self._view.setHtml(self._report_html(self._report, comparison))
         self._pdf_btn.setEnabled(True)
         self._add_btn.setEnabled(True)
+        self._reveal_btn.setEnabled(True)
 
     def _refresh_trend(self) -> None:
         """Recompute the trend series from the current history (which may span
@@ -387,8 +422,9 @@ class MeasurementReportDialog(QDialog):
             n=len(self._project_dirs)))
 
     def _trend_configs(self) -> list:
-        """The three grouped charts as ``(chart, title, metrics, y_max, dec)`` —
-        shared by the live tabs and the PDF export so they always match."""
+        """The four grouped charts as ``(chart, title, metrics, y_max, dec, auto)``
+        — shared by the live tabs and the PDF export so they always match. ``auto``
+        ranges the axis tightly around the data instead of anchoring at 0."""
         corner_metrics = [
             (_CORNER_LABELS[code](), QColor(_CORNER_LINE[code]),
              (lambda pt, c=code: (pt.get("corners") or {}).get(c)))
@@ -398,36 +434,63 @@ class MeasurementReportDialog(QDialog):
             (self._trend_de, tr("Colour accuracy (ΔE00)"), [
                 (tr("Average"), QColor("#56d6a5"), lambda pt: pt.get("mean")),
                 (tr("Worst"),   QColor("#e0864b"), lambda pt: pt.get("max")),
-            ], None, 1),
+            ], None, 1, False),
             # White (~L*100) and black (~L*10) are too far apart to share an axis
-            # (Knut), so each is its own auto-scaled chart — a small drift in
-            # either is then actually visible.
+            # (Knut), so each is its own auto-scaled chart — and the axis ranges
+            # tightly around the values (not from 0) so a small drift is visible.
             (self._trend_white, tr("Paper white (L*)"), [
                 (tr("Paper white L*"), QColor("#8a8a8a"), lambda pt: pt.get("white_L")),
-            ], None, 1),
+            ], None, 1, True),
             (self._trend_black, tr("Darkest black (L*)"), [
                 (tr("Black L*"), QColor("#505050"), lambda pt: pt.get("black_L")),
-            ], None, 1),
+            ], None, 1, True),
             (self._trend_corners, tr("Cube corners (ΔE00 per ink)"),
-             corner_metrics, None, 1),
+             corner_metrics, None, 1, False),
         ]
+
+    def _profile_root(self) -> Path:
+        """The profile's project folder (``<project>/runs/<id>`` → ``<project>``),
+        or the run folder itself for a browsed external ``.ti3`` that isn't in a
+        ChromIQ project layout."""
+        run_dir = self._ti3.parent if self._ti3 else Path.cwd()
+        if run_dir.parent.name == "runs":
+            return run_dir.parents[1]
+        return run_dir
+
+    def _report_dir(self) -> Path:
+        """Where a PDF is saved (Knut): an all-runs report belongs to the whole
+        profile, so it goes in a ``reports`` folder next to ``runs/``; a single-run
+        report goes in that run's own ``reports`` folder."""
+        from core.file_manager import reports_subdir
+        run_dir = self._ti3.parent
+        if self._all_runs_check.isChecked() and run_dir.parent.name == "runs":
+            return reports_subdir(self._profile_root())
+        return reports_subdir(run_dir)
+
+    def _on_reveal(self) -> None:
+        """Open the profile's folder in the file manager so the user can browse to
+        the reports folder and open saved PDFs (Knut)."""
+        from PyQt6.QtCore import QUrl
+        from PyQt6.QtGui import QDesktopServices
+        if self._ti3:
+            QDesktopServices.openUrl(QUrl.fromLocalFile(str(self._profile_root())))
 
     def _export_pdf(self) -> None:
         """Write the full report — all data, the trend charts and a plain-language
-        guide to reading them — as a PDF into the reports folder (Knut)."""
+        guide to reading them — as a PDF, then open it for viewing (Knut)."""
         if not self._report or not self._ti3:
             return
         from datetime import datetime
-        from PyQt6.QtCore import QMarginsF, QSizeF, QUrl
+        from PyQt6.QtCore import QMarginsF, QRectF, QSizeF, QUrl
         from PyQt6.QtGui import (
-            QImage, QPageLayout, QPageSize, QPdfWriter, QTextDocument,
+            QAbstractTextDocumentLayout, QColor, QDesktopServices, QFont,
+            QPageLayout, QPageSize, QPainter, QPdfWriter, QTextDocument,
         )
-        from core.file_manager import reports_subdir
 
-        reports = reports_subdir(self._ti3.parent)
+        reports = self._report_dir()
         reports.mkdir(parents=True, exist_ok=True)
         default = reports / (
-            f"report_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.pdf")
+            f"measurement_report_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.pdf")
         path, _ = QFileDialog.getSaveFileName(
             self, tr("Save report as PDF"), str(default), "PDF (*.pdf)")
         if not path:
@@ -436,18 +499,19 @@ class MeasurementReportDialog(QDialog):
         doc = QTextDocument()
         charts_html = ""
         if self._trend_de.has_trend():
-            # Render each grouped chart off-screen at a fixed export size (the
-            # live tabs only lay out the current one) and embed it as a resource.
-            for i, (_c, title, metrics, y_max, dec) in enumerate(self._trend_configs()):
+            # Render each grouped chart off-screen (the live tabs only lay out the
+            # current one) and embed it as a resource. Kept compact so all four
+            # trend charts fit on the one trend page (Knut).
+            for i, (_c, title, metrics, y_max, dec, auto) in enumerate(self._trend_configs()):
                 tmp = _TrendChart()
-                tmp.resize(720, 240)
+                tmp.resize(640, 176)
                 tmp.set_data(self._trend_series, metrics, dark=False,
-                             y_max=y_max, dec=dec)
+                             y_max=y_max, dec=dec, auto=auto)
                 img = tmp.grab().toImage()
                 url = QUrl(f"chart://{i}")
                 doc.addResource(QTextDocument.ResourceType.ImageResource, url, img)
-                charts_html += (f"<h3>{html.escape(title)}</h3>"
-                                f"<img src='chart://{i}' width='680'>")
+                charts_html += (f"<h3 style='margin:4px 0 0'>{html.escape(title)}</h3>"
+                                f"<img src='chart://{i}' width='600'>")
         # All saved runs of this printer, or just the loaded one (Knut's checkbox).
         # The loaded run is normally already among the saved history; we use the
         # history as-is (each with its own saved date) rather than the freshly
@@ -460,51 +524,90 @@ class MeasurementReportDialog(QDialog):
 
         writer = QPdfWriter(str(path))
         writer.setPageSize(QPageSize(QPageSize.PageSizeId.A4))
-        writer.setPageMargins(QMarginsF(14, 14, 14, 14), QPageLayout.Unit.Millimeter)
+        writer.setPageMargins(QMarginsF(14, 14, 14, 16), QPageLayout.Unit.Millimeter)
         # QPdfWriter defaults to a very high resolution, but the document is laid
-        # out in ~96-dpi pixels (font px, the img width=680), so at the default
-        # the content filled only a fraction of the page. Match the writer to the
-        # document's 96-dpi coordinate space so it fills the page; text stays
-        # vector-crisp regardless of this number.
+        # out in ~96-dpi pixels (font px, img widths), so match the writer to the
+        # document's 96-dpi coordinate space; text stays vector-crisp regardless.
         writer.setResolution(96)
-        doc.setPageSize(QSizeF(writer.width(), writer.height()))
-        doc.print(writer)
-        self._pdf_btn.setText(tr("Saved: {name}").format(name=Path(path).name))
+        page_w, page_h = float(writer.width()), float(writer.height())
+        footer_h = 22.0                       # reserve a band for the page number
+        body_h = page_h - footer_h
+        doc.setPageSize(QSizeF(page_w, body_h))
+
+        # Paint page by page so every page can carry a centred "Page X of Y"
+        # footer (Knut) — QTextDocument.print() offers no page decoration.
+        painter = QPainter(writer)
+        layout = doc.documentLayout()
+        total = max(1, doc.pageCount())
+        foot_font = QFont(); foot_font.setPixelSize(10)
+        for pg in range(total):
+            if pg > 0:
+                writer.newPage()
+            painter.save()
+            painter.translate(0.0, -pg * body_h)
+            ctx = QAbstractTextDocumentLayout.PaintContext()
+            ctx.clip = QRectF(0, pg * body_h, page_w, body_h)
+            layout.draw(painter, ctx)
+            painter.restore()
+            painter.save()
+            painter.setPen(QColor(120, 120, 120))
+            painter.setFont(foot_font)
+            painter.drawText(
+                QRectF(0, body_h + 2, page_w, footer_h - 2),
+                Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop,
+                tr("Page {n} of {total}").format(n=pg + 1, total=total))
+            painter.restore()
+        painter.end()
+
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))
 
     def _comparison_table_html(self, runs: list) -> str:
         """A side-by-side table of each metric across every run — the at-a-glance
-        drift view Knut asked for (columns = dated runs, rows = metrics)."""
+        drift view Knut asked for (columns = dated runs, rows = metrics). When more
+        dates than fit a portrait page, the columns continue in stacked follow-on
+        tables that repeat the Metric column; oldest run is always the first
+        column of the first table (Knut)."""
         def cell(v, dec=2):
             return f"{v:.{dec}f}" if isinstance(v, (int, float)) else "—"
-        dates = [str(r.get("created") or "")[:10] for r in runs]
-        head = ("<tr><th align='left'>" + tr("Metric") + "</th>"
-                + "".join(f"<th>{html.escape(d)}</th>" for d in dates) + "</tr>")
-        rows = [head]
-
-        def metric_row(label, fn, dec=2):
-            cells = "".join(f"<td align='right'>{cell(fn(r), dec)}</td>" for r in runs)
-            rows.append(f"<tr><td style='color:#555'>{html.escape(label)}</td>{cells}</tr>")
 
         de = lambda r: (r.get("de00") or {})
-        metric_row(tr("Average ΔE00"), lambda r: de(r).get("mean"))
-        metric_row(tr("Worst ΔE00"), lambda r: de(r).get("max"))
-        metric_row(tr("Paper white L*"),
-                   lambda r: (r.get("paper_white") or {}).get("lab", [None])[0], 1)
-        metric_row(tr("Black L*"),
-                   lambda r: (r.get("max_black") or {}).get("lab", [None])[0], 1)
+
+        def corner_de(r, c):
+            for cc in (r.get("corners") or []):
+                if cc.get("name") == c:
+                    return cc.get("de")
+            return None
+
+        specs = [
+            (tr("Average ΔE00"), lambda r: de(r).get("mean"), 2),
+            (tr("Worst ΔE00"), lambda r: de(r).get("max"), 2),
+            (tr("Paper white L*"),
+             lambda r: (r.get("paper_white") or {}).get("lab", [None])[0], 1),
+            (tr("Black L*"),
+             lambda r: (r.get("max_black") or {}).get("lab", [None])[0], 1),
+        ]
         for code in ("W", "K", "R", "G", "B", "C", "M", "Y"):
             lbl = tr("{corner} ΔE00").format(corner=_CORNER_LABELS[code]())
+            specs.append((lbl, (lambda r, c=code: corner_de(r, c)), 2))
 
-            def corner_de(r, c=code):
-                for cc in (r.get("corners") or []):
-                    if cc.get("name") == c:
-                        return cc.get("de")
-                return None
-            metric_row(lbl, corner_de)
-        return ("<h2 style='color:#2a2a2a'>" + tr("Side-by-side comparison") + "</h2>"
-                "<table cellpadding='4' cellspacing='0' "
-                "style='border-collapse:collapse;font-size:11px'>"
-                + "".join(rows) + "</table>")
+        CHUNK = 8                                   # dated columns that fit portrait
+        chunks = [runs[i:i + CHUNK] for i in range(0, len(runs), CHUNK)]
+        tables = []
+        for chunk in chunks:
+            dates = [str(r.get("created") or "")[:10] for r in chunk]
+            head = ("<tr><th align='left'>" + tr("Metric") + "</th>"
+                    + "".join(f"<th>{html.escape(d)}</th>" for d in dates) + "</tr>")
+            body = [head]
+            for label, fn, dec in specs:
+                cells = "".join(
+                    f"<td align='right'>{cell(fn(r), dec)}</td>" for r in chunk)
+                body.append(
+                    f"<tr><td style='color:#555'>{html.escape(label)}</td>{cells}</tr>")
+            tables.append("<table cellpadding='4' cellspacing='0' "
+                          "style='border-collapse:collapse;font-size:11px;"
+                          "margin-bottom:10px'>" + "".join(body) + "</table>")
+        return ("<h2 style='color:#2a2a2a;page-break-before:always'>"
+                + tr("Side-by-side comparison") + "</h2>" + "".join(tables))
 
     def _pdf_html(self, runs: list, charts_html: str) -> str:
         """The printable report (Knut's order): a printer-level header, the
@@ -549,13 +652,15 @@ class MeasurementReportDialog(QDialog):
                 "out at a glance. Save a report after each measurement to build "
                 "that history. Screen and print colours here are approximate; the "
                 "numbers come from your measurement file and are exact.") + "</p>")
-        charts = (("<h2 style='color:#2a2a2a'>" + tr("Trend over time (this printer)")
+        charts = (("<h2 style='color:#2a2a2a;page-break-before:always'>"
+                   + tr("Trend over time (this printer)")
                    + "</h2>" + charts_html) if charts_html else "")
         guide_box = ("<table width='100%' cellpadding='12' cellspacing='0'>"
                      "<tr><td style='background:#f4f7f6'>" + guide + "</td></tr></table>")
         comparison = self._comparison_table_html(runs) if len(runs) > 1 else ""
         # Full detailed data for every run, below the overview (Knut).
-        details = "<h2 style='color:#2a2a2a'>" + tr("Detailed data per measurement") + "</h2>"
+        details = ("<h2 style='color:#2a2a2a;page-break-before:always'>"
+                   + tr("Detailed data per measurement") + "</h2>")
         for run in runs:
             details += (
                 "<h3 style='color:#2a2a2a;border-bottom:1px solid #ddd'>"
@@ -569,8 +674,9 @@ class MeasurementReportDialog(QDialog):
 
     def _update_trends(self, series: list, dark: bool) -> None:
         """Feed the three grouped trend charts their own metric sets (#40, Knut)."""
-        for chart, _title, metrics, y_max, dec in self._trend_configs():
-            chart.set_data(series, metrics, dark=dark, y_max=y_max, dec=dec)
+        for chart, _title, metrics, y_max, dec, auto in self._trend_configs():
+            chart.set_data(series, metrics, dark=dark, y_max=y_max, dec=dec,
+                           auto=auto)
         has = self._trend_de.has_trend()
         self._trend_label.setVisible(has)
         self._trend_tabs.setVisible(has)
@@ -659,16 +765,30 @@ class MeasurementReportDialog(QDialog):
 
         worst = r.get("worst_patches") or []
         if worst:
+            # Two 8-row halves side by side in one 9-column table (an empty middle
+            # column separates them) — the same columns, half the vertical space
+            # (Knut).
             parts.append("<h3>" + tr("Worst patches") + "</h3>")
-            rows = ["<tr style='color:#888'><th align='left'>" + tr("Patch")
-                    + "</th><th align='right'>ΔE00</th><th>" + tr("Expected")
-                    + "</th><th>" + tr("Measured") + "</th></tr>"]
-            for p in worst:
-                rows.append(
-                    f"<tr><td>{html.escape(str(p['loc']))}</td>"
-                    f"<td align='right'><b>{p['de']:.2f}</b></td>"
-                    f"<td align='center'>{sw(p['expected_hex'])}</td>"
-                    f"<td align='center'>{sw(p['measured_hex'])}</td></tr>")
+
+            def wcells(p) -> str:
+                if p is None:
+                    return "<td></td><td></td><td></td><td></td>"
+                return (f"<td>{html.escape(str(p['loc']))}</td>"
+                        f"<td align='right'><b>{p['de']:.2f}</b></td>"
+                        f"<td align='center'>{sw(p['expected_hex'])}</td>"
+                        f"<td align='center'>{sw(p['measured_hex'])}</td>")
+
+            hdr = ("<th align='left'>" + tr("Patch") + "</th>"
+                   "<th align='right'>ΔE00</th><th>" + tr("Expected") + "</th><th>"
+                   + tr("Measured") + "</th>")
+            half = (len(worst) + 1) // 2
+            left, right = worst[:half], worst[half:]
+            rows = ["<tr style='color:#888'>" + hdr
+                    + "<th style='width:16px'></th>" + hdr + "</tr>"]
+            for i in range(half):
+                lp = left[i] if i < len(left) else None
+                rp = right[i] if i < len(right) else None
+                rows.append("<tr>" + wcells(lp) + "<td></td>" + wcells(rp) + "</tr>")
             parts.append("<table cellpadding='5' style='border-collapse:collapse'>"
                          + "".join(rows) + "</table>")
 

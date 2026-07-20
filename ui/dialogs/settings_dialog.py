@@ -726,7 +726,7 @@ class SettingsDialog(QDialog):
             "patches; raise it if you only want the most extreme ones. It "
             "changes only the red outline in the preview — never your "
             "measurements.\n\n"
-            "Default: 20 ΔE"),
+            "Default: 50 ΔE"),
             self))
         _beta.addLayout(_pw_row)
 
@@ -1906,7 +1906,7 @@ class SettingsDialog(QDialog):
         self._save_report_check.setChecked(
             bool(s.get("save_measurement_report", False)))
         self._patch_warn_spin.setValue(
-            float(s.get("patch_read_warn_de", 20.0)))
+            float(s.get("patch_read_warn_de", 50.0)))
         self._fast_connect_check.setChecked(
             bool(s.get("fast_instrument_connect", True)))
         self._safenet_check.setChecked(bool(s.get("misalign_safenet", False)))
