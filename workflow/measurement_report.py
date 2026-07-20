@@ -30,7 +30,29 @@ from workflow.ti3_analysis import (
 
 log = get_logger(__name__)
 
-REPORT_SCHEMA = 2
+REPORT_SCHEMA = 3
+
+# A cube corner counts as "present" in the chart when the nearest measured patch
+# sits within this many device units (0..100, per channel) of the ideal corner.
+# A full profiling chart has all eight; a minimal verification chart may omit
+# some, which the report flags (Knut) so the cube-corner stats aren't misleading.
+CORNER_PRESENT_TOL = 12.0
+
+# Default Pass/Fail thresholds (ΔE00) for the report's colour-accuracy verdict.
+# The average threshold judges the three *average* metrics, the maximum threshold
+# the two *maximum* metrics (Knut). Overridable per report in the window.
+DEFAULT_PASS_AVG = 2.0
+DEFAULT_PASS_MAX = 3.0
+
+# The five colour-accuracy metrics that carry a Pass/Fail verdict, in display
+# order, as (key, which-threshold). Spread is reported too but has no threshold.
+ACCURACY_METRICS: "list[tuple[str, str]]" = [
+    ("avg_all",   "avg"),
+    ("avg_low95", "avg"),
+    ("avg_high5", "avg"),
+    ("max_all",   "max"),
+    ("max_low95", "max"),
+]
 
 # The eight corners of the RGB device cube, by device value (0..100). These are
 # the paper white, the composite black and the six primary/secondary ink colours
@@ -66,6 +88,12 @@ def _srgb_hex(xyz100: "tuple[float, float, float]") -> str:
     return "#{:02x}{:02x}{:02x}".format(enc(r), enc(g), enc(b))
 
 
+def _clean_instrument(raw: "str | None") -> str:
+    """Tidy the .ti3 TARGET_INSTRUMENT string for display, or a clear fallback."""
+    s = str(raw or "").strip().strip('"').strip()
+    return s or "Unknown instrument"
+
+
 def _reference_labs(ti2_path: Path) -> "dict[str, tuple]":
     """{SAMPLE_ID: expected Lab} from the chart's .ti2 design XYZ, or {}."""
     try:
@@ -80,17 +108,36 @@ def _reference_labs(ti2_path: Path) -> "dict[str, tuple]":
 
 
 def _stats(vals: "list[float]") -> dict:
+    """The colour-accuracy metrics (Knut's revised set): averages and maxima over
+    all patches, over the best 95 %, and over the worst 5 %, plus the spread.
+
+    Splitting off the worst 5 % separates "how good is the bulk of the chart"
+    (the 95 % averages/maxima) from "how bad are the few hardest patches" (the
+    worst-5 % average) — far more telling than a single mean. ``mean``/``max``/
+    ``p95`` are kept as aliases so the older trend series still reads.
+    """
     if not vals:
         return {"n": 0}
-    a = np.asarray(vals, float)
+    a = np.sort(np.asarray(vals, float))
+    n = int(a.size)
+    if n >= 2:
+        k = max(1, min(n - 1, int(round(n * 0.95))))   # size of the lowest-95 % set
+    else:
+        k = n
+    low = a[:k]                              # the best 95 % (>=1 patch)
+    high = a[k:] if k < n else a[-1:]        # the worst 5 % (>=1 patch)
     return {
-        "n": int(a.size),
-        "mean": round(float(a.mean()), 3),
-        "median": round(float(np.median(a)), 3),
-        "max": round(float(a.max()), 3),
-        "min": round(float(a.min()), 3),
-        "std": round(float(a.std(ddof=1)) if a.size > 1 else 0.0, 3),
-        "p95": round(float(np.percentile(a, 95)), 3),
+        "n": n,
+        "avg_all":   round(float(a.mean()), 3),
+        "avg_low95": round(float(low.mean()), 3),
+        "avg_high5": round(float(high.mean()), 3),
+        "max_all":   round(float(a.max()), 3),
+        "max_low95": round(float(low.max()), 3),
+        "std":       round(float(a.std(ddof=1)) if n > 1 else 0.0, 3),
+        # aliases kept for the trend series (report_trend reads mean/max/p95)
+        "mean":  round(float(a.mean()), 3),
+        "max":   round(float(a.max()), 3),
+        "p95":   round(float(low.max()), 3),
     }
 
 
@@ -111,6 +158,10 @@ def build_report(ti3_path: str | Path, worst_n: int = 16) -> dict:
         "ti3": ti3_path.name,
         "chart": ti3_path.stem,
         "patches": data.n_patches,
+        # The measuring instrument, from the .ti3's TARGET_INSTRUMENT keyword
+        # (chartread writes it). Used in Report Scope and to warn when runs from
+        # different instruments are mixed into one report (Knut).
+        "instrument": _clean_instrument(data.keywords.get("TARGET_INSTRUMENT")),
     }
 
     # Paper white (lightest) and darkest black by measured L*.
@@ -139,13 +190,19 @@ def build_report(ti3_path: str | Path, worst_n: int = 16) -> dict:
     if data.rgb is not None and len(data.rgb):
         rgb = np.asarray(data.rgb, dtype=float)
         for name, target in CUBE_CORNERS:
-            ci = int(np.argmin(((rgb - np.array(target)) ** 2).sum(axis=1)))
+            diffs = np.abs(rgb - np.array(target))
+            ci = int((diffs ** 2).sum(axis=1).argmin())
+            # "present" = the chart actually has a patch AT this corner, not just
+            # a nearest neighbour miles away. A minimal verification chart may omit
+            # some corners; the report flags that (Knut).
+            present = bool(float(diffs[ci].max()) <= CORNER_PRESENT_TOL)
             entry: dict = {
                 "name": name,
                 "loc": data.sample_locs[ci] if data.sample_locs else data.sample_ids[ci],
                 "rgb": [round(v, 1) for v in rgb[ci]],
                 "lab": [round(v, 2) for v in lab[ci]],
                 "hex": _srgb_hex(tuple(data.xyz[ci])),
+                "present": present,
             }
             r = ref.get(data.sample_ids[ci]) if ref else None
             if r is not None:
@@ -240,7 +297,10 @@ def report_trend(reports: "list[dict]") -> "list[dict]":
     for r in reports:
         pt: dict = {"created": r.get("created"), "chart": r.get("chart")}
         de = r.get("de00") or {}
-        for k in ("mean", "max", "p95"):
+        # The five accuracy metrics the colour-accuracy chart plots (Knut), plus
+        # the mean/max aliases older points used.
+        for k in ("mean", "max", "p95",
+                  "avg_all", "avg_low95", "avg_high5", "max_all", "max_low95"):
             if de.get(k) is not None:
                 pt[k] = float(de[k])
         w, b = r.get("paper_white"), r.get("max_black")
@@ -275,3 +335,79 @@ def compare_reports(older: dict, newer: dict) -> dict:
             out[f"{pt}_de"] = round(
                 ciede2000(tuple(a["lab"]), tuple(b["lab"])), 2)
     return out
+
+
+def accuracy_verdict(de00: dict, avg_thr: float, max_thr: float) -> "tuple[list, bool]":
+    """Per-metric Pass/Fail for one run's colour-accuracy stats.
+
+    Returns ``(rows, all_pass)`` where each row is
+    ``{"key", "value", "threshold", "pass"}`` for the five threshold-bearing
+    metrics (:data:`ACCURACY_METRICS`); ``pass`` is None when the value is
+    missing (no design reference). Pass = measured ≤ its threshold."""
+    thr = {"avg": float(avg_thr), "max": float(max_thr)}
+    rows: list[dict] = []
+    all_pass = True
+    de00 = de00 or {}
+    for key, which in ACCURACY_METRICS:
+        val = de00.get(key)
+        t = thr[which]
+        if val is None:
+            rows.append({"key": key, "value": None, "threshold": t, "pass": None})
+            continue
+        ok = float(val) <= t + 1e-9
+        all_pass = all_pass and ok
+        rows.append({"key": key, "value": float(val), "threshold": t, "pass": ok})
+    return rows, all_pass
+
+
+def _run_label(r: dict) -> str:
+    """A run's ``"Profile" @ date`` label for warning lists."""
+    return f'"{r.get("chart") or "?"}" @ {str(r.get("created") or "")[:19]}'
+
+
+def report_scope(runs: "list[dict]") -> dict:
+    """Aggregate the runs included in a report into the Report Scope summary
+    (Knut): the profiles involved (name + instrument + run count), the total run
+    count, the overall date range, and any red-flag warnings.
+
+    Warnings — because the report can't tell which printer a run belongs to, and
+    the cube-corner stats need all eight corners:
+      * ``instrument`` — runs whose instrument differs from the dominant one
+        (mixing instruments, or possibly mixing printers).
+      * ``corners`` — runs whose chart is missing one or more cube corners.
+    """
+    from collections import Counter
+
+    profiles: "dict[str, dict]" = {}
+    for r in runs:
+        name = r.get("chart") or "?"
+        p = profiles.setdefault(name, {"name": name, "instruments": [], "n": 0})
+        p["instruments"].append(r.get("instrument") or "Unknown instrument")
+        p["n"] += 1
+    prof_list = [{"name": p["name"],
+                  "instrument": Counter(p["instruments"]).most_common(1)[0][0],
+                  "n": p["n"]}
+                 for p in profiles.values()]
+
+    dates = sorted(str(r.get("created") or "")[:10] for r in runs if r.get("created"))
+    date_range = (dates[0], dates[-1]) if dates else ("", "")
+
+    warnings: list[dict] = []
+    insts = [r.get("instrument") or "Unknown instrument" for r in runs]
+    if len(set(insts)) > 1:
+        dominant = Counter(insts).most_common(1)[0][0]
+        odd = [{"run": _run_label(r), "instrument": r.get("instrument") or "Unknown instrument"}
+               for r in runs
+               if (r.get("instrument") or "Unknown instrument") != dominant]
+        warnings.append({"kind": "instrument", "dominant": dominant, "runs": odd})
+
+    missing = []
+    for r in runs:
+        miss = [c["name"] for c in (r.get("corners") or []) if c.get("present") is False]
+        if miss:
+            missing.append({"run": _run_label(r), "missing": miss})
+    if missing:
+        warnings.append({"kind": "corners", "runs": missing})
+
+    return {"profiles": prof_list, "total": len(runs),
+            "date_range": date_range, "warnings": warnings}

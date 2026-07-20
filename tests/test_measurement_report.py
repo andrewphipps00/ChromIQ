@@ -156,3 +156,57 @@ def test_trend_chart_widget_visibility(qapp) -> None:
     assert w.has_trend()
     w.resize(400, 200)
     w.grab()                                            # paints without error
+
+
+def test_stats_split_metrics():
+    from workflow.measurement_report import _stats
+    # 20 patches: nineteen at 1.0, one at 10.0 (the worst 5%).
+    s = _stats([1.0] * 19 + [10.0])
+    assert s["avg_all"] == pytest.approx(1.45, abs=0.01)
+    assert s["max_all"] == 10.0
+    assert s["avg_low95"] == pytest.approx(1.0, abs=0.01)   # best 95% are all 1.0
+    assert s["max_low95"] == pytest.approx(1.0, abs=0.01)   # worst-5% (the 10) excluded
+    assert s["avg_high5"] == pytest.approx(10.0, abs=0.01)  # the single worst patch
+
+
+def test_accuracy_verdict_pass_fail():
+    from workflow.measurement_report import accuracy_verdict
+    de = {"avg_all": 1.5, "avg_low95": 1.0, "avg_high5": 2.5,
+          "max_all": 3.5, "max_low95": 2.0}
+    rows, all_pass = accuracy_verdict(de, avg_thr=2.0, max_thr=3.0)
+    got = {r["key"]: r["pass"] for r in rows}
+    assert got["avg_all"] and got["avg_low95"]           # ≤ 2.0
+    assert not got["avg_high5"]                          # 2.5 > 2.0 → fail
+    assert not got["max_all"]                            # 3.5 > 3.0 → fail
+    assert got["max_low95"]                              # 2.0 ≤ 3.0
+    assert all_pass is False
+
+
+def test_report_scope_warnings():
+    from workflow.measurement_report import report_scope
+    def mk(chart, created, inst, present_all=True):
+        corners = [{"name": n, "present": (present_all or n not in ("C", "M"))}
+                   for n in ("W", "K", "R", "G", "B", "C", "M", "Y")]
+        return {"chart": chart, "created": created, "instrument": inst, "corners": corners}
+    runs = [mk("P1", "2026-01-01T09:00:00", "i1 Pro"),
+            mk("P1", "2026-02-01T09:00:00", "i1 Pro"),
+            mk("P2", "2026-03-01T09:00:00", "ColorMunki"),          # odd instrument
+            mk("P1", "2026-04-01T09:00:00", "i1 Pro", present_all=False)]  # missing C,M
+    sc = report_scope(runs)
+    assert sc["total"] == 4
+    assert sc["date_range"] == ("2026-01-01", "2026-04-01")
+    assert {p["name"] for p in sc["profiles"]} == {"P1", "P2"}
+    kinds = {w["kind"] for w in sc["warnings"]}
+    assert kinds == {"instrument", "corners"}
+    inst_w = next(w for w in sc["warnings"] if w["kind"] == "instrument")
+    assert inst_w["dominant"] == "i1 Pro" and len(inst_w["runs"]) == 1
+    corn_w = next(w for w in sc["warnings"] if w["kind"] == "corners")
+    assert corn_w["runs"][0]["missing"] == ["C", "M"]
+
+
+def test_report_scope_clean_no_warnings():
+    from workflow.measurement_report import report_scope
+    corners = [{"name": n, "present": True} for n in "WKRGBCMY"]
+    runs = [{"chart": "P", "created": "2026-01-01T09:00:00",
+             "instrument": "i1 Pro", "corners": corners}]
+    assert report_scope(runs)["warnings"] == []

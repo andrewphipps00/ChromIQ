@@ -22,7 +22,7 @@ from PyQt6.QtWidgets import (
 from core.i18n import tr
 from core.logger import get_logger
 from ui.fade_scroll import attach_edge_fades
-from ui.styles import BG_INPUT, BORDER, SPEC_GREEN, TEXT_MAIN
+from ui.styles import BG_INPUT, BORDER, SPEC_GREEN, TAB_COLORS, TEXT_MAIN
 from ui.tab_header import dialog_masthead
 from ui.theme import resolve_mode
 from ui.tooltip_button import TooltipButton
@@ -48,6 +48,64 @@ _CORNER_LINE = {
     "W": "#9a9a9a", "K": "#555555", "R": "#e23b3b", "G": "#33a94a",
     "B": "#3b6fe2", "C": "#1fb0b0", "M": "#c93bc9", "Y": "#c2a41f",
 }
+
+# The colour-accuracy metrics (Knut's revised set), keyed by report ``de00``
+# field. Labels are lazy so tr() runs under the active language. ``_METRIC_LABELS``
+# covers all six (Spread included); ``_ACCURACY_ROW_KEYS`` are the five that carry
+# a Pass/Fail verdict, in display order; the trend chart plots those five.
+_METRIC_LABELS = {
+    "avg_all":   lambda: tr("Average ΔE, all patches"),
+    "avg_low95": lambda: tr("Average ΔE, lowest 95%"),
+    "avg_high5": lambda: tr("Average ΔE, highest 5%"),
+    "max_all":   lambda: tr("Maximum ΔE, all patches"),
+    "max_low95": lambda: tr("Maximum ΔE, lowest 95%"),
+    "std":       lambda: tr("Spread (std. dev.)"),
+}
+_ACCURACY_ROW_KEYS = ("avg_all", "avg_low95", "avg_high5", "max_all", "max_low95")
+# Line colour per accuracy metric for the colour-accuracy trend chart.
+_METRIC_LINE = {
+    "avg_all":   "#56d6a5", "avg_low95": "#37bcd6", "avg_high5": "#e0864b",
+    "max_all":   "#e0574b", "max_low95": "#9f82ff",
+}
+
+# Section heading colour / a thin heading rule, shared by window + PDF.
+_HEAD = "#2a2a2a"
+# Max dated columns (runs) per table before it continues below — a portrait page
+# fits six run columns plus the Metric column without the dates wrapping (Knut).
+_MAX_RUN_COLS = 6
+
+
+def _swatch(hexc: str) -> str:
+    """A solid colour block for rich text. Qt ignores width/height on an empty
+    span but honours background-color on a span WITH content, so we fill it with
+    spaces hidden by matching the text colour to the fill."""
+    c = html.escape(hexc or "#ffffff")
+    return (f"<span style='background-color:{c};color:{c};"
+            f"border:1px solid #999'>&nbsp;&nbsp;&nbsp;</span>")
+
+
+def _colour_line_html(height: int = 5) -> str:
+    """The ChromIQ five-part spectrum line as a full-width rich-text table row."""
+    cells = "".join(
+        f"<td width='20%' style='background:{c};font-size:1px;line-height:1px'>"
+        f"&nbsp;</td>" for c in TAB_COLORS)
+    return (f"<table width='100%' cellpadding='0' cellspacing='0' "
+            f"style='height:{height}px;margin:0'><tr>{cells}</tr></table>")
+
+
+def _h2(text: str, *, page_break: bool = False) -> str:
+    """A main section heading, matching 'Trend over time (this printer)' etc."""
+    brk = "page-break-before:always;" if page_break else ""
+    return (f"<h2 style='color:{_HEAD};{brk}margin:14px 0 4px'>"
+            f"{html.escape(text)}</h2>")
+
+
+def _h3(text: str) -> str:
+    return f"<h3 style='color:{_HEAD};margin:12px 0 3px'>{html.escape(text)}</h3>"
+
+
+def _fmt(v, dec: int = 2) -> str:
+    return f"{v:.{dec}f}" if isinstance(v, (int, float)) else "—"
 
 
 class _TrendChart(QWidget):
@@ -211,39 +269,67 @@ class MeasurementReportDialog(QDialog):
             self.windowFlags() & ~Qt.WindowType.WindowContextHelpButtonHint)
 
         _help = tr(
-            "This compares what your instrument measured against the "
-            "colours the chart was designed to have, patch by patch, and "
-            "sums it up:\n\n"
-            "  • ΔE00 (colour difference) — the average, middle (median), "
-            "worst and spread across all patches. Lower is closer to the "
-            "design; the numbers matter most when you compare two "
-            "measurements of the SAME chart.\n"
-            "  • Worst patches — the individual patches that differ most, with "
-            "the expected and measured colour side by side, so you can spot a "
-            "misread or a genuinely hard-to-reproduce colour.\n"
-            "  • Paper white and darkest black — the brightest and deepest "
-            "patches, a quick health check of your paper and maximum ink.\n"
-            "  • Cube corners — paper white, composite black and the six "
-            "primary and secondary inks (red, green, blue, cyan, magenta, "
-            "yellow): the corners of the colour cube. Each is compared to its "
-            "design colour, so they tell you about the inks themselves, not "
-            "only the instrument or the paper.\n\n"
-            "Why compare over time? On a printer, a single ΔE against the "
-            "design isn't meaningful on its own (a printer doesn't reproduce "
-            "sRGB). But because the design reference never changes, the "
-            "CHANGE between two dated reports of the same chart is a clean "
-            "signal of drift — ageing inks, a drifting printer, or a "
-            "drifting instrument. Press “Save this report” after each "
-            "measurement to build that history.\n\n"
-            "Trend over time: once you've saved two or more reports for a "
-            "printer, a small chart appears at the top plotting the average "
-            "and worst ΔE00 of every saved measurement across all of this "
-            "printer's builds — so a slow rise (drift) or a sudden jump (a "
-            "bad print or a misread) stands out at a glance. This is the "
-            "per-printer view: it gathers the whole history for this project, "
-            "which is one printer and paper.\n\n"
-            "Screen colours are approximate; the numbers come from your "
-            "measurement file and are exact.")
+            "What this tool does\n"
+            "This report compares what your instrument measured on a printed "
+            "chart against the colours the chart was designed to have, and turns "
+            "it into a clear Pass/Fail verdict you can track over time. The real "
+            "power is comparison: because the design reference never changes, the "
+            "way the numbers move between dated reports of the same printer is a "
+            "clean signal of drift — ageing inks, a printer slowly wandering, or "
+            "an instrument going off.\n\n"
+            "Two ways to use it\n"
+            "  • Profiling runs — after building a profile, check how faithfully "
+            "the chart reproduced.\n"
+            "  • Verification runs — the most valuable habit: print a small chart "
+            "THROUGH your finished profile (a colour-managed print, the "
+            "“Verification measurement” option on the Measure tab), measure it "
+            "every so often, and save a report each time. When the Pass/Fail "
+            "results start slipping, that's your sign the printer has drifted far "
+            "enough to re-profile. A tiny verification chart is enough — you're "
+            "watching the trend, not building a profile.\n\n"
+            "The sections\n"
+            "  • Report Scope — which profiles and instruments are in the report, "
+            "the run count and date range. IMPORTANT: the report cannot tell which "
+            "printer a measurement came from. It is up to YOU to only include runs "
+            "from the same printer. A good habit is a clear Printer Profile Name "
+            "(set on the Create Chart tab) — e.g. include the printer and paper — "
+            "so profiles from one printer are easy to pick out. As a safety net "
+            "the report still warns you if the runs you loaded use different "
+            "instruments, or if a chart is missing any of the eight cube corners "
+            "(which would make its cube-corner figures unreliable).\n"
+            "  • Report Results — a Pass/Fail grid: each colour-accuracy metric "
+            "against each run. Green passes, red fails.\n"
+            "  • Colour accuracy — the ΔE00 (colour difference) figures, split so "
+            "the bulk of the chart (all patches, and the best 95 %) is separated "
+            "from the few hardest patches (the worst 5 %). Each is judged against "
+            "your Pass thresholds. 0 is perfect, 1–2 is barely visible, 10+ is "
+            "clearly wrong.\n"
+            "  • Trend over time — the same metrics plotted across every saved "
+            "measurement, so a slow rise or a sudden jump stands out at a glance.\n"
+            "  • Side-by-side comparison — every metric for every run in one table.\n"
+            "  • Detailed data per run (optional) — the full breakdown for each "
+            "run: the accuracy table, paper white & black, the cube corners and "
+            "the sixteen worst patches.\n\n"
+            "Pass thresholds\n"
+            "You set two limits. The Average threshold (default 2.0 ΔE) judges the "
+            "three average metrics; the Maximum threshold (default 3.0 ΔE) judges "
+            "the two maximum metrics. A metric passes when it is at or below its "
+            "limit. Tighten them for critical work, loosen them for a quick check.\n\n"
+            "Options\n"
+            "  • Show all measurement runs — the whole printer's history, not just "
+            "the loaded one.\n"
+            "  • Show detailed data for each run — add the per-run breakdown.\n"
+            "  • Save report as PDF — a ChromIQ-styled PDF you can keep or share; "
+            "it opens automatically. Reveal folder opens where it was saved.\n\n"
+            "Using i1Profiler measurements\n"
+            "You can feed this report measurements made in i1Profiler: export them "
+            "and convert to a .ti3 with Tools → “Convert i1Profiler measurements "
+            "(.txt) to .ti3”. For the colour-accuracy figures the report also needs "
+            "the chart's design reference — put the matching .ti2 next to the .ti3 "
+            "(same file name). Without a .ti2 you still get paper white and black, "
+            "but not the ΔE comparison.\n\n"
+            "Screen and print colours here are approximate; the numbers come from "
+            "your measurement file and are exact.")
 
         # Tool-style chrome: uppercase eyebrow + serif title + ⓘ over a
         # full-width spectrum stripe, green accent — the same look as the other
@@ -300,20 +386,66 @@ class MeasurementReportDialog(QDialog):
             tr("Reveal folder"),
             tr("Opens the profile's folder in your file manager, so you can "
                "browse to the reports folder and open any PDF you saved. When "
-               "“Include all measurement runs in the PDF” is on, reports are "
-               "written to a reports folder next to the profile's runs; when it "
-               "is off, they go in the loaded run's own reports folder."),
+               "“Show all measurement runs” is on, reports are written to a "
+               "reports folder next to the profile's runs; when it is off, they "
+               "go in the loaded run's own reports folder."),
             self, color=SPEC_GREEN))
-        self._all_runs_check = QCheckBox(
-            tr("Include all measurement runs in the PDF"), self)
-        self._all_runs_check.setChecked(True)
-        self._all_runs_check.setToolTip(tr(
-            "When on, the PDF lists the data tables for every saved measurement "
-            "of this printer plus a side-by-side comparison — not only the run "
-            "shown here."))
-        out_row.addWidget(self._all_runs_check)
         out_row.addStretch(1)
         v.addLayout(out_row)
+
+        # Report options — the window and the PDF always show the same thing (Knut).
+        opt_row = QHBoxLayout()
+        self._all_runs_check = QCheckBox(tr("Show all measurement runs"), self)
+        self._all_runs_check.setChecked(True)
+        self._all_runs_check.setToolTip(tr(
+            "When on, the report covers every saved measurement of this printer "
+            "(Report Scope, Report Results and the side-by-side comparison span "
+            "them all). When off, only the loaded measurement is shown."))
+        self._all_runs_check.toggled.connect(lambda _=None: self._render())
+        opt_row.addWidget(self._all_runs_check)
+        self._detail_check = QCheckBox(tr("Show detailed data for each run"), self)
+        self._detail_check.setChecked(False)
+        self._detail_check.setToolTip(tr(
+            "When on, the full per-run breakdown — colour-accuracy Pass/Fail "
+            "table, paper white & black, cube corners and the worst patches — is "
+            "added for every run, in the window and in the PDF."))
+        self._detail_check.toggled.connect(lambda _=None: self._render())
+        opt_row.addWidget(self._detail_check)
+        opt_row.addStretch(1)
+        v.addLayout(opt_row)
+
+        # Pass/Fail thresholds — the average threshold judges the three average
+        # metrics, the maximum threshold the two maximum metrics (Knut).
+        from ui.widgets import NoScrollDoubleSpinBox
+        from workflow.measurement_report import DEFAULT_PASS_AVG, DEFAULT_PASS_MAX
+        thr_row = QHBoxLayout()
+        thr_row.addWidget(QLabel(tr("Pass threshold — Average:"), self))
+        self._avg_thr_spin = NoScrollDoubleSpinBox(self)
+        self._avg_thr_spin.setDecimals(1); self._avg_thr_spin.setRange(0.1, 100.0)
+        self._avg_thr_spin.setSingleStep(0.5); self._avg_thr_spin.setSuffix(" ΔE")
+        self._avg_thr_spin.setValue(DEFAULT_PASS_AVG)
+        self._avg_thr_spin.valueChanged.connect(lambda _=None: self._render())
+        thr_row.addWidget(self._avg_thr_spin)
+        thr_row.addSpacing(14)
+        thr_row.addWidget(QLabel(tr("Maximum:"), self))
+        self._max_thr_spin = NoScrollDoubleSpinBox(self)
+        self._max_thr_spin.setDecimals(1); self._max_thr_spin.setRange(0.1, 100.0)
+        self._max_thr_spin.setSingleStep(0.5); self._max_thr_spin.setSuffix(" ΔE")
+        self._max_thr_spin.setValue(DEFAULT_PASS_MAX)
+        self._max_thr_spin.valueChanged.connect(lambda _=None: self._render())
+        thr_row.addWidget(self._max_thr_spin)
+        thr_row.addWidget(TooltipButton(
+            tr("Pass thresholds"),
+            tr("The colour-accuracy verdict. A metric passes when its measured "
+               "ΔE00 is at or below its threshold. The Average threshold is "
+               "compared against the three average metrics (all patches, the best "
+               "95%, and the worst 5%); the Maximum threshold against the two "
+               "maximum metrics (all patches, and the best 95%). Typical starting "
+               "points are 2.0 for the average and 3.0 for the maximum — tighten "
+               "them for critical work, loosen them for a quick health check."),
+            self, color=SPEC_GREEN))
+        thr_row.addStretch(1)
+        v.addLayout(thr_row)
 
         self._trend_label = QLabel(tr("Trend over time (this printer)"), self)
         self._trend_label.setStyleSheet("font-weight:bold;margin-top:2px")
@@ -378,7 +510,7 @@ class MeasurementReportDialog(QDialog):
 
     def _load(self, path: Path) -> None:
         from workflow.measurement_report import (
-            build_report, compare_reports, list_project_reports, report_trend,
+            build_report, list_project_reports,
         )
         import json
         try:
@@ -388,28 +520,31 @@ class MeasurementReportDialog(QDialog):
             return
         self._ti3 = Path(path)
         # The printer's full history: every saved report across all runs of this
-        # project, oldest first (#40). The current measurement is usually the
-        # newest auto-saved one; compare against the report before it, and plot
-        # the whole series as a trend.
+        # project, oldest first (#40) — the runs the report and trend cover.
         history: list[dict] = []
         for p in list_project_reports(self._ti3.parent):
             try:
                 history.append(json.loads(p.read_text()))
             except Exception:  # noqa: BLE001
                 continue
-        self._history = history                 # every saved run, for the PDF
+        self._history = history                 # every saved run, for the report
         self._project_dirs = {self._ti3.parent}  # folders folded into the trend
-        comparison = None
-        for older in reversed(history):
-            if older.get("created") != self._report.get("created"):
-                comparison = compare_reports(older, self._report)
-                break
 
         self._refresh_trend()
-        self._view.setHtml(self._report_html(self._report, comparison))
+        self._render()
         self._pdf_btn.setEnabled(True)
         self._add_btn.setEnabled(True)
         self._reveal_btn.setEnabled(True)
+
+    def _render(self) -> None:
+        """(Re)build the on-screen report — the SAME body sequence as the PDF,
+        minus the trend charts (they're the tabs above). Called on load and
+        whenever a control that changes the report changes (Knut)."""
+        if not self._report:
+            self._view.setHtml(self._empty_html())
+            return
+        self._view.setHtml(
+            self._report_body_html(self._runs_for_report(), for_pdf=False))
 
     def _refresh_trend(self) -> None:
         """Recompute the trend series from the current history (which may span
@@ -449,6 +584,7 @@ class MeasurementReportDialog(QDialog):
                 seen.add((r.get("chart"), r.get("created")))
                 added += 1
         self._refresh_trend()
+        self._render()
         self._add_btn.setText(tr("Added — {n} projects in trend").format(
             n=len(self._project_dirs)))
 
@@ -463,8 +599,9 @@ class MeasurementReportDialog(QDialog):
         ]
         return [
             (self._trend_de, tr("Colour accuracy (ΔE00)"), [
-                (tr("Average"), QColor("#56d6a5"), lambda pt: pt.get("mean")),
-                (tr("Worst"),   QColor("#e0864b"), lambda pt: pt.get("max")),
+                (_METRIC_LABELS[k](), QColor(_METRIC_LINE[k]),
+                 (lambda pt, kk=k: pt.get(kk)))
+                for k in _ACCURACY_ROW_KEYS
             ], None, 1, False),
             # White (~L*100) and black (~L*10) are too far apart to share an axis
             # (Knut), so each is its own auto-scaled chart — and the axis ranges
@@ -543,48 +680,92 @@ class MeasurementReportDialog(QDialog):
                 doc.addResource(QTextDocument.ResourceType.ImageResource, url, img)
                 charts_html += (f"<h3 style='margin:4px 0 0'>{html.escape(title)}</h3>"
                                 f"<img src='chart://{i}' width='600'>")
-        # All saved runs of this printer, or just the loaded one (Knut's checkbox).
-        # The loaded run is normally already among the saved history; we use the
-        # history as-is (each with its own saved date) rather than the freshly
-        # built current report, so a run is never listed twice.
-        if self._all_runs_check.isChecked() and self._history:
-            runs = list(self._history)
-        else:
-            runs = [self._report]
+        # The exact same run set the window shows, so the PDF matches it (Knut).
+        runs = self._runs_for_report()
         doc.setHtml(self._pdf_html(runs, charts_html))
+
+        from PyQt6.QtGui import QFontMetricsF
 
         writer = QPdfWriter(str(path))
         writer.setPageSize(QPageSize(QPageSize.PageSizeId.A4))
-        writer.setPageMargins(QMarginsF(14, 14, 14, 16), QPageLayout.Unit.Millimeter)
+        # 15 mm all round keeps the wordmark ≥ 1.5 cm from the paper edge (Knut).
+        writer.setPageMargins(QMarginsF(15, 15, 15, 15), QPageLayout.Unit.Millimeter)
         # QPdfWriter defaults to a very high resolution, but the document is laid
         # out in ~96-dpi pixels (font px, img widths), so match the writer to the
         # document's 96-dpi coordinate space; text stays vector-crisp regardless.
         writer.setResolution(96)
         page_w, page_h = float(writer.width()), float(writer.height())
-        footer_h = 22.0                       # reserve a band for the page number
-        body_h = page_h - footer_h
+        # Header band (wordmark + per-page scope + colour line) at the top of the
+        # printable area, footer band (page number) at the bottom. 34 px ≈ 9 mm,
+        # so with the 15 mm margin the top margin stays under 2.5 cm (Knut).
+        header_h, footer_h = 34.0, 22.0
+        body_h = page_h - header_h - footer_h
         doc.setPageSize(QSizeF(page_w, body_h))
 
-        # Paint page by page so every page can carry a centred "Page X of Y"
-        # footer (Knut) — QTextDocument.print() offers no page decoration.
+        units = self._scope_header_units(runs)   # profile names + measurements/date
+        head_font = QFont(); head_font.setPixelSize(8)
+        foot_font = QFont(); foot_font.setPixelSize(10)
+        # The ChromIQ wordmark, exactly as the app masthead draws it: "Chrom" in
+        # Instrument Serif near-black, "IQ" bold-italic in the magenta accent.
+        wm_r = QFont(); wm_r.setPixelSize(22)
+        wm_r.setFamilies(["Instrument Serif", "Georgia", "Times New Roman", "serif"])
+        wm_i = QFont(wm_r); wm_i.setBold(True); wm_i.setItalic(True)
+        wm_fr, wm_fi = QFontMetricsF(wm_r), QFontMetricsF(wm_i)
+        wm_chrom_w = wm_fr.horizontalAdvance("Chrom")
+        wm_iq_w = wm_fi.horizontalAdvance("IQ")
+
+        def draw_wordmark() -> None:
+            x = page_w - (wm_chrom_w + wm_iq_w)
+            base = 1.0 + wm_fr.ascent()
+            painter.save()
+            painter.setFont(wm_r); painter.setPen(QColor("#1c1b18"))
+            painter.drawText(QPointF(x, base), "Chrom")
+            painter.setFont(wm_i); painter.setPen(QColor("#ff4573"))
+            painter.drawText(QPointF(x + wm_chrom_w - 1.0, base), "IQ")
+            painter.restore()
+
         painter = QPainter(writer)
         layout = doc.documentLayout()
         total = max(1, doc.pageCount())
-        foot_font = QFont(); foot_font.setPixelSize(10)
+
+        def draw_header(pg: int) -> None:
+            draw_wordmark()
+            if pg == 0:
+                return                            # page 1: wordmark only (line is in body)
+            # Scope text, left, wrapped by whole units within the width left of
+            # the wordmark; and the five-part colour line along the band's bottom.
+            painter.save()
+            painter.setPen(QColor(90, 90, 90)); painter.setFont(head_font)
+            fm = painter.fontMetrics()
+            max_w = page_w - (wm_chrom_w + wm_iq_w) - 14.0
+            x, y, line_h = 0.0, 8.0, fm.height() + 1.0
+            for u in units:
+                w = fm.horizontalAdvance(u)
+                if x > 0 and x + w > max_w:
+                    x = 0.0; y += line_h
+                    if y > header_h - 8.0:        # keep it inside the band
+                        break
+                painter.drawText(QPointF(x, y + fm.ascent()), u)
+                x += w
+            painter.restore()
+            seg = page_w / 5.0
+            for i, col in enumerate(TAB_COLORS):
+                painter.fillRect(QRectF(i * seg, header_h - 4.0, seg, 3.0), QColor(col))
+
         for pg in range(total):
             if pg > 0:
                 writer.newPage()
+            draw_header(pg)
             painter.save()
-            painter.translate(0.0, -pg * body_h)
+            painter.translate(0.0, header_h - pg * body_h)
             ctx = QAbstractTextDocumentLayout.PaintContext()
             ctx.clip = QRectF(0, pg * body_h, page_w, body_h)
             layout.draw(painter, ctx)
             painter.restore()
             painter.save()
-            painter.setPen(QColor(120, 120, 120))
-            painter.setFont(foot_font)
+            painter.setPen(QColor(120, 120, 120)); painter.setFont(foot_font)
             painter.drawText(
-                QRectF(0, body_h + 2, page_w, footer_h - 2),
+                QRectF(0, page_h - footer_h + 2, page_w, footer_h - 2),
                 Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop,
                 tr("Page {n} of {total}").format(n=pg + 1, total=total))
             painter.restore()
@@ -592,116 +773,266 @@ class MeasurementReportDialog(QDialog):
 
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))
 
-    def _comparison_table_html(self, runs: list) -> str:
-        """A side-by-side table of each metric across every run — the at-a-glance
-        drift view Knut asked for (columns = dated runs, rows = metrics). When more
-        dates than fit a portrait page, the columns continue in stacked follow-on
-        tables that repeat the Metric column; oldest run is always the first
-        column of the first table (Knut)."""
-        def cell(v, dec=2):
-            return f"{v:.{dec}f}" if isinstance(v, (int, float)) else "—"
+    def _scope_header_units(self, runs: list) -> list:
+        """The per-page header units (Knut): each profile name in quotes, then the
+        total measurement count + date range as one unit — wrapped by whole units
+        in the painter so a long list flows onto a second header line."""
+        from workflow.measurement_report import report_scope
+        sc = report_scope(runs)
+        profs = sc["profiles"]
+        units = [f'“{p["name"]}”' + ("," if i < len(profs) - 1 else "")
+                 for i, p in enumerate(profs)]
+        d0, d1 = sc["date_range"]
+        units.append("  " + tr("{n} measurements").format(n=sc["total"])
+                     + f" ({d0} – {d1})")
+        # Add a trailing space to each name unit so they don't run together.
+        return [(u + " ") if u.endswith(",") else u for u in units]
 
-        de = lambda r: (r.get("de00") or {})
+    # ---- report composition (shared by the window and the PDF) --------------
+    _ZEBRA_BG = "#f2f2f2"
 
-        def corner_de(r, c):
-            for cc in (r.get("corners") or []):
-                if cc.get("name") == c:
-                    return cc.get("de")
-            return None
+    def _thresholds(self) -> "tuple[float, float]":
+        """The (average, maximum) ΔE00 Pass thresholds from the input fields, or
+        the module defaults before those fields are built."""
+        from workflow.measurement_report import DEFAULT_PASS_AVG, DEFAULT_PASS_MAX
+        avg = getattr(self, "_avg_thr_spin", None)
+        mx = getattr(self, "_max_thr_spin", None)
+        return (float(avg.value()) if avg is not None else DEFAULT_PASS_AVG,
+                float(mx.value()) if mx is not None else DEFAULT_PASS_MAX)
 
-        specs = [
-            (tr("Average ΔE00"), lambda r: de(r).get("mean"), 2),
-            (tr("Worst ΔE00"), lambda r: de(r).get("max"), 2),
-            (tr("Paper white L*"),
-             lambda r: (r.get("paper_white") or {}).get("lab", [None])[0], 1),
-            (tr("Black L*"),
-             lambda r: (r.get("max_black") or {}).get("lab", [None])[0], 1),
-        ]
-        for code in ("W", "K", "R", "G", "B", "C", "M", "Y"):
-            lbl = tr("{corner} ΔE00").format(corner=_CORNER_LABELS[code]())
-            specs.append((lbl, (lambda r, c=code: corner_de(r, c)), 2))
+    def _runs_for_report(self) -> list:
+        """Every saved run of the loaded printer(s) when 'Show all measurement
+        runs' is on, else just the loaded one. The same list drives the window
+        and the PDF, so they always match (worst-patch count included, Knut)."""
+        if (getattr(self, "_all_runs_check", None) is not None
+                and self._all_runs_check.isChecked() and self._history):
+            return list(self._history)
+        return [self._report] if self._report else []
 
-        CHUNK = 8                                   # dated columns that fit portrait
-        chunks = [runs[i:i + CHUNK] for i in range(0, len(runs), CHUNK)]
-        tables = []
-        for chunk in chunks:
+    def _metric_table(self, dates: list, data_rows: list) -> str:
+        """One metric×run table: a wide, no-wrap Metric column, dated run columns,
+        a rule under the header row and a light-grey background on every other
+        data row (Knut)."""
+        thb = "border-bottom:1.5px solid #bbb;white-space:nowrap"
+        th = ("<tr><th align='left' style='" + thb + ";padding:2px 14px 3px 0'>"
+              + html.escape(tr("Metric")) + "</th>"
+              + "".join("<th align='right' style='" + thb + ";padding:2px 8px 3px'>"
+                        + html.escape(d) + "</th>" for d in dates) + "</tr>")
+        body = [th]
+        for i, (label, cells) in enumerate(data_rows):
+            bg = f" style='background:{self._ZEBRA_BG}'" if i % 2 == 1 else ""
+            body.append(f"<tr{bg}><td style='white-space:nowrap;padding-right:14px'>"
+                        + html.escape(label) + "</td>" + "".join(cells) + "</tr>")
+        return ("<table cellpadding='4' cellspacing='0' style='border-collapse:"
+                "collapse;font-size:11px;margin-bottom:10px'>"
+                + "".join(body) + "</table>")
+
+    def _chunked_metric_tables(self, runs: list, row_getters: list) -> str:
+        """Stacked metric×run tables, at most :data:`_MAX_RUN_COLS` dated columns
+        each, continuing below with the Metric column repeated; oldest run first."""
+        out = []
+        for i in range(0, len(runs), _MAX_RUN_COLS):
+            chunk = runs[i:i + _MAX_RUN_COLS]
             dates = [str(r.get("created") or "")[:10] for r in chunk]
-            head = ("<tr><th align='left'>" + tr("Metric") + "</th>"
-                    + "".join(f"<th>{html.escape(d)}</th>" for d in dates) + "</tr>")
-            body = [head]
-            for label, fn, dec in specs:
-                cells = "".join(
-                    f"<td align='right'>{cell(fn(r), dec)}</td>" for r in chunk)
-                body.append(
-                    f"<tr><td style='color:#555'>{html.escape(label)}</td>{cells}</tr>")
-            tables.append("<table cellpadding='4' cellspacing='0' "
-                          "style='border-collapse:collapse;font-size:11px;"
-                          "margin-bottom:10px'>" + "".join(body) + "</table>")
-        return ("<h2 style='color:#2a2a2a;page-break-before:always'>"
-                + tr("Side-by-side comparison") + "</h2>" + "".join(tables))
+            rows = [(label, [get(r) for r in chunk]) for label, get in row_getters]
+            out.append(self._metric_table(dates, rows))
+        return "".join(out)
 
-    def _pdf_html(self, runs: list, charts_html: str) -> str:
-        """The printable report (Knut's order): a printer-level header, the
-        how-to-read guide, the trend charts, a side-by-side comparison, then the
-        full detailed data for every run below."""
-        first = runs[0] if runs else self._report
-        span = ""
-        if len(runs) > 1:
-            span = (" &nbsp;·&nbsp; " + tr("{n} measurements").format(n=len(runs))
-                    + f" ({str(runs[0].get('created') or '')[:10]} – "
-                    f"{str(runs[-1].get('created') or '')[:10]})")
-        header = (
-            "<table width='100%' cellpadding='0' cellspacing='0'>"
-            "<tr><td style='border-bottom:2px solid #56d6a5;padding-bottom:6px'>"
-            f"<span style='font-size:22px;font-weight:bold;color:#2a2a2a'>"
-            f"{html.escape(tr('Measurement Report'))}</span><br>"
-            f"<span style='font-size:12px;color:#777'>{html.escape(first['chart'])}"
-            + span + "</span></td></tr></table><br>")
+    def _scope_html(self, runs: list) -> str:
+        """Report Scope (Knut): which profiles + instruments are included, the run
+        count and date range, and red warnings for mixed instruments or missing
+        cube colours."""
+        from workflow.measurement_report import report_scope
+        sc = report_scope(runs)
+        items = "".join(
+            "<li>“" + html.escape(p["name"]) + "”, "
+            + html.escape(tr("Instrument: {inst}").format(inst=p["instrument"]))
+            + f" <span style='color:#888'>· {p['n']} " + html.escape(tr("runs"))
+            + "</span></li>"
+            for p in sc["profiles"])
+        d0, d1 = sc["date_range"]
+        ind = "margin:0 0 0 1.6em"
+        out = (_h2(tr("Report Scope"))
+               + "<div>" + html.escape(
+                   tr("The following profile(s) measurement runs are included:"))
+               + "</div><ul style='margin:2px 0 6px'>" + items + "</ul>"
+               + "<div><b>" + html.escape(tr("No. of Measurements:")) + "</b></div>"
+               + f"<div style='{ind}'>{sc['total']}</div>"
+               + "<div><b>" + html.escape(tr("Date range:")) + "</b></div>"
+               + f"<div style='{ind}'>{html.escape(d0)} – {html.escape(d1)}</div>")
+        return out + self._scope_warnings_html(sc["warnings"])
+
+    def _scope_warnings_html(self, warnings: list) -> str:
+        """Red warning block for the Report Scope checks (Knut). Empty when clean."""
+        if not warnings:
+            return ""
+        blocks = []
+        for w in warnings:
+            if w["kind"] == "instrument":
+                lis = "".join(
+                    "<li>" + html.escape(o["run"]) + " — "
+                    + html.escape(tr("uses {inst}").format(inst=o["instrument"]))
+                    + "</li>" for o in w["runs"])
+                blocks.append(
+                    "<div><b>" + html.escape(tr("Warning — mixed instruments.")) + "</b> "
+                    + html.escape(tr(
+                        "Every run in a report should come from the same instrument "
+                        "and the same printer; the report cannot tell printers apart. "
+                        "These runs use a different instrument from the majority "
+                        "({dom}):").format(dom=w["dominant"]))
+                    + "</div><ul>" + lis + "</ul>")
+            elif w["kind"] == "corners":
+                lis = "".join(
+                    "<li>" + html.escape(o["run"]) + " — "
+                    + html.escape(tr("missing {names}").format(
+                        names=", ".join(_CORNER_LABELS.get(n, (lambda n=n: n))()
+                                        for n in o["missing"])))
+                    + "</li>" for o in w["runs"])
+                blocks.append(
+                    "<div><b>" + html.escape(tr("Warning — missing cube colours.")) + "</b> "
+                    + html.escape(tr(
+                        "These runs are missing one or more of the eight cube "
+                        "corners, so their cube-corner figures are less meaningful:"))
+                    + "</div><ul>" + lis + "</ul>")
+        return ("<div style='color:#c0392b;margin-top:10px'>"
+                + "".join(blocks) + "</div>")
+
+    def _how_to_read_html(self) -> str:
+        """The plain-language guide, boxed like before (Knut keeps it up front)."""
         guide = (
-            "<h2>" + tr("How to read this report") + "</h2>"
-            "<p>" + tr(
+            _h2(tr("How to read this report"))
+            + "<p>" + html.escape(tr(
                 "This report compares what your instrument measured against the "
                 "colours the chart was designed to have. Every number is a colour "
                 "difference (ΔE00): 0 is a perfect match, 1–2 is barely visible, "
-                "and 10+ is clearly wrong.") + "</p>"
+                "and 10+ is clearly wrong.")) + "</p>"
             "<ul>"
-            "<li>" + tr("<b>Colour accuracy</b> — the average, median, worst, best "
-                        "and spread of ΔE00 across every patch. On a printer the "
-                        "absolute value is less telling than how it CHANGES between "
-                        "dated reports of the same chart.") + "</li>"
-            "<li>" + tr("<b>Paper white &amp; darkest black</b> — the brightest and "
-                        "deepest patches (L*), a quick health check of your paper "
-                        "and maximum ink.") + "</li>"
-            "<li>" + tr("<b>Cube corners</b> — paper white, composite black and the "
-                        "six primary and secondary inks. These say as much about "
-                        "your inks as about the instrument.") + "</li>"
+            "<li>" + html.escape(tr(
+                "Colour accuracy — the ΔE00 across the patches, split so you can "
+                "see the bulk of the chart (all patches and the best 95%) apart "
+                "from the few hardest patches (the worst 5%). Each metric is judged "
+                "against your Pass thresholds.")) + "</li>"
+            "<li>" + html.escape(tr(
+                "Paper white & darkest black — the brightest and deepest patches "
+                "(L*), a quick health check of your paper and maximum ink.")) + "</li>"
+            "<li>" + html.escape(tr(
+                "Cube corners — paper white, composite black and the six primary "
+                "and secondary inks. These say as much about your inks as about "
+                "the instrument.")) + "</li>"
             "</ul>"
-            "<p>" + tr(
-                "The trend charts plot every saved report of this printer over "
-                "time, so a slow rise (drift — ageing inks, a drifting printer or "
-                "instrument) or a sudden jump (a bad print or a misread) stands "
-                "out at a glance. Save a report after each measurement to build "
-                "that history. Screen and print colours here are approximate; the "
-                "numbers come from your measurement file and are exact.") + "</p>")
-        charts = (("<h2 style='color:#2a2a2a;page-break-before:always'>"
-                   + tr("Trend over time (this printer)")
-                   + "</h2>" + charts_html) if charts_html else "")
-        guide_box = ("<table width='100%' cellpadding='12' cellspacing='0'>"
-                     "<tr><td style='background:#f4f7f6'>" + guide + "</td></tr></table>")
-        comparison = self._comparison_table_html(runs) if len(runs) > 1 else ""
-        # Full detailed data for every run, below the overview (Knut).
-        details = ("<h2 style='color:#2a2a2a;page-break-before:always'>"
-                   + tr("Detailed data per measurement") + "</h2>")
-        for run in runs:
-            details += (
-                "<h3 style='color:#2a2a2a;border-bottom:1px solid #ddd'>"
-                f"{html.escape(str(run.get('created') or ''))} &nbsp;·&nbsp; "
-                f"{run.get('patches', 0)} " + html.escape(tr('patches')) + "</h3>"
-                + self._report_html(run, None, title=False))
-        # Knut's order: how-to-read first, then charts, then comparison, then data.
+            "<p>" + html.escape(tr(
+                "On a printer a single ΔE against the design isn't meaningful on "
+                "its own — a printer doesn't reproduce sRGB. But the design "
+                "reference never changes, so comparing dated reports of the same "
+                "chart is a clean drift signal. Save a report after each "
+                "measurement to build that history. Screen and print colours here "
+                "are approximate; the numbers come from your measurement file and "
+                "are exact.")) + "</p>")
+        return ("<table width='100%' cellpadding='12' cellspacing='0'>"
+                "<tr><td style='background:#f4f7f6'>" + guide + "</td></tr></table>")
+
+    def _report_results_html(self, runs: list) -> str:
+        """Report Results: a Pass/Fail grid, rows = the five threshold metrics,
+        columns = dated runs (≤6 per table, continuing below). Pass green, Fail
+        red (Knut)."""
+        from workflow.measurement_report import accuracy_verdict
+        avg_thr, max_thr = self._thresholds()
+        verd = {id(r): {x["key"]: x["pass"]
+                        for x in accuracy_verdict(r.get("de00") or {}, avg_thr, max_thr)[0]}
+                for r in runs}
+
+        def pf(r, key):
+            p = verd[id(r)].get(key)
+            if p is None:
+                return "<td align='center'>—</td>"
+            col = "#1e8e3e" if p else "#c0392b"
+            txt = tr("Pass") if p else tr("Fail")
+            return (f"<td align='center' style='color:{col};font-weight:bold'>"
+                    f"{html.escape(txt)}</td>")
+
+        row_getters = [(_METRIC_LABELS[k](), (lambda r, k=k: pf(r, k)))
+                       for k in _ACCURACY_ROW_KEYS]
+        return (_h2(tr("Report Results"))
+                + "<div style='color:#555;margin-bottom:4px'>" + html.escape(tr(
+                    "The following results are extracted from section “Colour "
+                    "accuracy” for each measurement run included for this report."))
+                + "</div>" + self._chunked_metric_tables(runs, row_getters))
+
+    def _comparison_table_html(self, runs: list) -> str:
+        """Side-by-side: the full metric set across every run (columns = dated
+        runs, ≤6 per table). Zebra rows, header rule, wide Metric column (Knut)."""
+        de = lambda r: (r.get("de00") or {})
+
+        def num(getter, dec):
+            return lambda r: f"<td align='right'>{_fmt(getter(r), dec)}</td>"
+
+        def corner_de(r, code):
+            for cc in (r.get("corners") or []):
+                if cc.get("name") == code:
+                    return cc.get("de")
+            return None
+
+        row_getters = [(_METRIC_LABELS[k](), num((lambda r, k=k: de(r).get(k)), 2))
+                       for k in ("avg_all", "avg_low95", "avg_high5",
+                                 "max_all", "max_low95", "std")]
+        row_getters += [
+            (tr("Paper white L*"),
+             num(lambda r: (r.get("paper_white") or {}).get("lab", [None])[0], 1)),
+            (tr("Black L*"),
+             num(lambda r: (r.get("max_black") or {}).get("lab", [None])[0], 1)),
+        ]
+        for code in ("W", "K", "R", "G", "B", "C", "M", "Y"):
+            lbl = tr("{corner} ΔE00").format(corner=_CORNER_LABELS[code]())
+            row_getters.append((lbl, num((lambda r, c=code: corner_de(r, c)), 2)))
+        return (_h2(tr("Side-by-side comparison"), page_break=True)
+                + self._chunked_metric_tables(runs, row_getters))
+
+    def _report_body_html(self, runs: list, *, for_pdf: bool,
+                          charts_html: str = "") -> str:
+        """The full report body, shared by the window and the PDF in ONE sequence
+        (Knut): title/heading → Report Scope → How to read → Report Results →
+        trend charts (PDF) → Side-by-side (>1 run) → Detailed (opt-in)."""
+        if not runs:
+            return self._empty_html()
+        total = len(runs)
+        d0 = str(runs[0].get("created") or "")[:10]
+        d1 = str(runs[-1].get("created") or "")[:10]
+        span = ""
+        if total > 1:
+            span = (" &nbsp;·&nbsp; " + tr("{n} measurements").format(n=total)
+                    + f" ({html.escape(d0)} – {html.escape(d1)})")
+        # ── heading ──
+        if for_pdf:
+            head = (f"<div style='font-size:22px;font-weight:bold;color:{_HEAD}'>"
+                    + html.escape(tr("Measurement Report")) + "</div>"
+                    f"<div style='font-size:12px;color:#777;margin:2px 0 4px'>"
+                    + html.escape(runs[0].get("chart") or "") + span + "</div>"
+                    + _colour_line_html() + "<br>")
+        else:
+            head = (f"<h2 style='margin:0 0 2px'>"
+                    + html.escape(runs[0].get("chart") or "") + "</h2>"
+                    f"<div style='color:#888;font-size:12px'>"
+                    + tr("{n} measurements").format(n=total)
+                    + f" ({html.escape(d0)} – {html.escape(d1)})</div>")
+        parts = [head, self._scope_html(runs), self._how_to_read_html(),
+                 self._report_results_html(runs)]
+        if for_pdf and charts_html:
+            parts.append(
+                _h2(tr("Trend over time (this printer)"), page_break=True)
+                + "<div style='color:#555;margin-bottom:6px'>" + html.escape(tr(
+                    "A rising average or shifting white/black/colour over time "
+                    "points to ageing inks, printer drift, or instrument drift."))
+                + "</div>" + charts_html)
+        if total > 1:
+            parts.append(self._comparison_table_html(runs))
+        if getattr(self, "_detail_check", None) is not None \
+                and self._detail_check.isChecked():
+            parts.append(self._detailed_section_html(runs))
         return ("<div style='font-family:sans-serif;color:#333;font-size:12px'>"
-                + header + guide_box + "<br>" + charts + "<br>" + comparison
-                + "<br>" + details + "</div>")
+                + "".join(parts) + "</div>")
+
+    def _pdf_html(self, runs: list, charts_html: str) -> str:
+        return self._report_body_html(runs, for_pdf=True, charts_html=charts_html)
 
     def _update_trends(self, series: list, dark: bool) -> None:
         """Feed the three grouped trend charts their own metric sets (#40, Knut)."""
@@ -723,95 +1054,108 @@ class MeasurementReportDialog(QDialog):
                 + html.escape(tr("Could not read this measurement: {msg}")
                               .format(msg=msg)) + "</div>")
 
-    def _report_html(self, r: dict, comparison: "dict | None", title: bool = True) -> str:
-        def sw(hexc: str) -> str:
-            # Qt's rich-text engine ignores display:inline-block width/height on
-            # an empty span (the swatches came out invisible), but it DOES honour
-            # background-color on a span with content. Fill it with spaces hidden
-            # by matching the text colour to the fill, so a solid colour block
-            # shows on every theme.
-            c = html.escape(hexc)
-            return (f"<span style='background-color:{c};color:{c};"
-                    f"border:1px solid #999'>&nbsp;&nbsp;&nbsp;</span>")
-
-        de = r.get("de00")
+    def _run_detail_html(self, r: dict) -> str:
+        """One run's full breakdown: the colour-accuracy Pass/Fail table
+        (Metric / Measured ΔE00 / Threshold / Result), paper white & black, the
+        cube corners, and the 16 worst patches (Knut)."""
+        de = r.get("de00") or {}
         parts = []
-        if title:
-            parts += [f"<h2 style='margin:0 0 2px'>{html.escape(r['chart'])}</h2>",
-                      f"<div style='color:#888;font-size:12px'>"
-                      f"{html.escape(r['created'])} · {r['patches']} "
-                      + tr("patches") + "</div>"]
+        if de.get("avg_all") is not None:
+            from workflow.measurement_report import accuracy_verdict
+            avg_thr, max_thr = self._thresholds()
+            rows, _ = accuracy_verdict(de, avg_thr, max_thr)
+            head = ("<tr style='color:#888'>"
+                    "<th align='left' style='border-bottom:1.5px solid #bbb'>"
+                    + html.escape(tr("Metric")) + "</th>"
+                    "<th align='right' style='border-bottom:1.5px solid #bbb'>"
+                    + html.escape(tr("Measured ΔE00")) + "</th>"
+                    "<th align='right' style='border-bottom:1.5px solid #bbb'>"
+                    + html.escape(tr("Threshold")) + "</th>"
+                    "<th align='center' style='border-bottom:1.5px solid #bbb'>"
+                    + html.escape(tr("Result")) + "</th></tr>")
+            trs = [head]
 
-        if de:
-            parts.append("<h3>" + tr("Colour accuracy (ΔE00 vs the chart's design)") + "</h3>")
-            parts.append(
-                "<table cellpadding='5' style='border-collapse:collapse'>"
-                + "".join(
-                    f"<tr><td style='color:#888'>{html.escape(lbl)}</td>"
-                    f"<td style='text-align:right'><b>{de[k]:.2f}</b></td></tr>"
-                    for lbl, k in ((tr("Average"), "mean"), (tr("Median"), "median"),
-                                   (tr("Worst"), "max"), (tr("Best"), "min"),
-                                   (tr("Spread (std. dev.)"), "std"),
-                                   (tr("95% within"), "p95")))
-                + "</table>")
+            def row_html(i, label, measured, threshold, verdict):
+                bg = f" style='background:{self._ZEBRA_BG}'" if i % 2 == 1 else ""
+                if verdict is None:
+                    res = "—"
+                else:
+                    col = "#1e8e3e" if verdict else "#c0392b"
+                    res = (f"<span style='color:{col};font-weight:bold'>"
+                           + html.escape(tr("Pass") if verdict else tr("Fail"))
+                           + "</span>")
+                return (f"<tr{bg}><td style='padding-right:14px'>{html.escape(label)}</td>"
+                        f"<td align='right'><b>{_fmt(measured)}</b></td>"
+                        f"<td align='right'>{_fmt(threshold) if threshold is not None else '—'}</td>"
+                        f"<td align='center'>{res}</td></tr>")
+
+            for i, row in enumerate(rows):
+                trs.append(row_html(i, _METRIC_LABELS[row["key"]](), row["value"],
+                                    row["threshold"], row["pass"]))
+            # Spread is reported for completeness but carries no threshold (Knut).
+            trs.append(row_html(len(rows), _METRIC_LABELS["std"](),
+                                de.get("std"), None, None))
+            parts.append(_h3(tr("Colour accuracy (ΔE00 vs the chart's design)")))
+            parts.append("<table cellpadding='5' cellspacing='0' "
+                         "style='border-collapse:collapse;font-size:11px'>"
+                         + "".join(trs) + "</table>")
         else:
-            parts.append("<p style='color:#888'>"
-                         + tr("No design reference (.ti2) was found next to this "
-                              "measurement, so colour-accuracy statistics aren't "
-                              "available — only the paper white and black below.")
-                         + "</p>")
+            parts.append("<p style='color:#888'>" + html.escape(tr(
+                "No design reference (.ti2) was found next to this measurement, so "
+                "colour-accuracy statistics aren't available — only the paper white "
+                "and black below.")) + "</p>")
 
-        w, b = r["paper_white"], r["max_black"]
-        parts.append("<h3>" + tr("Paper white &amp; darkest black") + "</h3>")
-        parts.append(
-            f"<div>{sw(w['hex'])} " + tr("White") + f" ({html.escape(str(w['loc']))}) "
-            f"— L* {w['lab'][0]:.1f}</div>"
-            f"<div>{sw(b['hex'])} " + tr("Black") + f" ({html.escape(str(b['loc']))}) "
-            f"— L* {b['lab'][0]:.1f}</div>")
+        w, b = r.get("paper_white"), r.get("max_black")
+        if w and b:
+            parts.append(_h3(tr("Paper white & darkest black")))
+            parts.append(
+                f"<div>{_swatch(w['hex'])} " + html.escape(tr("White"))
+                + f" ({html.escape(str(w['loc']))}) — L* {w['lab'][0]:.1f}</div>"
+                f"<div>{_swatch(b['hex'])} " + html.escape(tr("Black"))
+                + f" ({html.escape(str(b['loc']))}) — L* {b['lab'][0]:.1f}</div>")
 
         corners = r.get("corners") or []
         if corners:
-            parts.append("<h3>" + tr("Cube corners (the eight ink extremes)") + "</h3>")
-            parts.append("<div style='color:#888;font-size:12px;margin-bottom:4px'>"
-                         + tr("Paper white, composite black and the six primary and "
-                              "secondary inks — the corners of the colour cube. These "
-                              "say as much about your inks as about the measurement.")
-                         + "</div>")
-            head = ("<tr style='color:#888'><th align='left'>" + tr("Corner")
-                    + "</th><th>" + tr("Expected") + "</th><th>" + tr("Measured")
-                    + "</th><th align='right'>ΔE00</th></tr>")
+            parts.append(_h3(tr("Cube corners (the eight ink extremes)")))
+            head = ("<tr style='color:#888'><th align='left'>" + html.escape(tr("Corner"))
+                    + "</th><th>" + html.escape(tr("Expected")) + "</th><th>"
+                    + html.escape(tr("Measured")) + "</th><th align='right'>ΔE00</th></tr>")
             crows = [head]
-            for c in corners:
-                lbl = _CORNER_LABELS.get(c["name"], lambda: c["name"])()
-                exp = (sw(c["expected_hex"]) if c.get("expected_hex") else "—")
-                de_c = (f"<b>{c['de']:.2f}</b>" if c.get("de") is not None else "—")
+            for i, c in enumerate(corners):
+                lbl = _CORNER_LABELS.get(c["name"], (lambda: c["name"]))()
+                exp = _swatch(c["expected_hex"]) if c.get("expected_hex") else "—"
+                de_c = f"<b>{_fmt(c.get('de'))}</b>" if c.get("de") is not None else "—"
+                miss = "" if c.get("present", True) else (
+                    " <span style='color:#c0392b'>(" + html.escape(tr("missing"))
+                    + ")</span>")
+                bg = f" style='background:{self._ZEBRA_BG}'" if i % 2 == 1 else ""
                 crows.append(
-                    f"<tr><td>{html.escape(lbl)} "
+                    f"<tr{bg}><td>{html.escape(lbl)}{miss} "
                     f"<span style='color:#888'>({html.escape(str(c['loc']))})</span></td>"
                     f"<td align='center'>{exp}</td>"
-                    f"<td align='center'>{sw(c['hex'])}</td>"
+                    f"<td align='center'>{_swatch(c['hex'])}</td>"
                     f"<td align='right'>{de_c}</td></tr>")
-            parts.append("<table cellpadding='5' style='border-collapse:collapse'>"
+            parts.append("<table cellpadding='5' cellspacing='0' "
+                         "style='border-collapse:collapse;font-size:11px'>"
                          + "".join(crows) + "</table>")
 
         worst = r.get("worst_patches") or []
         if worst:
-            # Two 8-row halves side by side in one 9-column table (an empty middle
-            # column separates them) — the same columns, half the vertical space
-            # (Knut).
-            parts.append("<h3>" + tr("Worst patches") + "</h3>")
+            # Two 8-row halves side by side in one 9-column table (empty middle
+            # column) — same columns, half the height (Knut).
+            parts.append(_h3(tr("Worst patches")))
 
             def wcells(p) -> str:
                 if p is None:
                     return "<td></td><td></td><td></td><td></td>"
                 return (f"<td>{html.escape(str(p['loc']))}</td>"
-                        f"<td align='right'><b>{p['de']:.2f}</b></td>"
-                        f"<td align='center'>{sw(p['expected_hex'])}</td>"
-                        f"<td align='center'>{sw(p['measured_hex'])}</td>")
+                        f"<td align='right'><b>{_fmt(p['de'])}</b></td>"
+                        f"<td align='center'>{_swatch(p['expected_hex'])}</td>"
+                        f"<td align='center'>{_swatch(p['measured_hex'])}</td>")
 
-            hdr = ("<th align='left'>" + tr("Patch") + "</th>"
-                   "<th align='right'>ΔE00</th><th>" + tr("Expected") + "</th><th>"
-                   + tr("Measured") + "</th>")
+            hdr = ("<th align='left'>" + html.escape(tr("Patch")) + "</th>"
+                   "<th align='right'>ΔE00</th><th>" + html.escape(tr("Expected"))
+                   + "</th><th>" + html.escape(tr("Measured")) + "</th>")
             half = (len(worst) + 1) // 2
             left, right = worst[:half], worst[half:]
             rows = ["<tr style='color:#888'>" + hdr
@@ -820,30 +1164,27 @@ class MeasurementReportDialog(QDialog):
                 lp = left[i] if i < len(left) else None
                 rp = right[i] if i < len(right) else None
                 rows.append("<tr>" + wcells(lp) + "<td></td>" + wcells(rp) + "</tr>")
-            parts.append("<table cellpadding='5' style='border-collapse:collapse'>"
+            parts.append("<table cellpadding='5' cellspacing='0' "
+                         "style='border-collapse:collapse;font-size:11px'>"
                          + "".join(rows) + "</table>")
 
-        if comparison:
-            parts.append("<h3>" + tr("Change since the last saved report") + "</h3>")
-            parts.append("<div style='color:#888;font-size:12px'>"
-                         + tr("compared with {when}").format(
-                             when=html.escape(str(comparison.get("older", "?"))))
-                         + "</div>")
-            crows = []
-            for lbl, k in ((tr("Average ΔE00"), "de00_mean_delta"),
-                           (tr("Worst ΔE00"), "de00_max_delta"),
-                           (tr("Paper-white shift"), "paper_white_de"),
-                           (tr("Black shift"), "max_black_de")):
-                if k in comparison:
-                    val = comparison[k]
-                    arrow = "▲" if val > 0.05 else ("▼" if val < -0.05 else "—")
-                    crows.append(f"<tr><td style='color:#888'>{html.escape(lbl)}</td>"
-                                 f"<td align='right'>{arrow} {val:+.2f}</td></tr>")
-            if crows:
-                parts.append("<table cellpadding='5'>" + "".join(crows) + "</table>")
-            parts.append("<div style='color:#888;font-size:12px;margin-top:6px'>"
-                         + tr("A rising average or shifting white/black over time "
-                              "points to ageing inks, printer drift, or instrument "
-                              "drift.") + "</div>")
+        return "<div>" + "".join(parts) + "</div>"
 
-        return "<div style='font-family:sans-serif'>" + "".join(parts) + "</div>"
+    def _detailed_section_html(self, runs: list) -> str:
+        """The opt-in 'Detailed data per measurement run' section: each run on its
+        own page, led by a 'Measurement run — date — N patches' heading and the
+        profile name (Knut)."""
+        out = [_h2(tr("Detailed data per measurement run"), page_break=True)]
+        for idx, run in enumerate(runs):
+            brk = "page-break-before:always;" if idx > 0 else ""
+            out.append(
+                f"<h3 style='color:{_HEAD};{brk}border-bottom:1px solid #ddd;"
+                f"margin:12px 0 2px'>"
+                + html.escape(tr("Measurement run — {date} — {n} patches").format(
+                    date=str(run.get("created") or ""), n=run.get("patches", 0)))
+                + "</h3>"
+                "<div style='color:#555;margin-bottom:4px'>"
+                + html.escape(tr("Profile name: {name}").format(
+                    name=run.get("chart") or "")) + "</div>"
+                + self._run_detail_html(run))
+        return "".join(out)
