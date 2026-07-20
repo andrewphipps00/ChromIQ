@@ -250,9 +250,14 @@ class _TrendChart(QWidget):
                     yy = T + h * (1.0 - (tv - vmin) / span)
                     p.setPen(tpen)
                     p.drawLine(QPointF(L, yy), QPointF(L + w, yy))
+                    # Label sits OUTSIDE the plot in the left margin, right-aligned
+                    # with the y-axis numbers and vertically centred on its dotted
+                    # line; it tracks the line as the threshold changes (Knut).
                     p.setPen(QPen(fg, 1.0))
-                    p.drawText(QPointF(L + w - p.fontMetrics().horizontalAdvance(tlab)
-                                       - 2, yy - 2.0), tlab)
+                    p.drawText(QRectF(0, yy - 7, L - 4, 14),
+                               Qt.AlignmentFlag.AlignRight
+                               | Qt.AlignmentFlag.AlignVCenter,
+                               tlab)
 
         # X axis: a tick under EVERY measurement point plus as many dated labels
         # (YYYY-MM-DD) as fit without overlapping — always the first and last —
@@ -386,11 +391,13 @@ class MeasurementReportDialog(QDialog):
             "  2. Convert it with Tools → “Convert i1Profiler → TI3”, then add the "
             "resulting .ti3 here with “Add Profile's Measurements…”.\n"
             "That's all — you get the full colour-accuracy figures, no extra "
-            "reference file needed. ChromIQ works out the expected colour of each "
-            "patch from the measured device values, the same way it would from a "
-            "chart's own design file. (If a matching .ti2 happens to sit next to "
-            "the .ti3, that's used as the reference instead.) The instrument is "
-            "read from the i1Profiler file during conversion.\n"
+            "reference file needed. ChromIQ works out each patch's expected colour "
+            "from the device values recorded in the file — the RGB / ink code "
+            "values sent to the printer, which are the chart's fixed design and "
+            "the same for every print, so the reference stays just as static "
+            "across runs as a .ti2 would. (If a matching .ti2 happens to sit next "
+            "to the .ti3, that's used instead.) The instrument is read from the "
+            "i1Profiler file during conversion.\n"
             "Keeping things tidy: convert into the same folder as your i1Profiler "
             "files, add the .ti3, and save the PDF report right there — your "
             "i1Profiler work stays together and separate from ChromIQ's own "
@@ -451,8 +458,10 @@ class MeasurementReportDialog(QDialog):
                "The instrument shown in the report is read from each measurement "
                "file itself. For the colour figures the report uses the chart's "
                "design file (.ti2) when it sits next to the .ti3; if there isn't "
-               "one, it works out the expected colours from the measured device "
-               "values instead — so you still get the full ΔE comparison.\n\n"
+               "one, it derives the same reference from the device values in the "
+               "file (the fixed code values sent to the printer, identical for "
+               "every run) — so you still get the full ΔE comparison against a "
+               "static reference.\n\n"
                "Using i1Profiler measurements: export each measurement from "
                "i1Profiler and convert it with Tools → “Convert i1Profiler → TI3”, "
                "then add each .ti3 here. No .ti2 is required — ChromIQ derives the "
@@ -495,8 +504,9 @@ class MeasurementReportDialog(QDialog):
                "numbers) to a PDF and opens it. The charts are included only when "
                "the report has two or more runs.\n\n"
                "Where it is saved: when “Show all measurement runs” is on, the PDF "
-               "belongs to the whole printer and goes in a reports folder next to "
-               "the profile's runs; when it is off, it goes in the loaded run's "
+               "belongs to the whole printer profile and goes in a reports folder "
+               "next to the profile's runs; when it is off, it goes in the loaded "
+               "run's "
                "own reports folder. You choose the exact place and name in the "
                "save dialog.\n\n"
                "Reveal folder — opens that profile folder in your file manager so "
@@ -559,7 +569,9 @@ class MeasurementReportDialog(QDialog):
                "95%, and the worst 5%); the Maximum threshold against the two "
                "maximum metrics (all patches, and the best 95%). Typical starting "
                "points are 2.0 for the average and 3.0 for the maximum — tighten "
-               "them for critical work, loosen them for a quick health check."),
+               "them for critical work, loosen them for a quick health check.\n\n"
+               "The values a report starts with are the defaults set in "
+               "Settings → Reports (Pass Threshold Average and Maximum)."),
             self, color=SPEC_GREEN))
         thr_row.addStretch(1)
         v.addLayout(thr_row)
@@ -622,13 +634,32 @@ class MeasurementReportDialog(QDialog):
         every saved report across the profile's runs, or the freshly built one
         when nothing is saved yet (a stand-alone / i1Profiler .ti3)."""
         import json
-        from workflow.measurement_report import build_report, list_project_reports
+        from workflow.measurement_report import (
+            build_report, list_project_reports, REPORT_SCHEMA)
         runs: list[dict] = []
         for p in list_project_reports(ti3.parent):
             try:
-                runs.append(json.loads(p.read_text()))
+                rep = json.loads(p.read_text())
             except Exception:  # noqa: BLE001
                 continue
+            # Reports saved by an older ChromIQ carry an older schema whose
+            # metric set predates the current one (no avg_all/max_all …), so the
+            # window would show "no accuracy data" for them. Rebuild such a
+            # report from its run's own .ti3 — same measurement, current metrics —
+            # keeping the saved date so the trend timeline is unchanged (Knut).
+            stale = (rep.get("schema", 0) < REPORT_SCHEMA
+                     or (rep.get("de00") or {}).get("avg_all") is None)
+            if stale:
+                run_ti3 = p.parent.parent / ti3.name
+                if run_ti3.is_file():
+                    try:
+                        created = rep.get("created")
+                        rep = build_report(run_ti3)
+                        if created:
+                            rep["created"] = created
+                    except Exception:  # noqa: BLE001
+                        pass
+            runs.append(rep)
         if not runs:
             runs = [build_report(ti3)]
         runs.sort(key=lambda r: str(r.get("created") or ""))
@@ -1309,10 +1340,10 @@ class MeasurementReportDialog(QDialog):
             trs.append(row_html(len(rows), _METRIC_LABELS["std"](),
                                 de.get("std"), None, None))
             device_ref = r.get("reference_source") == "device"
-            parts.append(_h3(
-                tr("Colour accuracy (ΔE00 vs the measured device values)")
-                if device_ref
-                else tr("Colour accuracy (ΔE00 vs the chart's design)")))
+            # Both cases compare against the chart's DESIGN — either straight from
+            # the .ti2, or reconstructed from the device values — so the heading is
+            # the same; the note below explains the reconstruction (Knut).
+            parts.append(_h3(tr("Colour accuracy (ΔE00 vs the chart's design)")))
             parts.append("<table cellpadding='5' cellspacing='0' "
                          "style='border-collapse:collapse;font-size:11px'>"
                          + "".join(trs) + "</table>")
@@ -1320,9 +1351,10 @@ class MeasurementReportDialog(QDialog):
                 parts.append("<p style='color:#888;font-size:10px'>" + html.escape(tr(
                     "No design file (.ti2) sits next to this measurement, so the "
                     "expected colour of each patch is the sRGB estimate of its "
-                    "measured device values — the same reference a chart's design "
-                    "file would carry. Typical for imported i1Profiler "
-                    "measurements.")) + "</p>")
+                    "device values — the fixed code values sent to the printer, "
+                    "the chart's design, identical for every run. This is exactly "
+                    "the reference a .ti2 would carry, so it stays static across "
+                    "runs. Typical for imported i1Profiler measurements.")) + "</p>")
         else:
             parts.append("<p style='color:#888'>" + html.escape(tr(
                 "This measurement has no device values to compare against, so "

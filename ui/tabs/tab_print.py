@@ -278,8 +278,10 @@ class TabPrint(QWidget):
         _tl = QHBoxLayout(_trailing)
         _tl.setContentsMargins(0, 0, 0, 0)
         _tl.setSpacing(6)
-        _tl.addWidget(self._load_image_btn)
+        # Order: load test chart, then load image, then reveal folder — the load
+        # image icon sits in the middle, left of the folder icon (Knut).
         _tl.addWidget(self._load_btn)
+        _tl.addWidget(self._load_image_btn)
         from ui.widgets import RevealFolderButton
         self._reveal_btn = RevealFolderButton(SPEC_AMBER, _trailing)
         self._reveal_btn.setToolTip(tr(

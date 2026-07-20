@@ -207,7 +207,9 @@ def build_report(ti3_path: str | Path, worst_n: int = 16) -> dict:
             ref[sid] = xyz_to_lab(tuple(v / 100.0 for v in _patch_xyz(r, g, b)))
         ref_source = "device"
     # "design" = compared against the chart's own .ti2; "device" = compared
-    # against the sRGB estimate of the measured device values (imported files).
+    # against the sRGB estimate of the file's DEVICE (design) values — the fixed
+    # code values sent to the printer, so the reference is static across runs, not
+    # recomputed from the varying measured colours (imported files).
     report["reference_source"] = ref_source
 
     # The eight cube corners (paper white, composite black, the six ink
