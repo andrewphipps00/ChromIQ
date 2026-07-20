@@ -434,7 +434,7 @@ class TabProfile(QWidget):
         cc.setContentsMargins(0, 0, 0, 0)
         cc.setSpacing(8)
 
-        self._file_grp = file_grp = QGroupBox(tr("Measurement Data (.ti3 / i1Profiler .txt)"), colprof_container)
+        self._file_grp = file_grp = QGroupBox(tr("Measurement Data (.ti3 / i1Profiler .mxf / .txt)"), colprof_container)
         fg = QHBoxLayout(file_grp)
         # The load + reveal buttons now live in the header's upper-right; this
         # frame just shows which measurement is selected.
@@ -3768,14 +3768,16 @@ class TabProfile(QWidget):
     def _on_load_ti3(self) -> None:
         path = open_file_dialog(
             self, "Load measurement data",
-            "Measurement data (*.ti3 *.txt)",
+            "Measurement data (*.ti3 *.txt *.mxf *.cxf)",
             extra_path=self._settings.get("custom_output_path", ""),
             declutter_settings=self._settings,
         )
         if not path:
             return
         p = Path(path)
-        if p.suffix.lower() == ".txt":
+        if p.suffix.lower() in (".mxf", ".cxf"):
+            self._import_i1profiler_cxf(p)          # i1Profiler native CxF3
+        elif p.suffix.lower() == ".txt":
             self._import_i1profiler_txt(p)
         else:
             # An external .ti3 (or one in an old flat folder) gets imported
@@ -3792,6 +3794,36 @@ class TabProfile(QWidget):
     # ------------------------------------------------------------------
     # i1Profiler .txt import  (txt2ti3 → .ti3)
     # ------------------------------------------------------------------
+
+    def _import_i1profiler_cxf(self, cxf_path: Path) -> None:
+        """Import an i1Profiler NATIVE measurement (CxF3 ``.mxf`` / ``.cxf``):
+        parse it straight to a ``.ti3`` (no txt2ti3, no export step), instrument
+        and measurement date stamped, then load it like any external .ti3."""
+        import tempfile
+        from workflow.reference_convert import (cxf_measurement_to_ti3,
+                                                ReferenceConvertError)
+        self._log.clear()
+        self._log.appendPlainText(
+            f"Importing i1Profiler measurement: {cxf_path.name} …")
+        try:
+            out = cxf_measurement_to_ti3(
+                cxf_path, Path(tempfile.mkdtemp()) / f"{cxf_path.stem}.ti3")
+        except ReferenceConvertError as exc:
+            self._log.appendPlainText(f"[ERROR] {exc}")
+            self._show_txt_import_error(str(exc))
+            return
+        from workflow.ti3_analysis import parse_ti3
+        kw = parse_ti3(out).keywords
+        self._log.appendPlainText(
+            f"[OK] Converted to {out.name}  ·  {kw.get('TARGET_INSTRUMENT', '')}"
+            + (f" · measured {kw['CHROMIQ_MEASURED']}" if kw.get("CHROMIQ_MEASURED") else ""))
+        from ui.ti2_loader import resolve_ti3
+        resolved = resolve_ti3(self, out, self._settings)
+        if resolved is None:
+            return
+        self.about_to_load_ti3.emit()
+        self.set_ti3_path(resolved)
+        self.ti3_manually_loaded.emit()
 
     def _import_i1profiler_txt(self, txt_path: Path) -> None:
         """Bring an i1Profiler measurement .txt into the working folder and

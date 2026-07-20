@@ -1322,31 +1322,42 @@ class I1ProfilerToTi3Dialog(_ToolDialogBase):
     HELP = (
         tr("Measured your chart in X-Rite's i1Profiler? This brings those readings "
         "back into ChromIQ so you can build a profile from them.\n\n"
-        "i1Profiler saves its measurements in its own text format, which ChromIQ "
-        "can't read directly. This tool translates that file into the measurement "
-        "format ChromIQ uses everywhere else.\n\n"
+        "This tool translates an i1Profiler measurement into the format ChromIQ "
+        "uses everywhere else. It reads two kinds of file:\n"
+        "  • i1Profiler's own saved measurement (.mxf) — no export step needed, "
+        "just point at it.\n"
+        "  • a measurement you exported from i1Profiler as text/CGATS (.txt), or "
+        "an .cxf.\n\n"
         "Here's how:\n\n"
-        "1. Pick the measurement file (.txt) you exported from i1Profiler.\n"
+        "1. Pick the i1Profiler measurement (.mxf, .txt or .cxf).\n"
         "2. Pick where to save the result and what to call it. ChromIQ suggests "
         "the same folder as your i1Profiler file, so everything stays together.\n"
         "3. Click Convert.\n\n"
         "You'll get a ChromIQ measurement file (.ti3) you can take straight to the "
-        "Build Profile tab — which neatly closes the loop after measuring an "
-        "exported chart over in i1Profiler.\n\n"
+        "Build Profile tab — which neatly closes the loop after measuring in "
+        "i1Profiler.\n\n"
         "It's also ready for the Measurement Report (Tools → “Measurement "
         "report”): just add the .ti3 there and you get the full colour-accuracy "
         "figures — no extra reference file needed.\n\n"
-        "Which instrument? i1Profiler records that in the measurement file, so "
-        "ChromIQ reads it and carries it into the .ti3 for you. If the file "
-        "doesn't name one, the report simply shows “i1Profiler (unspecified)”."))
+        "Instrument and date: ChromIQ reads the measuring instrument and the "
+        "measurement date from the i1Profiler file and carries them into the .ti3, "
+        "so the report shows the right instrument and plots each run on the date "
+        "it was measured. If the file names no instrument, the report shows "
+        "“i1Profiler (unspecified)”."))
     DESCRIPTION = (
-        tr("Convert an i1Profiler measurement export (.txt) into an Argyll .ti3 "
-        "measurement file. Use this when you measured a chart in i1Profiler "
-        "(typically because you used an i1iSis scanner) and want to build the "
-        "ICC profile with Argyll instead.\n\n"
-        "Requirements: the .txt must contain real measured colour data (Lab/XYZ "
-        "or spectral) for every patch — not just a reference patch list. The "
-        "resulting .ti3 can be loaded into Build Profile.")
+        tr("Bring an i1Profiler measurement into ChromIQ as an Argyll .ti3 file. "
+        "Use this when you measured a chart in i1Profiler — often because you have "
+        "an i1iSis or i1iO that lays out and reads its own chart — and want to "
+        "build the ICC profile (or check accuracy) in ChromIQ.\n\n"
+        "Two kinds of file work:\n"
+        "  • i1Profiler's own saved measurement (.mxf) — pick it directly, no "
+        "export step; ChromIQ reads the readings, the measuring instrument and "
+        "the measurement date straight from it.\n"
+        "  • a measurement you exported from i1Profiler as text/CGATS (.txt), or "
+        "an .cxf file.\n\n"
+        "Either way you need REAL measured colour (spectral or Lab/XYZ) for every "
+        "patch, not just a reference patch list. The resulting .ti3 loads into "
+        "Build Profile and into the Measurement Report.")
     )
 
     def __init__(self, runner: "ArgyllRunner", settings: "AppSettings", parent: QWidget | None = None) -> None:
@@ -1357,7 +1368,8 @@ class I1ProfilerToTi3Dialog(_ToolDialogBase):
         self._refresh()
 
     def _build_inputs(self) -> None:
-        self._content.addWidget(QLabel(tr("i1Profiler measurement file (.txt):"), self))
+        self._content.addWidget(QLabel(
+            tr("i1Profiler measurement file (.txt, .mxf, .cxf):"), self))
         row = QHBoxLayout()
         self._txt_field = QLineEdit(self)
         self._txt_field.setReadOnly(True)
@@ -1380,7 +1392,8 @@ class I1ProfilerToTi3Dialog(_ToolDialogBase):
 
     def _pick_txt(self) -> None:
         p = self._pick_input_file(
-            tr("Choose i1Profiler measurement"), tr("i1Profiler exports (*.txt);;All files (*)")
+            tr("Choose i1Profiler measurement"),
+            tr("i1Profiler measurements (*.txt *.mxf *.cxf);;All files (*)")
         )
         if p:
             self._txt = p
@@ -1420,6 +1433,32 @@ class I1ProfilerToTi3Dialog(_ToolDialogBase):
             if choice != QMessageBox.StandardButton.Yes:
                 self._finish(False)
                 return
+
+        # i1Profiler's native CxF3 (.mxf / .cxf): a direct, synchronous parse —
+        # txt2ti3 can't read CxF, and no export step is needed (Basti).
+        from workflow.reference_convert import (is_cxf, cxf_measurement_to_ti3,
+                                                ReferenceConvertError)
+        if is_cxf(self._txt):
+            self._log.clear()
+            self._log.appendPlainText(f"Converting {self._txt.name} → {out.name}")
+            try:
+                cxf_measurement_to_ti3(self._txt, out)
+            except ReferenceConvertError as exc:
+                self._log.appendPlainText(f"[ERROR] {exc}")
+                self._finish(False)
+                return
+            from workflow.ti3_analysis import parse_ti3
+            kw = parse_ti3(out).keywords
+            if kw.get("TARGET_INSTRUMENT"):
+                self._log.appendPlainText(
+                    tr("Instrument: {name}").format(name=kw["TARGET_INSTRUMENT"]))
+            if kw.get("CHROMIQ_MEASURED"):
+                self._log.appendPlainText(
+                    tr("Measured: {date}").format(date=kw["CHROMIQ_MEASURED"]))
+            self._log.appendPlainText(f"[OK] Wrote {out}")
+            _remember_dir(self._settings, self.TOOL_KEY, out.parent)
+            self._finish(True)
+            return
 
         # txt2ti3 wants both files in the cwd and writes <base>.ti3 next to <base>.txt.
         # Copy the input alongside the desired base name so we don't pollute the
