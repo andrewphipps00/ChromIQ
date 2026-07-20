@@ -1204,8 +1204,8 @@ class PatchGridButton(QToolButton):
                  page: bool = False) -> None:
         super().__init__(parent)
         self._color = color
-        # page=True draws a document outline around a smaller grid — "load a
-        # chart PAGE" (Knut's option B, used on the Print + Measure tabs).
+        # page=True draws a folded-corner document around a smaller grid — "load a
+        # chart PAGE" (Knut's option C, used on the Print + Measure tabs).
         self._page = page
         self.setObjectName("tooltip_btn")
         self.setFixedSize(QSize(40, 40))
@@ -1235,13 +1235,30 @@ class PatchGridButton(QToolButton):
             color.setAlpha(230)
         cx, cy = self.width() / 2.0, self.height() / 2.0
         if self._page:
-            # A portrait document outline around a smaller grid (option B).
+            # A document with a folded top-right corner, around a smaller grid
+            # (Knut's option C).
             pw, ph = s * 0.54, s * 0.68
-            p.setPen(QPen(color, max(1.2, s * 0.05)))
+            ear = s * 0.15
+            x0, y0 = cx - pw / 2.0, cy - ph / 2.0
+            x1, y1 = x0 + pw, y0 + ph
+            pen = QPen(color, max(1.2, s * 0.05))
+            pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+            p.setPen(pen)
             p.setBrush(Qt.BrushStyle.NoBrush)
-            p.drawRoundedRect(QRectF(cx - pw / 2.0, cy - ph / 2.0, pw, ph),
-                              s * 0.07, s * 0.07)
-            self._draw_grid(p, cx, cy, s * 0.36, color)
+            page = QPainterPath()
+            page.moveTo(x0, y0)
+            page.lineTo(x1 - ear, y0)
+            page.lineTo(x1, y0 + ear)
+            page.lineTo(x1, y1)
+            page.lineTo(x0, y1)
+            page.closeSubpath()
+            p.drawPath(page)
+            fold = QPainterPath()          # the little folded-corner triangle
+            fold.moveTo(x1 - ear, y0)
+            fold.lineTo(x1 - ear, y0 + ear)
+            fold.lineTo(x1, y0 + ear)
+            p.drawPath(fold)
+            self._draw_grid(p, cx, cy + s * 0.02, s * 0.34, color)
         else:
             self._draw_grid(p, cx, cy, s * self.GRID_FRAC, color)
         p.end()
