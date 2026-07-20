@@ -5103,6 +5103,18 @@ class TabMeasure(QWidget):
     def _engine_selected(self) -> bool:
         return str(self._settings.get("chartread_engine", "argyll")) == "chromiq"
 
+    def refresh_engine_visibility(self) -> None:
+        """Re-apply the chart-reading-engine beta flag to the engine-only UI so
+        turning it on/off in Settings takes effect the moment you click OK — no
+        app restart. Called by MainWindow after the Settings dialog closes; the
+        engine itself is already chosen live at the start of each measurement, so
+        this only syncs the visible chrome (the "Live preview" view groups)."""
+        on = self._engine_selected()
+        for grp in (getattr(self, "_g_view_grp", None),
+                    getattr(self, "_m_view_grp", None)):
+            if grp is not None:
+                grp.setVisible(on)
+
     def _locate_strip(self, letter: str) -> "tuple[int, int, QRect | None]":
         """(page, local index, image-px rect) for a strip letter — the same
         mapping _on_stripe_changed uses for the measure arrow."""

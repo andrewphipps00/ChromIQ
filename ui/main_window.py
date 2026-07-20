@@ -718,6 +718,12 @@ class MainWindow(QMainWindow):
         # open, so its showEvent alone would miss the change.
         if hasattr(self._tab_profile, "_refresh_engine_rows"):
             self._tab_profile._refresh_engine_rows()
+        # Chart-reading engine beta (#126): toggling it on/off now takes effect on
+        # OK — the Measure tab's engine-only view controls appear/disappear
+        # without an app restart (the measurement itself already reads the flag
+        # live at each read).
+        if hasattr(self._tab_measure, "refresh_engine_visibility"):
+            self._tab_measure.refresh_engine_visibility()
 
     def _apply_calibration_mode(self) -> None:
         enabled = bool(self._settings.get("calibration_mode", False))
