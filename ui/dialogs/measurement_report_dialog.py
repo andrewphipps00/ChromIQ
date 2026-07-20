@@ -303,7 +303,7 @@ class MeasurementReportDialog(QDialog):
                "“Include all measurement runs in the PDF” is on, reports are "
                "written to a reports folder next to the profile's runs; when it "
                "is off, they go in the loaded run's own reports folder."),
-            self))
+            self, color=SPEC_GREEN))
         self._all_runs_check = QCheckBox(
             tr("Include all measurement runs in the PDF"), self)
         self._all_runs_check.setChecked(True)
