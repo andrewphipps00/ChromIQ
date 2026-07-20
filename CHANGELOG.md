@@ -1,5 +1,13 @@
 # Changelog
 
+## v3.13.12-beta.23
+
+- **Measurement Report window restyled** to match the other Tools windows: a
+  masthead (title + ⓘ) over the full-width spectrum stripe with the green accent
+  and its gradient wash, the report view scrolls with the same fade-to-edge
+  gradient the other tool panels use, and the checked checkbox, focus rings and
+  ⓘ icons all take the green accent.
+
 ## v3.13.12-beta.22
 
 - **Measurement report — a lot tidier and more useful.** The buttons no longer
