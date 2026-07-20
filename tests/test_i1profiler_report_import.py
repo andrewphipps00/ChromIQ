@@ -10,7 +10,8 @@ import pytest
 
 from workflow.measurement_report import build_report
 from workflow.reference_convert import (
-    read_instrumentation, stamp_instrument_from_source,
+    read_instrumentation, read_measurement_date, stamp_instrument_from_source,
+    stamp_measurement_date_from_source, finalize_converted_ti3,
 )
 
 # An i1Profiler-style measurement .ti3 (as txt2ti3 would produce): device RGB on
@@ -108,6 +109,61 @@ def test_stamp_instrument_overrides_txt2ti3_placeholder(tmp_path: Path):
     assert 'TARGET_INSTRUMENT "i1iSis"' in text
     assert "spectrolino" not in text.lower()
     assert build_report(ti3)["instrument"] == "i1iSis"
+
+
+def _dated_txt(tmp_path: Path, created: str, instr: str = "i1iSis") -> Path:
+    p = tmp_path / "m.txt"
+    p.write_text(f'CGATS.17\n\nINSTRUMENTATION "{instr}"\nCREATED "{created}"\n\n'
+                 "BEGIN_DATA_FORMAT\nSampleID RGB_R RGB_G RGB_B\n"
+                 "END_DATA_FORMAT\nBEGIN_DATA\n1 255 255 255\nEND_DATA\n")
+    return p
+
+
+def test_read_measurement_date_is_locale_safe(tmp_path: Path):
+    # English month names must parse regardless of the process locale (not via
+    # strptime %B, which is locale-dependent), plus ISO / numeric forms.
+    cases = {
+        "January 06, 2026": "2026-01-06", "Jul 4 2026": "2026-07-04",
+        "2026-03-15": "2026-03-15", "03/15/2026": "2026-03-15",
+        "15.03.2026": "2026-03-15", "Tue Jul 21 00:44:31 2026": "2026-07-21",
+    }
+    for raw, iso in cases.items():
+        assert read_measurement_date(_dated_txt(tmp_path, raw)) == iso, raw
+    # A locale switch must not break the English-month parse.
+    import locale
+    try:
+        locale.setlocale(locale.LC_TIME, "de_DE.UTF-8")
+    except locale.Error:
+        pass
+    try:
+        assert read_measurement_date(_dated_txt(tmp_path, "January 06, 2026")) == "2026-01-06"
+    finally:
+        locale.setlocale(locale.LC_TIME, "C")
+
+
+def test_stamp_and_report_use_measurement_date(tmp_path: Path):
+    src = _dated_txt(tmp_path, "January 06, 2026")
+    ti3 = tmp_path / "chart.ti3"; ti3.write_text(_TI3_255)
+    assert stamp_measurement_date_from_source(ti3, src) == "2026-01-06"
+    assert 'CHROMIQ_MEASURED "2026-01-06"' in ti3.read_text()
+    # the report dates the run by the measurement date, not "now"
+    assert build_report(ti3)["created"].startswith("2026-01-06")
+
+
+def test_finalize_stamps_both_instrument_and_date(tmp_path: Path):
+    src = _dated_txt(tmp_path, "March 15, 2026", instr="i1Pro 2")
+    ti3 = tmp_path / "chart.ti3"; ti3.write_text(_TI3_255)
+    instr, date = finalize_converted_ti3(ti3, src)
+    assert instr == "i1Pro 2" and date == "2026-03-15"
+    rep = build_report(ti3)
+    assert rep["instrument"] == "i1Pro 2" and rep["created"].startswith("2026-03-15")
+
+
+def test_report_without_measurement_date_uses_now(tmp_path: Path):
+    # A native chartread .ti3 (no CHROMIQ_MEASURED) still dates by build time.
+    ti3 = tmp_path / "chart.ti3"; ti3.write_text(_TI3_255)
+    from datetime import date as _date
+    assert build_report(ti3)["created"].startswith(_date.today().isoformat())
 
 
 def test_stamp_instrument_placeholder_falls_back(tmp_path: Path):

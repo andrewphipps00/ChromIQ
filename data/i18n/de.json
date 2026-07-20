@@ -3177,5 +3177,6 @@
   "driver/resolution": "Treiber/Auflösung",
   "Replace the current clip-border text with the example table?": "Den aktuellen Clip-Rand-Text durch die Beispieltabelle ersetzen?",
   "PRINT: borderless, 100% size (no scaling), color management OFF": "DRUCK: randlos, 100 % Größe (keine Skalierung), Farbmanagement AUS",
-  "ink set": "Tintensatz"
+  "ink set": "Tintensatz",
+  "Measured: {date}": "Gemessen: {date}"
 }

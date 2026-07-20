@@ -3177,5 +3177,6 @@
   "driver/resolution": "driver/resolution",
   "Replace the current clip-border text with the example table?": "Replace the current clip-border text with the example table?",
   "PRINT: borderless, 100% size (no scaling), color management OFF": "PRINT: borderless, 100% size (no scaling), color management OFF",
-  "ink set": "ink set"
+  "ink set": "ink set",
+  "Measured: {date}": "Measured: {date}"
 }

@@ -17,6 +17,7 @@ Pure Python (numpy) — no Argyll process. Reuses ``ti3_analysis``.
 from __future__ import annotations
 
 import json
+import re
 import statistics
 from datetime import datetime
 from pathlib import Path
@@ -152,9 +153,16 @@ def build_report(ti3_path: str | Path, worst_n: int = 16) -> dict:
     data = parse_ti3(ti3_path)
     lab = [xyz_to_lab((x / 100.0, y / 100.0, z / 100.0)) for x, y, z in data.xyz]
 
+    # Date the report by the MEASUREMENT date when the .ti3 carries one
+    # (CHROMIQ_MEASURED, written by Convert i1Profiler → TI3 from the export's
+    # date), so imported runs trend by when they were measured, not when the
+    # report is built. Native chartread files have no such keyword → build time.
+    _measured = str(data.keywords.get("CHROMIQ_MEASURED") or "").strip()
+    _created = (f"{_measured}T00:00:00" if re.match(r"^\d{4}-\d{2}-\d{2}$", _measured)
+                else datetime.now().isoformat(timespec="seconds"))
     report: dict = {
         "schema": REPORT_SCHEMA,
-        "created": datetime.now().isoformat(timespec="seconds"),
+        "created": _created,
         "ti3": ti3_path.name,
         "chart": ti3_path.stem,
         "patches": data.n_patches,

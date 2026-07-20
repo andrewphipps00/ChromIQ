@@ -1447,11 +1447,14 @@ class I1ProfilerToTi3Dialog(_ToolDialogBase):
                 # measurement report can show it (falls back to a clear label
                 # when the file names none) (Knut).
                 try:
-                    from workflow.reference_convert import stamp_instrument_from_source
-                    instr = stamp_instrument_from_source(out, self._txt)
+                    from workflow.reference_convert import finalize_converted_ti3
+                    instr, date = finalize_converted_ti3(out, self._txt)
                     if instr:
                         self._log.appendPlainText(
                             tr("Instrument: {name}").format(name=instr))
+                    if date:
+                        self._log.appendPlainText(
+                            tr("Measured: {date}").format(date=date))
                 except Exception:
                     pass
                 self._log.appendPlainText(f"[OK] Wrote {out}")

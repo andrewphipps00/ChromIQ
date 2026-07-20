@@ -3842,6 +3842,21 @@ class TabProfile(QWidget):
             self._show_txt_import_error(output)
             return
         self._log.appendPlainText(f"[OK] Converted to {ti3.name}")
+        # Stamp the real instrument + measurement date from the i1Profiler source
+        # (the staged .txt beside the .ti3), so a report built from this run shows
+        # the right instrument and trends by the measurement date — same as the
+        # Convert tool (Knut). Best-effort; never block the build.
+        try:
+            from workflow.reference_convert import finalize_converted_ti3
+            src_txt = self._txt_convert_dir / f"{self._txt_convert_base}.txt"
+            if src_txt.is_file():
+                instr, date = finalize_converted_ti3(ti3, src_txt)
+                if instr or date:
+                    self._log.appendPlainText(
+                        f"Instrument: {instr}"
+                        + (f" · measured {date}" if date else ""))
+        except Exception:
+            pass
         self._log.ensureCursorVisible()
         self.about_to_load_ti3.emit()
         self.set_ti3_path(ti3)

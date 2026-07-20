@@ -89,7 +89,7 @@ def convert_i1profiler_measurement(path: str | Path, argyll_bin: str | Path,
         raise ReferenceConvertError(
             "txt2ti3 ran but produced no .ti3 — is this an i1Profiler "
             "measurement export?")
-    stamp_instrument_from_source(out, p)
+    finalize_converted_ti3(out, p)
     return out
 
 
@@ -115,6 +115,76 @@ def read_instrumentation(txt_path: str | Path) -> "str | None":
         return None
     val = m.group(1).strip()
     return None if val.lower() in _UNKNOWN_INSTRUMENTATION else val
+
+
+# The report ('created') and its over-time trend need each measurement's DATE.
+# txt2ti3 overwrites CREATED with the conversion time, so read the measurement
+# date from the source export's CREATED header and preserve it (i1Profiler writes
+# e.g. `CREATED "July 19, 2026"`). Kept as a CHROMIQ_MEASURED keyword the report
+# reads, so imported runs trend by when they were measured, not when converted.
+# English month names are matched OURSELVES (not via strptime %B, which is
+# locale-dependent — under a non-English process locale it silently fails).
+_MONTHS = {}
+for _i, _name in enumerate(
+        ("january", "february", "march", "april", "may", "june", "july",
+         "august", "september", "october", "november", "december"), 1):
+    _MONTHS[_name] = _i
+    _MONTHS[_name[:3]] = _i
+
+
+def read_measurement_date(txt_path: str | Path) -> "str | None":
+    """The measurement date from an i1Profiler export's ``CREATED`` header, as an
+    ISO date (``YYYY-MM-DD``), or ``None`` if absent/unparseable. Locale-safe."""
+    try:
+        text = Path(txt_path).read_text(errors="replace")
+    except OSError:
+        return None
+    m = re.search(r'^\s*CREATED\s+"?(.*?)"?\s*$', text, re.IGNORECASE | re.MULTILINE)
+    if not m:
+        return None
+    raw = m.group(1).strip()
+    iso = re.match(r"(\d{4})-(\d{2})-(\d{2})", raw)             # ISO / prefix
+    if iso:
+        return f"{iso.group(1)}-{iso.group(2)}-{iso.group(3)}"
+    us = re.match(r"(\d{1,2})/(\d{1,2})/(\d{4})\s*$", raw)      # US m/d/Y
+    if us:
+        return f"{us.group(3)}-{int(us.group(1)):02d}-{int(us.group(2)):02d}"
+    eu = re.match(r"(\d{1,2})\.(\d{1,2})\.(\d{4})\s*$", raw)    # d.m.Y
+    if eu:
+        return f"{eu.group(3)}-{int(eu.group(2)):02d}-{int(eu.group(1)):02d}"
+    # English month name: "January 06, 2026", "Jan 6 2026", ctime "Tue Jul 21
+    # 00:44:31 2026". Find the month + day, and the 4-digit year separately (the
+    # ctime form puts a time between them).
+    mn = re.search(r"([A-Za-z]{3,9})\.?\s+(\d{1,2})\b", raw)
+    yr = re.search(r"\b(\d{4})\b", raw)
+    if mn and yr and mn.group(1).lower() in _MONTHS:
+        return f"{yr.group(1)}-{_MONTHS[mn.group(1).lower()]:02d}-{int(mn.group(2)):02d}"
+    return None
+
+
+def stamp_measurement_date_from_source(ti3_path: str | Path,
+                                       source_txt: str | Path) -> "str | None":
+    """Copy the source export's measurement date into the converted ``.ti3`` as a
+    ``CHROMIQ_MEASURED`` keyword, so the report dates the run by when it was
+    measured. No-op when the source has no parseable date or the ``.ti3`` already
+    carries one. Returns the ISO date written (or already present), else None."""
+    ti3_path = Path(ti3_path)
+    try:
+        text = ti3_path.read_text(errors="replace")
+    except OSError:
+        return None
+    m = re.search(r'^\s*CHROMIQ_MEASURED\s+"?(.*?)"?\s*$', text,
+                  re.IGNORECASE | re.MULTILINE)
+    if m:
+        return m.group(1).strip()
+    date = read_measurement_date(source_txt)
+    if not date:
+        return None
+    lines = text.splitlines()
+    at = 1 if lines and lines[0].strip().upper().startswith("CTI3") else 0
+    lines[at:at] = ['KEYWORD "CHROMIQ_MEASURED"', f'CHROMIQ_MEASURED "{date}"']
+    ti3_path.write_text("\n".join(lines) + "\n")
+    return date
 
 
 # txt2ti3 hard-codes the Spectrolino as the TARGET_INSTRUMENT of every file it
@@ -164,6 +234,21 @@ def stamp_instrument_from_source(ti3_path: str | Path, source_txt: str | Path,
                         f'TARGET_INSTRUMENT "{name}"']
         ti3_path.write_text("\n".join(lines) + "\n")
     return name
+
+
+def finalize_converted_ti3(ti3_path: str | Path,
+                           source_txt: str | Path) -> "tuple[str, str | None]":
+    """Finalise a just-converted (txt2ti3) ``.ti3`` from its i1Profiler source:
+    stamp the real instrument (over txt2ti3's Spectrolino placeholder) and the
+    measurement date, so the measurement report shows the right instrument and
+    trends by when the chart was measured, not when it was converted. Returns
+    ``(instrument, iso_date_or_None)``. THE single place all three convert paths
+    call — the Convert i1Profiler → TI3 tool, convert_i1profiler_measurement (the
+    scanner-target import), and the Build Profile .txt import — so they behave
+    identically (Knut)."""
+    instrument = stamp_instrument_from_source(ti3_path, source_txt)
+    date = stamp_measurement_date_from_source(ti3_path, source_txt)
+    return instrument, date
 
 
 def _run(argyll_bin: Path, tool: str, args: list[str],
