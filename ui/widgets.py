@@ -1200,9 +1200,13 @@ class PatchGridButton(QToolButton):
     GRID_FRAC = 0.60   # glyph box as a fraction of the button
     GRID_N    = 3      # squares per side
 
-    def __init__(self, color: str, parent: QWidget | None = None) -> None:
+    def __init__(self, color: str, parent: QWidget | None = None, *,
+                 page: bool = False) -> None:
         super().__init__(parent)
         self._color = color
+        # page=True draws a document outline around a smaller grid — "load a
+        # chart PAGE" (Knut's option B, used on the Print + Measure tabs).
+        self._page = page
         self.setObjectName("tooltip_btn")
         self.setFixedSize(QSize(40, 40))
         self.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -1225,23 +1229,36 @@ class PatchGridButton(QToolButton):
         super().paintEvent(ev)  # QSS background (incl. :hover) under the glyph
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
-        side = min(self.width(), self.height()) * self.GRID_FRAC
-        gap  = side * 0.16
-        cell = (side - (self.GRID_N - 1) * gap) / self.GRID_N
-        x0   = (self.width()  - side) / 2.0
-        y0   = (self.height() - side) / 2.0
+        s = float(min(self.width(), self.height()))
         color = QColor(self._color)
         if not self._hover:
             color.setAlpha(230)
+        cx, cy = self.width() / 2.0, self.height() / 2.0
+        if self._page:
+            # A portrait document outline around a smaller grid (option B).
+            pw, ph = s * 0.54, s * 0.68
+            p.setPen(QPen(color, max(1.2, s * 0.05)))
+            p.setBrush(Qt.BrushStyle.NoBrush)
+            p.drawRoundedRect(QRectF(cx - pw / 2.0, cy - ph / 2.0, pw, ph),
+                              s * 0.07, s * 0.07)
+            self._draw_grid(p, cx, cy, s * 0.36, color)
+        else:
+            self._draw_grid(p, cx, cy, s * self.GRID_FRAC, color)
+        p.end()
+
+    def _draw_grid(self, p: "QPainter", cx: float, cy: float, side: float,
+                   color: "QColor") -> None:
+        gap = side * 0.16
+        cell = (side - (self.GRID_N - 1) * gap) / self.GRID_N
+        x0, y0 = cx - side / 2.0, cy - side / 2.0
         p.setPen(Qt.PenStyle.NoPen)
         p.setBrush(color)
         rad = cell * 0.22
         for r in range(self.GRID_N):
             for c in range(self.GRID_N):
-                x = x0 + c * (cell + gap)
-                y = y0 + r * (cell + gap)
-                p.drawRoundedRect(QRectF(x, y, cell, cell), rad, rad)
-        p.end()
+                p.drawRoundedRect(
+                    QRectF(x0 + c * (cell + gap), y0 + r * (cell + gap), cell, cell),
+                    rad, rad)
 
 
 class StackedPagesButton(QToolButton):

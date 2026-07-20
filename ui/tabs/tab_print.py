@@ -255,7 +255,7 @@ class TabPrint(QWidget):
         # target's .ti2 so it can be reprinted. Mirrors the Create Chart tab's
         # folder/grid/star trio, in this tab's amber accent (#70, Knut). Replaces
         # the old bottom-row "Load existing target" button.
-        self._load_btn = PatchGridButton(SPEC_AMBER, left)
+        self._load_btn = PatchGridButton(SPEC_AMBER, left, page=True)
         self._load_btn.setToolTip(
             tr("Load test chart.\n"
                "Open a chart you already created (its .ti2 file) and\n"

@@ -807,17 +807,19 @@ class SettingsDialog(QDialog):
             tr("When this is on, ChromIQ automatically writes a small dated "
             "report next to each chart every time you finish measuring it "
             "(in a “reports” folder beside the chart). Each report records how "
-            "close the measurement came to the chart's design colours — the "
-            "average, worst and spread of the colour difference, the worst "
-            "patches, and the paper white and black.\n\n"
-            "Why turn it on? Because the reports then build up over time, and "
-            "the Measurement report window (in the Measure tab) can show you "
-            "how a chart's measurement has changed since last time — a "
-            "gradual rise, or a shift in white or black, is a sign of ageing "
-            "inks, a drifting printer, or a drifting instrument.\n\n"
+            "close the measurement came to the chart's design colours — a "
+            "Pass/Fail check of the colour accuracy, the worst patches, the "
+            "cube corners, and the paper white and black.\n\n"
+            "Why keep it on? Because the reports then build up over time, and "
+            "the Measurement Report tool can plot how a chart's measurements "
+            "change from one to the next — a gradual rise, or a shift in white "
+            "or black, is a sign of ageing inks, a drifting printer, or a "
+            "drifting instrument. It's especially handy for regular "
+            "verification measurements: the report shows you when the results "
+            "have slipped far enough that re-profiling is worth it.\n\n"
             "It costs nothing noticeable and never changes your measurement "
-            "files. Leave it off if you don't need this history.\n\n"
-            "Default: off"),
+            "files. Turn it off if you don't want this history.\n\n"
+            "Default: on"),
             self))
         _beta.addLayout(_rep_row)
         _beta.addStretch()
@@ -1904,7 +1906,7 @@ class SettingsDialog(QDialog):
         self._chartread_engine_check.setChecked(
             str(s.get("chartread_engine", "argyll")) == "chromiq")
         self._save_report_check.setChecked(
-            bool(s.get("save_measurement_report", False)))
+            bool(s.get("save_measurement_report", True)))
         self._patch_warn_spin.setValue(
             float(s.get("patch_read_warn_de", 50.0)))
         self._fast_connect_check.setChecked(

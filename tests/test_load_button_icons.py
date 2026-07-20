@@ -49,12 +49,14 @@ class _Settings:
         self._d[k] = v
 
 
-def test_measure_load_button_is_icon_only_strip(_app):
+def test_measure_load_button_is_icon_only_grid(_app):
     from core.argyll_runner import ArgyllRunner
     from ui.tabs.tab_measure import TabMeasure
-    from ui.widgets import StripReadButton
+    from ui.widgets import PatchGridButton
     tab = TabMeasure(ArgyllRunner(_Settings()), _Settings())
-    assert isinstance(tab._load_ti1_btn, StripReadButton)   # strip+arrow glyph
+    # Same grid-of-patches glyph the Print tab uses, in page mode (Basti/Knut).
+    assert isinstance(tab._load_ti1_btn, PatchGridButton)
+    assert tab._load_ti1_btn._page is True        # the document-around-grid variant
     assert tab._load_ti1_btn.text() == ""         # no label, just the glyph
     assert tab._load_ti1_btn.toolTip()            # but a helpful tooltip
 

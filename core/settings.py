@@ -166,7 +166,7 @@ DEFAULTS: dict[str, Any] = {
     # dated accuracy report (mean/worst ΔE, worst patches, white/black) to the
     # run's reports/ folder after every measurement, so reports of the same
     # chart accrue and can be compared over time (ink/printer/instrument drift).
-    "save_measurement_report":   False,
+    "save_measurement_report":   True,
     # Patch-reading error limit (#126, Knut): the ΔE at which a just-measured
     # patch gets the red warning outline in the engine's live split-patch
     # preview. Generous by default so only near-certain misreads are flagged.
@@ -477,7 +477,7 @@ def thresholds_for_combo(
 # Bump when a shipped default changes in a way that must reach users who have
 # the OLD default persisted. Settings → Save writes every key, so a stored
 # value otherwise pins a user to the old behaviour for good.
-SETTINGS_SCHEMA = 9
+SETTINGS_SCHEMA = 10
 
 # key → the old default(s) it must no longer be stuck on. Only a stored value
 # EQUAL to one of the old defaults is dropped (so it falls through to the new
@@ -546,11 +546,29 @@ class AppSettings:
             dropped.append("margin_thresholds[A4/Letter Landscape jig]")
         if self._migrate_patch_warn_floor():
             dropped.append("patch_read_warn_de (raised value now too high)")
+        if self._migrate_save_report_default():
+            dropped.append("save_measurement_report (now on by default)")
         self._qs.setValue("settings_schema", SETTINGS_SCHEMA)
         if dropped:
             log.info("Settings migrated to schema %d; dropped stale defaults: %s",
                      SETTINGS_SCHEMA, ", ".join(dropped))
         return dropped
+
+    def _migrate_save_report_default(self) -> bool:
+        """schema 10: saving a measurement report after each measurement is now on
+        by default. A stored echo of the old ``False`` default is dropped so it
+        resolves to the new ``True``; an explicit ``True`` is already correct.
+        (Booleans persist as the string "false", which the float-based
+        _SUPERSEDED_DEFAULTS can't match, so this handles it directly.)"""
+        raw = self._qs.value("save_measurement_report", None)
+        if raw is None:
+            return False
+        is_true = raw is True or (isinstance(raw, str)
+                                  and raw.strip().lower() in ("true", "1", "yes"))
+        if not is_true:
+            self._qs.remove("save_measurement_report")
+            return True
+        return False
 
     def _migrate_patch_warn_floor(self) -> bool:
         """schema 8 (#49): the patch-read warning outline is now adaptive — a

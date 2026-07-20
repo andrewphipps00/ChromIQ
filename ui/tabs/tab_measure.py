@@ -1064,8 +1064,10 @@ class TabMeasure(QWidget):
         fg = QVBoxLayout(file_grp)
         fg.setContentsMargins(8, 6, 8, 8)
         file_row = QHBoxLayout()
-        from ui.widgets import StripReadButton
-        self._load_ti1_btn = StripReadButton(_TAB_COLOR, file_outer)
+        from ui.widgets import PatchGridButton
+        # Same grid-of-patches glyph the Print tab's "load test chart" button uses,
+        # in the Measure tab's green accent (Basti) — a chart is a chart.
+        self._load_ti1_btn = PatchGridButton(_TAB_COLOR, file_outer, page=True)
         self._load_ti1_btn.setToolTip(tr(
             "Load a chart file (.ti2) to measure.\n\n"
             "This is the laid-out chart ChromIQ made for you in Create Chart — "
