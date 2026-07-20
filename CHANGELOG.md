@@ -1,5 +1,18 @@
 # Changelog
 
+## v3.13.12-beta.25
+
+- **Settings — new “Reports” tab.** The measurement-report options live here now:
+  the “Save a measurement report after each measurement” switch (moved out of
+  Beta), and a “Measurement Report Defaults” section where you set the default
+  Pass thresholds (Average and Maximum ΔE) the report opens with.
+- **Chart-load button — a clearer icon.** The Measure tab's “load chart file”
+  button now uses the same patch-grid glyph as the Print tab's “load test
+  chart”, drawn as a small document (a folded-corner page around the grid), in
+  the tab's accent colour — green on Measure, amber on Print.
+- **Saving a measurement report is on by default** (existing installs that were
+  on the old default switch on; you can turn it off in Settings → Reports).
+
 ## v3.13.12-beta.24
 
 - **Measurement Report — a big rework (Knut).** The window and the PDF now show
