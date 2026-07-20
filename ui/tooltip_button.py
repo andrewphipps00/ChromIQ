@@ -53,6 +53,9 @@ class TooltipButton(QToolButton):
         color: str | None = None,
     ) -> None:
         super().__init__(parent)
+        # A help icon: never take keyboard focus, so the space bar can't pop its
+        # tooltip just because a tab handed it the initial focus (Knut).
+        self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self._title     = title
         self._body      = body.strip()
         self._min_width = min_width

@@ -237,6 +237,13 @@ class MainWindow(QMainWindow):
             }}
         """)
 
+        # When a tab is shown, Qt hands the initial focus to its first focusable
+        # child. If that's a button (e.g. a mode toggle), the space bar would
+        # activate it even though the user never tabbed there — so drop the focus
+        # off any button the tab auto-focused (Knut).
+        from ui.widgets import defer_clear_button_focus
+        defer_clear_button_focus(self)
+
     def _apply_tab_widget_styling(self, index: int) -> None:
         """Inject a tab's per-tab accent stylesheet into its own widget tree.
 

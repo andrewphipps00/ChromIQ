@@ -664,6 +664,23 @@ class TooltipWrapFilter(QObject):
         obj.move(x, y)
 
 
+class DialogFocusFilter(QObject):
+    """Installs on QApplication. When any top-level window (a dialog) is shown,
+    Qt hands the initial focus to its first focusable child — often a button, or
+    the dialog's auto-default button. The space bar would then activate it even
+    though the user never tabbed there (Knut: it opened file pickers, saved
+    defaults, popped tooltips). This drops that stray focus off the button for
+    EVERY dialog at once — the Tools, Settings, Soft-proof, Profile Info,
+    device-link, scanner-target, editor, … — so no per-dialog change is needed.
+    Input fields keep their focus; a default button still answers Enter."""
+
+    def eventFilter(self, obj: QObject, event: QEvent) -> bool:
+        if (event.type() == QEvent.Type.Show
+                and isinstance(obj, QWidget) and obj.isWindow()):
+            defer_clear_button_focus(obj)
+        return False
+
+
 def reapply_groupbox_surface(root: QWidget) -> None:
     """Walk every QGroupBox descendant of `root` and re-apply the surface
     colour. Called from MainWindow.apply_theme on every theme switch
@@ -1188,6 +1205,28 @@ def load_magenta_folder_icon() -> QIcon:
     return load_tinted_folder_icon(SPEC_MAGENTA, size=22)
 
 
+def defer_clear_button_focus(_root=None) -> None:
+    """Drop the initial focus off any button Qt auto-focused when a tab/dialog is
+    shown, so the space bar can't activate it before the user clicks or tabs to
+    it. Input fields keep their focus; a dialog's default button still answers
+    Enter, since that doesn't need focus — only the stray space-activation goes
+    away. (Knut: space was toggling modes / opening file pickers / popping
+    tooltips on fresh tab or dialog entry.)
+
+    Run across a few passes: a dialog's *default* button re-grabs focus during
+    window activation, so a single deferred clear can fire too early to stick.
+    Each pass only clears a button, never an input the user has since focused."""
+    from PyQt6.QtCore import QTimer
+    from PyQt6.QtWidgets import QAbstractButton, QApplication
+
+    def _clear() -> None:
+        fw = QApplication.focusWidget()
+        if isinstance(fw, QAbstractButton):
+            fw.clearFocus()
+    for _delay in (0, 40, 150):
+        QTimer.singleShot(_delay, _clear)
+
+
 class PatchGridButton(QToolButton):
     """A small grid-of-patches glyph button, painted in a given accent colour.
 
@@ -1209,6 +1248,9 @@ class PatchGridButton(QToolButton):
         self._page = page
         self.setObjectName("tooltip_btn")
         self.setFixedSize(QSize(40, 40))
+        # Icon-only, mouse-operated: never take keyboard focus, so the space bar
+        # can't activate it just because a tab handed it the initial focus (Knut).
+        self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self._hover = False
 
@@ -1294,6 +1336,9 @@ class StackedPagesButton(QToolButton):
         self._color = color
         self.setObjectName("tooltip_btn")
         self.setFixedSize(QSize(40, 40))
+        # Icon-only, mouse-operated: never take keyboard focus, so the space bar
+        # can't activate it just because a tab handed it the initial focus (Knut).
+        self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self._hover = False
 
@@ -1412,6 +1457,9 @@ class StripReadButton(QToolButton):
         self._color = color
         self.setObjectName("tooltip_btn")
         self.setFixedSize(QSize(40, 40))
+        # Icon-only, mouse-operated: never take keyboard focus, so the space bar
+        # can't activate it just because a tab handed it the initial focus (Knut).
+        self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self._hover = False
 
@@ -1483,6 +1531,9 @@ class MeasuredChartButton(QToolButton):
         self._color = color
         self.setObjectName("tooltip_btn")
         self.setFixedSize(QSize(40, 40))
+        # Icon-only, mouse-operated: never take keyboard focus, so the space bar
+        # can't activate it just because a tab handed it the initial focus (Knut).
+        self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self._hover = False
 
@@ -1688,6 +1739,9 @@ class RevealFolderButton(QToolButton):
         self._color = color
         self.setObjectName("tooltip_btn")
         self.setFixedSize(QSize(40, 40))
+        # Icon-only, mouse-operated: never take keyboard focus, so the space bar
+        # can't activate it just because a tab handed it the initial focus (Knut).
+        self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self._hover = False
 
@@ -1756,6 +1810,9 @@ class ImageFileButton(QToolButton):
         self._color = color
         self.setObjectName("tooltip_btn")
         self.setFixedSize(QSize(40, 40))
+        # Icon-only, mouse-operated: never take keyboard focus, so the space bar
+        # can't activate it just because a tab handed it the initial focus (Knut).
+        self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self._hover = False
 

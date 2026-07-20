@@ -102,7 +102,8 @@ try:
     from ui.main_window import MainWindow
     from ui.styles import WinButtonLayoutStyle
     from ui.theme import apply_appearance
-    from ui.widgets import ButtonFontFilter, GroupBoxSurfaceFilter, TooltipWrapFilter
+    from ui.widgets import (ButtonFontFilter, DialogFocusFilter,
+                            GroupBoxSurfaceFilter, TooltipWrapFilter)
 except BaseException:
     log.exception("Fatal error importing application modules")
     raise
@@ -144,6 +145,10 @@ def main() -> int:
     # Word-wrap every native tooltip so long ones never run off-screen (#70).
     _tooltip_wrap_filter = TooltipWrapFilter(app)
     app.installEventFilter(_tooltip_wrap_filter)
+
+    # Stop the space bar activating a dialog's auto-focused button (Knut).
+    _dialog_focus_filter = DialogFocusFilter(app)
+    app.installEventFilter(_dialog_focus_filter)
 
     settings = AppSettings()
     settings.migrate()   # drop persisted values that only echo a superseded default

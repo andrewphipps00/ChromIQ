@@ -65,6 +65,9 @@ class BuiltinPresetButton(QToolButton):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setObjectName("tooltip_btn")
+        # Icon-only: never take keyboard focus (space would open the presets
+        # overlay just because a tab handed it the initial focus) (Knut).
+        self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.setToolTip(tr("Built-in presets"))
         self.setFixedSize(QSize(40, 40))
         self.setCursor(Qt.CursorShape.PointingHandCursor)
