@@ -1598,7 +1598,7 @@ class LayoutOptionsPanel(QWidget):
         workflow/chart_creator.py's legacy left-clip record."""
         def field(label_key: str, n: int) -> str:
             return f"{tr(label_key)}: {'_' * n}"
-        header = (tr("ArgyllCMS {patchcount} RGB target on {paper}") + " - "
+        header = (tr("ChromIQ Chart {patchcount} RGB target on {paper}") + " - "
                   + tr("PRINT: borderless, 100% size (no scaling), color management OFF"))
         row1 = f"{field('date', 24)} {field('printer', 48)} {field('ink set', 48)}"
         row2 = (f"{field('profile name', 37)} {field('paper type', 36)} "
