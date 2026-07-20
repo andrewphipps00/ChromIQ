@@ -1149,14 +1149,16 @@ class MeasurementReportDialog(QDialog):
             def wcells(p) -> str:
                 if p is None:
                     return "<td></td><td></td><td></td><td></td>"
+                # Patch · Expected · Measured · ΔE00 — the same column order as the
+                # Cube-corners table, so the two read the same (Knut).
                 return (f"<td>{html.escape(str(p['loc']))}</td>"
-                        f"<td align='right'><b>{_fmt(p['de'])}</b></td>"
                         f"<td align='center'>{_swatch(p['expected_hex'])}</td>"
-                        f"<td align='center'>{_swatch(p['measured_hex'])}</td>")
+                        f"<td align='center'>{_swatch(p['measured_hex'])}</td>"
+                        f"<td align='right'><b>{_fmt(p['de'])}</b></td>")
 
-            hdr = ("<th align='left'>" + html.escape(tr("Patch")) + "</th>"
-                   "<th align='right'>ΔE00</th><th>" + html.escape(tr("Expected"))
-                   + "</th><th>" + html.escape(tr("Measured")) + "</th>")
+            hdr = ("<th align='left'>" + html.escape(tr("Patch")) + "</th><th>"
+                   + html.escape(tr("Expected")) + "</th><th>"
+                   + html.escape(tr("Measured")) + "</th><th align='right'>ΔE00</th>")
             half = (len(worst) + 1) // 2
             left, right = worst[:half], worst[half:]
             rows = ["<tr style='color:#888'>" + hdr
