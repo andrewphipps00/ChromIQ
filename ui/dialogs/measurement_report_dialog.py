@@ -15,18 +15,20 @@ from pathlib import Path
 from PyQt6.QtCore import QPointF, QRectF, Qt
 from PyQt6.QtGui import QColor, QFont, QPainter, QPen
 from PyQt6.QtWidgets import (
-    QCheckBox, QDialog, QFileDialog, QHBoxLayout, QLabel, QPushButton,
+    QCheckBox, QDialog, QFileDialog, QFrame, QHBoxLayout, QLabel, QPushButton,
     QTabWidget, QTextBrowser, QVBoxLayout, QWidget,
 )
 
 from core.i18n import tr
 from core.logger import get_logger
+from ui.fade_scroll import attach_edge_fades
+from ui.styles import BG_INPUT, BORDER, SPEC_GREEN, TEXT_MAIN
+from ui.tab_header import dialog_masthead
+from ui.theme import resolve_mode
 from ui.tooltip_button import TooltipButton
-from ui.widgets import open_file_dialog, tint_dialog_primary
+from ui.widgets import open_file_dialog
 
 log = get_logger(__name__)
-
-_TAB_COLOR = "#56d6a5"
 
 
 # Cube-corner codes → human labels (lazy so tr() runs under the active language).
@@ -204,22 +206,12 @@ class MeasurementReportDialog(QDialog):
         self._history: list = []
         self._project_dirs: set = set()
         self.setWindowTitle(tr("Measurement Report"))
-        self.setMinimumSize(720, 640)
+        self.setMinimumSize(760, 640)
+        self.setWindowFlags(
+            self.windowFlags() & ~Qt.WindowType.WindowContextHelpButtonHint)
 
-        v = QVBoxLayout(self)
-        v.setContentsMargins(20, 18, 20, 18)
-        v.setSpacing(12)
-
-        intro_row = QHBoxLayout()
-        intro = QLabel(tr(
-            "See how accurately your printed chart was reproduced, and keep a "
-            "dated report so you can compare measurements of the same chart "
-            "over time."), self)
-        intro.setWordWrap(True)
-        intro_row.addWidget(intro, 1)
-        intro_row.addWidget(TooltipButton(
-            tr("Measurement report"),
-            tr("This compares what your instrument measured against the "
+        _help = tr(
+            "This compares what your instrument measured against the "
             "colours the chart was designed to have, patch by patch, and "
             "sums it up:\n\n"
             "  • ΔE00 (colour difference) — the average, middle (median), "
@@ -251,9 +243,32 @@ class MeasurementReportDialog(QDialog):
             "per-printer view: it gathers the whole history for this project, "
             "which is one printer and paper.\n\n"
             "Screen colours are approximate; the numbers come from your "
-            "measurement file and are exact."),
-            self))
-        v.addLayout(intro_row)
+            "measurement file and are exact.")
+
+        # Tool-style chrome: uppercase eyebrow + serif title + ⓘ over a
+        # full-width spectrum stripe, green accent — the same look as the other
+        # Tools windows. Zero side margins so the stripe runs edge to edge.
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+        head, self._header, stripe = dialog_masthead(
+            self, tr("MEASUREMENT · REPORT"), tr("Measurement Report"),
+            tooltip_title=tr("Measurement report"), tooltip_body=_help,
+            accent=SPEC_GREEN)
+        outer.addLayout(head)
+        outer.addWidget(stripe)
+
+        v = QVBoxLayout()
+        v.setContentsMargins(22, 14, 22, 16)
+        v.setSpacing(12)
+        outer.addLayout(v)
+
+        intro = QLabel(tr(
+            "See how accurately your printed chart was reproduced, and keep a "
+            "dated report so you can compare measurements of the same chart "
+            "over time."), self)
+        intro.setWordWrap(True)
+        v.addWidget(intro)
 
         # Two rows so the (now five) controls never clip: sourcing on top,
         # output below (Knut — beta.21 buttons were cut on both sides).
@@ -321,8 +336,14 @@ class MeasurementReportDialog(QDialog):
 
         self._view = QTextBrowser(self)
         self._view.setOpenExternalLinks(False)
+        self._view.setFrameShape(QFrame.Shape.NoFrame)
         self._view.setHtml(self._empty_html())
         v.addWidget(self._view, 1)
+        # The report view scrolls internally — give it the same fade-to-surface
+        # gradient the Tools dialogs use on their scroll areas.
+        self._view_fades = attach_edge_fades(self._view, surface="dialog")
+        self._view_fades.set_appearance(
+            resolve_mode(self._settings.get("appearance", "auto")))
 
         close_row = QHBoxLayout()
         close_row.addStretch(1)
@@ -331,7 +352,16 @@ class MeasurementReportDialog(QDialog):
         close_row.addWidget(close_btn)
         v.addLayout(close_row)
 
-        tint_dialog_primary(self, _TAB_COLOR)
+        # Neutral control accents (checkbox / focus rings) like the Tools
+        # dialogs, replacing the global tab-accent; in dark mode match the report
+        # view to the input background so it isn't darker than the chrome.
+        mode = resolve_mode(self._settings.get("appearance", "auto"))
+        from ui.dialogs.tools_dialogs import neutral_controls_qss
+        qss = neutral_controls_qss("#1c1b18" if mode == "light" else "#d0d0d0")
+        if mode == "dark":
+            qss += (f"QTextBrowser {{ background: {BG_INPUT}; color: {TEXT_MAIN};"
+                    f" border: 1px solid {BORDER}; border-radius: 3px; }}")
+        self.setStyleSheet(qss)
 
         if initial_ti3 is not None and Path(initial_ti3).exists():
             self._load(Path(initial_ti3))

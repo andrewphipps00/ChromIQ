@@ -13,9 +13,9 @@ Typical use:
 """
 from __future__ import annotations
 
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import QEvent, QObject, Qt
 from PyQt6.QtGui import QColor, QLinearGradient, QPainter, QPaintEvent
-from PyQt6.QtWidgets import QScrollArea, QWidget
+from PyQt6.QtWidgets import QAbstractScrollArea, QScrollArea, QWidget
 
 
 # Per-surface (dark, light) backdrop colours.
@@ -120,3 +120,62 @@ class FadeScrollArea(QScrollArea):
         self._bot_fade.setVisible(scrollable and not at_bot)
         self._top_fade.raise_()
         self._bot_fade.raise_()
+
+
+class EdgeFades(QObject):
+    """Attach the same top/bottom fade-to-surface gradient to *any* existing
+    scroll area — a ``QTextBrowser``, ``QListWidget``, etc. — that already
+    manages its own scrolling, without re-parenting it into a FadeScrollArea.
+
+    The fades are overlaid on the area's viewport and follow the theme via
+    :meth:`set_appearance` (call once with the current mode; dialogs rarely
+    change theme while open). Keep the returned object alive."""
+
+    FADE_H = FadeScrollArea.FADE_H
+
+    def __init__(self, area: QAbstractScrollArea, *, surface: str = "dialog") -> None:
+        super().__init__(area)
+        self._area = area
+        self._surface = surface if surface in _SURFACES else "dialog"
+        self._mode = "dark"
+        vp = area.viewport()
+        self._top = _ScrollFade("top", vp)
+        self._bot = _ScrollFade("bottom", vp)
+        sb = area.verticalScrollBar()
+        sb.valueChanged.connect(self._refresh)
+        sb.rangeChanged.connect(lambda _mn, _mx: self._refresh())
+        vp.installEventFilter(self)
+        self._refresh_color()
+        self._refresh()
+
+    def set_appearance(self, mode: str) -> None:
+        self._mode = "light" if mode == "light" else "dark"
+        self._refresh_color()
+
+    def _refresh_color(self) -> None:
+        dark, light = _SURFACES[self._surface]
+        color = light if self._mode == "light" else dark
+        self._top.set_color(color)
+        self._bot.set_color(color)
+
+    def eventFilter(self, obj: QObject, ev: QEvent) -> bool:  # noqa: N802
+        if ev.type() == QEvent.Type.Resize:
+            self._refresh()
+        return False
+
+    def _refresh(self) -> None:
+        vp = self._area.viewport()
+        w, h = vp.width(), vp.height()
+        self._top.setGeometry(0, 0, w, self.FADE_H)
+        self._bot.setGeometry(0, h - self.FADE_H, w, self.FADE_H)
+        sb = self._area.verticalScrollBar()
+        scrollable = sb.maximum() > sb.minimum()
+        self._top.setVisible(scrollable and sb.value() > sb.minimum())
+        self._bot.setVisible(scrollable and sb.value() < sb.maximum())
+        self._top.raise_()
+        self._bot.raise_()
+
+
+def attach_edge_fades(area: QAbstractScrollArea, *, surface: str = "dialog") -> EdgeFades:
+    """Convenience wrapper around :class:`EdgeFades`."""
+    return EdgeFades(area, surface=surface)
