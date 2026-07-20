@@ -325,6 +325,18 @@ def apply_furniture_reserves(geom, kw: dict):
     return replace(geom, label_band_mm=lb, bottom_reserve_mm=br)
 
 
+def clip_text_lines(text: "str | None") -> list[str]:
+    """Custom clip-border text split into rendered lines. INTERIOR blank lines are
+    kept — they become writing space between the lines (a hand fills in the
+    underscored fields); only leading/trailing blanks are trimmed (Knut)."""
+    lines = (text or "").splitlines()
+    while lines and not lines[0].strip():
+        lines.pop(0)
+    while lines and not lines[-1].strip():
+        lines.pop()
+    return lines
+
+
 def render_clip_strip(mode: str, *, width_px: int, height_px: int, dpi: int,
                       text: str = "", font_family: str = "Inter",
                       image_path: str = "", ctx: dict | None = None,
@@ -377,8 +389,10 @@ def render_clip_strip(mode: str, *, width_px: int, height_px: int, dpi: int,
         strip.paste(overlay, (0, 0), overlay)
         return strip
 
-    # plain text → rotated text up the strip
-    lines = [ln for ln in (text or "").splitlines() if ln.strip()]
+    # plain text → rotated text up the strip. Keep INTERIOR blank lines — they add
+    # writing space between the lines (for a hand to fill in the underscored
+    # fields); only leading/trailing blanks are trimmed (Knut).
+    lines = clip_text_lines(text)
     if not lines:
         return strip
     overlay = _vtext("\n".join(lines), font_family, width_px, height_px,

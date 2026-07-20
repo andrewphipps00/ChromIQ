@@ -273,8 +273,14 @@ def placement(geom: Geom, paper_w_mm: float, paper_h_mm: float, layout: Layout) 
         _leader_top = max(0.0, min(_ideal_top, g.margin_t - _lab_h)) + g.offset_y
     else:
         _leader_top = g.margin_t + g.offset_y   # default: flush under the margin
+    # A right-side clip: the patches must butt against the clip zone (the
+    # instrument grips there), so right-anchor the block and let the horizontal
+    # slack fall on the LEFT (non-clip) side. Left-anchoring piled the slack onto
+    # the right, widening the right clip beyond its set width (Knut).
+    fh_eff = (1.0 if (getattr(g, "clip_side", "left") == "right" and g.lbord > 0)
+              else fh)
     return Placement(
-        x0=g.margin_l + g.rlwi + fh * extra_w + g.hxew + g.offset_x,
+        x0=g.margin_l + g.rlwi + fh_eff * extra_w + g.hxew + g.offset_x,
         y0_first=_y0,
         plen=g.plen, pwid=g.pwid, pspa=g.pspa, rrsp=g.rrsp,
         steps_in_pass=layout.steps_in_pass,

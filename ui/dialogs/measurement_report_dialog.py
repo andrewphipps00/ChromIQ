@@ -245,15 +245,24 @@ class _TrendChart(QWidget):
         if self._thresholds:
             tpen = QPen(QColor(150, 150, 150) if self._dark else QColor(120, 120, 120))
             tpen.setStyle(Qt.PenStyle.DotLine); tpen.setWidthF(1.2)
-            for tv, tlab in zip(self._thresholds, (tr("Avg"), tr("Max"))):
-                if isinstance(tv, (int, float)) and vmin <= tv <= vmax:
-                    yy = T + h * (1.0 - (tv - vmin) / span)
-                    p.setPen(tpen)
-                    p.drawLine(QPointF(L, yy), QPointF(L + w, yy))
-                    # Label sits OUTSIDE the plot in the left margin, right-aligned
-                    # with the y-axis numbers and vertically centred on its dotted
-                    # line; it tracks the line as the threshold changes (Knut).
-                    p.setPen(QPen(fg, 1.0))
+            thr = [(tv, tlab) for tv, tlab in zip(self._thresholds, (tr("Avg"), tr("Max")))
+                   if isinstance(tv, (int, float)) and vmin <= tv <= vmax]
+            # Default: the label sits outside the plot in the left margin, aligned
+            # with the y-axis numbers. But a threshold can land ON a y-axis number
+            # (e.g. Avg 2.0 with a gridline at 2.0), overlapping it — so if EITHER
+            # label would collide, put BOTH just above their own line at the left
+            # tip instead (Knut). y-axis numbers are at fracs 0 / 0.5 / 1.
+            axis_ys = [T + h * (1.0 - f) for f in (0.0, 0.5, 1.0)]
+            thr_ys = [T + h * (1.0 - (tv - vmin) / span) for tv, _ in thr]
+            collide = any(abs(ty - ay) < 9.0 for ty in thr_ys for ay in axis_ys)
+            for (tv, tlab), yy in zip(thr, thr_ys):
+                p.setPen(tpen)
+                p.drawLine(QPointF(L, yy), QPointF(L + w, yy))
+                p.setPen(QPen(fg, 1.0))
+                if collide:
+                    # Just above the dotted line, left-adjusted to its left tip.
+                    p.drawText(QPointF(L + 2, yy - 3), tlab)
+                else:
                     p.drawText(QRectF(0, yy - 7, L - 4, 14),
                                Qt.AlignmentFlag.AlignRight
                                | Qt.AlignmentFlag.AlignVCenter,

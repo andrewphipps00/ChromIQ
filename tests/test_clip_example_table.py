@@ -75,3 +75,14 @@ def test_new_line_insert_available_only_for_multiline(app):
         return [a.text() for a in btn.menu().actions()]
     assert any("New line" in t for t in actions(panel.clip_insert_btn))
     assert not any("New line" in t for t in actions(panel.insert_token_btn))
+
+
+def test_clip_text_keeps_interior_blank_lines():
+    """Blank lines between text lines survive (writing space for hand-filled
+    fields); leading/trailing blanks are trimmed (Knut beta.28)."""
+    from workflow.layout_engine.raster import clip_text_lines
+    assert clip_text_lines("date: ___\n \nprinter: ___") == \
+        ["date: ___", " ", "printer: ___"]
+    assert clip_text_lines("\n\nA\n\nB\n\n") == ["A", "", "B"]
+    assert clip_text_lines("   \n  ") == []
+    assert clip_text_lines(None) == []

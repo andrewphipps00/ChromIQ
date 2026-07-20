@@ -555,6 +555,28 @@ def test_clip_side_left_right():
     assert ar[0] + ar[2] <= A4[0] + 1e-6
 
 
+def test_right_clip_width_equals_setting():
+    """A right-side clip zone must be exactly its set width, not wider: the patch
+    block right-anchors against the clip so the horizontal slack falls on the
+    LEFT, instead of piling onto the right and widening the clip (Knut beta.28)."""
+    from workflow.layout_engine.presets import LayoutRecipe
+    w, h = A4
+    def whites(side):
+        r = LayoutRecipe(instrument="i1", paper="A4", clip_border=True,
+                         clip_side=side, clip_border_width_mm=26.0)
+        g = instruments.geom_from_build_kwargs(r.build_kwargs())
+        lay = geometry.compute(g, w, h, 400)
+        pl = geometry.placement(g, w, h, lay)
+        n = lay.patches_per_page // lay.steps_in_pass if lay.steps_in_pass else 0
+        block_w = max(0, n - 1) * g.rrsp + g.pwid
+        return pl.x0, w - (pl.x0 + block_w)          # left white, right white
+    lw, rw = whites("right")
+    assert abs(rw - 26.0) < 0.5, f"right clip {rw:.1f} mm, expected ~26"
+    lw2, rw2 = whites("left")
+    assert abs(lw2 - 26.0) < 0.5                      # symmetric with left
+    assert abs(rw - lw2) < 0.5                        # both clips the same width
+
+
 def test_cm_ss_notes_band_reserves_space():
     """CM/SS have no native clip border, but a notes band can be reserved on
     either edge when clip content is on — reducing capacity (#93, Knut)."""
