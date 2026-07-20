@@ -1150,6 +1150,7 @@ class LayoutOptionsPanel(QWidget):
         ccg = QGridLayout(self._clip_content_grp)
         self.clip_content_mode = NoScrollComboBox(self)
         for k, lbl in (("off", tr("Off")), ("text", tr("Custom text")),
+                       ("example", tr("Example custom table")),
                        ("branding", tr("ChromIQ branding")),
                        ("notes", tr("Notes box")), ("image", tr("Imported image"))):
             self.clip_content_mode.addItem(lbl, k)
@@ -1159,10 +1160,20 @@ class LayoutOptionsPanel(QWidget):
         self.clip_side.addItem(tr("Right"), "right")
         self.clip_side.currentIndexChanged.connect(self._update_clip_margin_conflict)
         self.clip_side.currentIndexChanged.connect(self._emit)
-        self.clip_text = QLineEdit(self)
+        from PyQt6.QtWidgets import QPlainTextEdit
+        # Multi-line so a record like the "Example custom table" template (many
+        # lines) is comfortable to view and edit; ~4 lines tall with a scrollbar
+        # to reach the rest (Knut).
+        self.clip_text = QPlainTextEdit(self)
         self.clip_text.setPlaceholderText(tr("e.g. {project} — {date}"))
+        _clip_fm = self.clip_text.fontMetrics()
+        self.clip_text.setFixedHeight(int(_clip_fm.lineSpacing() * 4 + 12))
+        self.clip_text.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
+        self.clip_text.setVerticalScrollBarPolicy(
+            _Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self.clip_text.textChanged.connect(self._emit)
-        self.clip_insert_btn = self._make_insert_button(self.clip_text)
+        self.clip_insert_btn = self._make_insert_button(self.clip_text,
+                                                        multiline=True)
         self.clip_text_font = NoScrollComboBox(self)
         self._populate_font_combo(self.clip_text_font)
         self.clip_text_font.currentIndexChanged.connect(self._emit)
@@ -1181,7 +1192,8 @@ class LayoutOptionsPanel(QWidget):
         self.clip_dims_label.setStyleSheet("color: palette(mid);")
         self.clip_dims_label.setWordWrap(True)
         self.clip_preview = QLabel(self)
-        self.clip_preview.setMinimumHeight(30)
+        # Tall enough to show a multi-line record at a glance (Knut).
+        self.clip_preview.setMinimumHeight(90)
         self.clip_preview.setAlignment(_Qt.AlignmentFlag.AlignCenter)
         self.clip_preview.setStyleSheet("border: 1px solid palette(mid);")
         # Don't let the preview pixmap or dims text dictate the panel's min width
@@ -1564,9 +1576,61 @@ class LayoutOptionsPanel(QWidget):
                 w.setVisible(show_image)
 
     def _on_clip_content_changed(self, *_a) -> None:
+        # "Example custom table" isn't a persistent mode — it loads a ready-made
+        # record into the editable Text box and switches to Custom text (Knut).
+        if self.clip_content_mode.currentData() == "example":
+            self._load_example_clip_table()
+            return
         self._sync_clip_content_enabled()
         # On CM/SS the clip-width row appears only once notes content is on, so
         # re-evaluate visibility when the content mode changes (#93).
+        self._sync_clip_enable_display()
+        self._update_clip_visibility()
+        self._emit()
+
+    @staticmethod
+    def _example_clip_table_text() -> str:
+        """A ready-made record for the clip strip, replicating the legacy "Print
+        info in left clip area" table (two header lines + six fill-in fields), as
+        editable text with the same {patchcount}/{paper} tokens the chart fills in
+        and underline runs to hand-write on (Knut). Kept in sync with
+        workflow/chart_creator.py's header_lines / form_fields."""
+        rule = "_" * 12
+        rows = [
+            tr("ArgyllCMS {patchcount} RGB target on {paper}"),
+            tr("PRINT: borderless, 100% size (no scaling), color management OFF"),
+        ]
+        for field in (tr("date"), tr("printer"), tr("ink set"),
+                      tr("profile name"), tr("paper type"), tr("driver/resolution")):
+            rows.append(f"{field}: {rule}")
+        return "\n".join(rows)
+
+    def _load_example_clip_table(self) -> None:
+        """Fill the clip Text box with the example record and switch to Custom
+        text so it can be edited. Confirms first if the box already has text, so a
+        stray selection can't wipe the user's own record."""
+        existing = self.clip_text.toPlainText().strip()
+        if existing:
+            from PyQt6.QtWidgets import QMessageBox
+            if QMessageBox.question(
+                    self, tr("Load example table?"),
+                    tr("Replace the current clip-border text with the example "
+                       "table?")) != QMessageBox.StandardButton.Yes:
+                # Revert the combo to Custom text without touching the text.
+                self._select_clip_content("text")
+                return
+        self.clip_text.setPlainText(self._example_clip_table_text())
+        self._select_clip_content("text")
+
+    def _select_clip_content(self, key: str) -> None:
+        """Set the Content combo to *key* and run the normal post-change sync,
+        without recursing through the "example" one-shot branch."""
+        i = self.clip_content_mode.findData(key)
+        self.clip_content_mode.blockSignals(True)
+        if i >= 0:
+            self.clip_content_mode.setCurrentIndex(i)
+        self.clip_content_mode.blockSignals(False)
+        self._sync_clip_content_enabled()
         self._sync_clip_enable_display()
         self._update_clip_visibility()
         self._emit()
@@ -2004,7 +2068,7 @@ class LayoutOptionsPanel(QWidget):
         ph = max(1, round(h_mm * pdpi / 25.4))
         img = raster.render_clip_strip(
             mode, width_px=pw, height_px=ph, dpi=pdpi,
-            text=self._resolve_sample(self.clip_text.text()),
+            text=self._resolve_sample(self.clip_text.toPlainText()),
             font_family=self.clip_text_font.currentData() or "Inter",
             image_path=self.clip_image_path.text().strip(),
             image_obj=self._preview_clip_image(max(pw, ph)) if mode == "image" else None,
@@ -2069,8 +2133,9 @@ class LayoutOptionsPanel(QWidget):
         self.fixed_seed_cb.setChecked(True)   # a drawn seed is a reproducible one
         self.seed_spin.setValue(pick_seed())
 
-    def _make_insert_button(self, target):
-        """A compact "Insert ▾" token menu that inserts into *target* line edit.
+    def _make_insert_button(self, target, *, multiline: bool = False):
+        """A compact "Insert ▾" token menu that inserts into *target* (a QLineEdit
+        or, when *multiline*, a QPlainTextEdit).
 
         Qt's own menu-indicator arrow is hidden so the single "▾" in the label
         is the only arrow (and stays aligned with the text).
@@ -2094,6 +2159,13 @@ class LayoutOptionsPanel(QWidget):
             act = menu.addAction(label)
             act.triggered.connect(
                 lambda _c=False, r=run, tgt=target: self._insert_literal_into(tgt, r))
+        # A newline — only for a multi-line target (the clip text), so a record
+        # can be built line by line from the menu (Knut).
+        if multiline:
+            menu.addSeparator()
+            act = menu.addAction(tr("New line"))
+            act.triggered.connect(
+                lambda _c=False, tgt=target: self._insert_literal_into(tgt, "\n"))
         btn.setMenu(menu)
         return btn
 
@@ -2164,15 +2236,22 @@ class LayoutOptionsPanel(QWidget):
                         "padding: 0px; margin: 0px; }")
         return b
 
-    def _insert_token_into(self, target, token: str) -> None:
-        """Drop ``{token}`` into *target* at the cursor."""
-        target.insert("{%s}" % token)
+    @staticmethod
+    def _insert_at_cursor(target, text: str) -> None:
+        """Insert *text* at the cursor of a QLineEdit OR a QPlainTextEdit."""
+        if hasattr(target, "insertPlainText"):      # QPlainTextEdit (multi-line)
+            target.insertPlainText(text)
+        else:                                       # QLineEdit (single line)
+            target.insert(text)
         target.setFocus()
 
+    def _insert_token_into(self, target, token: str) -> None:
+        """Drop ``{token}`` into *target* at the cursor."""
+        self._insert_at_cursor(target, "{%s}" % token)
+
     def _insert_literal_into(self, target, text: str) -> None:
-        """Drop literal *text* (e.g. an underline run) at the cursor."""
-        target.insert(text)
-        target.setFocus()
+        """Drop literal *text* (e.g. an underline run or a newline) at the cursor."""
+        self._insert_at_cursor(target, text)
 
     def _resolve_sample(self, text: str) -> str:
         """Fill *text*'s placeholders with representative values for preview —
@@ -2453,7 +2532,7 @@ class LayoutOptionsPanel(QWidget):
         self.clip_content_mode.setCurrentIndex(_cc if _cc >= 0 else 0)
         _cs = self.clip_side.findData(getattr(r, "clip_side", "left") or "left")
         self.clip_side.setCurrentIndex(_cs if _cs >= 0 else 0)
-        self.clip_text.setText(r.clip_text)
+        self.clip_text.setPlainText(r.clip_text)
         _cf = self.clip_text_font.findData(r.clip_text_font)
         self.clip_text_font.setCurrentIndex(_cf if _cf >= 0 else 0)
         self.clip_text_size.setValue(mm_to_pt(r.clip_text_size_mm))
@@ -2554,7 +2633,7 @@ class LayoutOptionsPanel(QWidget):
         r.clip_border_width_mm = self.clip_width.value()
         r.clip_content_mode = self.clip_content_mode.currentData() or "off"
         r.clip_side = self.clip_side.currentData() or "left"
-        r.clip_text = self.clip_text.text()
+        r.clip_text = self.clip_text.toPlainText()
         r.clip_text_font = self.clip_text_font.currentData() or "Inter"
         r.clip_text_size_mm = pt_to_mm(self.clip_text_size.value())
         r.clip_image_path = self.clip_image_path.text().strip()
