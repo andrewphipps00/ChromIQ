@@ -1258,6 +1258,7 @@ class SettingsDialog(QDialog):
         self._report_max_thr_spin.setSingleStep(0.5)
         self._report_max_thr_spin.setSuffix(" ΔE")
         thr_row.addWidget(self._report_max_thr_spin)
+        thr_row.addStretch()
         thr_row.addWidget(TooltipButton(
             tr("Pass thresholds"),
             tr("The colour-accuracy verdict. A metric passes when its measured "
@@ -1268,7 +1269,6 @@ class SettingsDialog(QDialog):
                "points are 2.0 for the average and 3.0 for the maximum — tighten "
                "them for critical work, loosen them for a quick health check."),
             self))
-        thr_row.addStretch()
         gl.addLayout(thr_row)
         v.addWidget(defaults_grp)
         v.addStretch()
