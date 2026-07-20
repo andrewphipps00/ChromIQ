@@ -1590,20 +1590,20 @@ class LayoutOptionsPanel(QWidget):
 
     @staticmethod
     def _example_clip_table_text() -> str:
-        """A ready-made record for the clip strip, replicating the legacy "Print
-        info in left clip area" table (two header lines + six fill-in fields), as
-        editable text with the same {patchcount}/{paper} tokens the chart fills in
-        and underline runs to hand-write on (Knut). Kept in sync with
-        workflow/chart_creator.py's header_lines / form_fields."""
-        rule = "_" * 12
-        rows = [
-            tr("ArgyllCMS {patchcount} RGB target on {paper}"),
-            tr("PRINT: borderless, 100% size (no scaling), color management OFF"),
-        ]
-        for field in (tr("date"), tr("printer"), tr("ink set"),
-                      tr("profile name"), tr("paper type"), tr("driver/resolution")):
-            rows.append(f"{field}: {rule}")
-        return "\n".join(rows)
+        """A ready-made record for the clip strip (Knut's approved layout): a
+        header line with the chart summary + print reminder, then two rows of
+        fill-in fields with a BLANK line between each for hand-writing. The
+        {patchcount}/{paper} tokens fill in when the chart is built; the underline
+        runs are lengths Knut tuned to sit nicely at ~10–12 pt. Kept in sync with
+        workflow/chart_creator.py's legacy left-clip record."""
+        def field(label_key: str, n: int) -> str:
+            return f"{tr(label_key)}: {'_' * n}"
+        header = (tr("ArgyllCMS {patchcount} RGB target on {paper}") + " - "
+                  + tr("PRINT: borderless, 100% size (no scaling), color management OFF"))
+        row1 = f"{field('date', 24)} {field('printer', 48)} {field('ink set', 48)}"
+        row2 = (f"{field('profile name', 37)} {field('paper type', 36)} "
+                f"{field('driver/resolution', 24)}")
+        return "\n".join([header, " ", row1, " ", row2])
 
     def _load_example_clip_table(self) -> None:
         """Fill the clip Text box with the example record and switch to Custom

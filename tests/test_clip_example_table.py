@@ -29,7 +29,7 @@ def test_example_table_prefills_text_and_reverts_to_custom_text(app):
     assert panel.clip_content_mode.currentData() == "text"
     # …and filled the box with the multi-line template.
     text = panel.clip_text.toPlainText()
-    assert text.count("\n") >= 6
+    assert text.count("\n") >= 4
     assert "{patchcount}" in text and "{paper}" in text
     assert "borderless" in text
     for field in ("date", "printer", "ink set", "profile name",
@@ -39,20 +39,22 @@ def test_example_table_prefills_text_and_reverts_to_custom_text(app):
     assert panel.clip_text.isEnabled()
 
 
-def test_example_table_matches_legacy_left_clip_fields(app):
-    """The template must stay in sync with chart_creator's legacy left-clip
-    header lines and form fields."""
+def test_example_table_matches_knut_approved_layout(app):
+    """Knut's approved layout: a header line (chart summary + PRINT reminder),
+    then two field rows with a BLANK line between each for hand-writing."""
     panel = _panel()
-    text = panel._example_clip_table_text()
-    # header line 2 is verbatim from chart_creator.py
-    assert "PRINT: borderless, 100% size (no scaling), color management OFF" in text
-    # the six fill-in fields, in order
-    lines = text.splitlines()
-    fields = [ln.split(":")[0] for ln in lines[2:]]
-    assert fields == ["date", "printer", "ink set", "profile name",
-                      "paper type", "driver/resolution"]
-    # each field line carries an underline run to write on
-    assert all("_" in ln for ln in lines[2:])
+    lines = panel._example_clip_table_text().splitlines()
+    assert len(lines) == 5
+    # header line: tokens + the verbatim print reminder
+    assert "{patchcount}" in lines[0] and "{paper}" in lines[0]
+    assert "PRINT: borderless, 100% size (no scaling), color management OFF" in lines[0]
+    assert not lines[1].strip() and not lines[3].strip()      # blank writing rows
+    # two field rows, each three underscored fields in order
+    def fields(row):
+        import re
+        return [f.strip() for f, _ in re.findall(r"([a-z /]+): (_+)", row)]
+    assert fields(lines[2]) == ["date", "printer", "ink set"]
+    assert fields(lines[4]) == ["profile name", "paper type", "driver/resolution"]
 
 
 def test_multiline_clip_text_roundtrips_through_recipe(app):
