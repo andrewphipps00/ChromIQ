@@ -379,13 +379,22 @@ class MeasurementReportDialog(QDialog):
             "  • Save report as PDF — a ChromIQ-styled PDF you can keep or share; "
             "it opens automatically. Reveal folder opens where it was saved.\n\n"
             "Using i1Profiler measurements\n"
-            "You can feed this report measurements made in i1Profiler: export the "
-            "measurement as a text file and convert it with the Tools menu's "
-            "“Convert i1Profiler → TI3”. For the colour-accuracy figures the report "
-            "also needs "
-            "the chart's design reference — put the matching .ti2 next to the .ti3 "
-            "(same file name). Without a .ti2 you still get paper white and black, "
-            "but not the ΔE comparison.\n\n"
+            "You can feed this report measurements made in i1Profiler (handy when "
+            "you measured with an i1iSis or i1iO, which lay out their own charts). "
+            "Just two steps:\n"
+            "  1. Export the measurement from i1Profiler as a text file.\n"
+            "  2. Convert it with Tools → “Convert i1Profiler → TI3”, then add the "
+            "resulting .ti3 here with “Add Profile's Measurements…”.\n"
+            "That's all — you get the full colour-accuracy figures, no extra "
+            "reference file needed. ChromIQ works out the expected colour of each "
+            "patch from the measured device values, the same way it would from a "
+            "chart's own design file. (If a matching .ti2 happens to sit next to "
+            "the .ti3, that's used as the reference instead.) The instrument is "
+            "read from the i1Profiler file during conversion.\n"
+            "Keeping things tidy: convert into the same folder as your i1Profiler "
+            "files, add the .ti3, and save the PDF report right there — your "
+            "i1Profiler work stays together and separate from ChromIQ's own "
+            "profile folders.\n\n"
             "Screen and print colours here are approximate; the numbers come from "
             "your measurement file and are exact.")
 
@@ -440,13 +449,16 @@ class MeasurementReportDialog(QDialog):
                "keeps its saved reports in a reports/ folder. Point at any run's "
                ".ti3 and ChromIQ finds the whole profile's history automatically. "
                "The instrument shown in the report is read from each measurement "
-               "file itself, and the colour figures need the chart's design file "
-               "(.ti2) next to the .ti3 — without it you still get paper white "
-               "and black, but no ΔE.\n\n"
-               "Using i1Profiler measurements: convert each measurement to a .ti3 "
-               "(Tools → “Convert i1Profiler → TI3”), keep its .ti2 beside it, and "
-               "put the runs in a runs/run1, runs/run2, … layout so they're read "
-               "as one profile; otherwise add each .ti3 on its own.\n\n"
+               "file itself. For the colour figures the report uses the chart's "
+               "design file (.ti2) when it sits next to the .ti3; if there isn't "
+               "one, it works out the expected colours from the measured device "
+               "values instead — so you still get the full ΔE comparison.\n\n"
+               "Using i1Profiler measurements: export each measurement from "
+               "i1Profiler and convert it with Tools → “Convert i1Profiler → TI3”, "
+               "then add each .ti3 here. No .ti2 is required — ChromIQ derives the "
+               "reference from the measured values, and reads the instrument from "
+               "the i1Profiler file during conversion. Convert into the i1Profiler "
+               "file's own folder to keep everything together.\n\n"
                "Remove Profile's Measurements… — select a profile in the list and "
                "remove it (its runs leave the report). Clear List empties the "
                "whole report.\n\n"
@@ -1296,13 +1308,24 @@ class MeasurementReportDialog(QDialog):
             # Spread is reported for completeness but carries no threshold (Knut).
             trs.append(row_html(len(rows), _METRIC_LABELS["std"](),
                                 de.get("std"), None, None))
-            parts.append(_h3(tr("Colour accuracy (ΔE00 vs the chart's design)")))
+            device_ref = r.get("reference_source") == "device"
+            parts.append(_h3(
+                tr("Colour accuracy (ΔE00 vs the measured device values)")
+                if device_ref
+                else tr("Colour accuracy (ΔE00 vs the chart's design)")))
             parts.append("<table cellpadding='5' cellspacing='0' "
                          "style='border-collapse:collapse;font-size:11px'>"
                          + "".join(trs) + "</table>")
+            if device_ref:
+                parts.append("<p style='color:#888;font-size:10px'>" + html.escape(tr(
+                    "No design file (.ti2) sits next to this measurement, so the "
+                    "expected colour of each patch is the sRGB estimate of its "
+                    "measured device values — the same reference a chart's design "
+                    "file would carry. Typical for imported i1Profiler "
+                    "measurements.")) + "</p>")
         else:
             parts.append("<p style='color:#888'>" + html.escape(tr(
-                "No design reference (.ti2) was found next to this measurement, so "
+                "This measurement has no device values to compare against, so "
                 "colour-accuracy statistics aren't available — only the paper white "
                 "and black below.")) + "</p>")
 

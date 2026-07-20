@@ -1327,11 +1327,18 @@ class I1ProfilerToTi3Dialog(_ToolDialogBase):
         "format ChromIQ uses everywhere else.\n\n"
         "Here's how:\n\n"
         "1. Pick the measurement file (.txt) you exported from i1Profiler.\n"
-        "2. Pick where to save the result and what to call it.\n"
+        "2. Pick where to save the result and what to call it. ChromIQ suggests "
+        "the same folder as your i1Profiler file, so everything stays together.\n"
         "3. Click Convert.\n\n"
         "You'll get a ChromIQ measurement file (.ti3) you can take straight to the "
         "Build Profile tab — which neatly closes the loop after measuring an "
-        "exported chart over in i1Profiler."))
+        "exported chart over in i1Profiler.\n\n"
+        "It's also ready for the Measurement Report (Tools → “Measurement "
+        "report”): just add the .ti3 there and you get the full colour-accuracy "
+        "figures — no extra reference file needed.\n\n"
+        "Which instrument? i1Profiler records that in the measurement file, so "
+        "ChromIQ reads it and carries it into the .ti3 for you. If the file "
+        "doesn't name one, the report simply shows “i1Profiler (unspecified)”."))
     DESCRIPTION = (
         tr("Convert an i1Profiler measurement export (.txt) into an Argyll .ti3 "
         "measurement file. Use this when you measured a chart in i1Profiler "
@@ -1380,6 +1387,10 @@ class I1ProfilerToTi3Dialog(_ToolDialogBase):
             self._txt_field.setText(str(p))
             if not self._output.name:
                 self._output._name_edit.setText(p.stem)
+            # Default the destination to the i1Profiler file's own folder, so the
+            # converted .ti3 lands beside the measurement — keeping i1Profiler
+            # data together and away from ChromIQ profile folders (Knut).
+            self._output._dir_edit.setText(str(p.parent))
             self._refresh()
 
     def _can_run(self) -> bool:
@@ -1431,6 +1442,18 @@ class I1ProfilerToTi3Dialog(_ToolDialogBase):
         def _on_finish(code: int) -> None:
             ok = code == 0 and out.exists()
             if ok:
+                # txt2ti3 doesn't carry the instrument across; read it from the
+                # i1Profiler export's INSTRUMENTATION header and stamp it so the
+                # measurement report can show it (falls back to a clear label
+                # when the file names none) (Knut).
+                try:
+                    from workflow.reference_convert import stamp_instrument_from_source
+                    instr = stamp_instrument_from_source(out, self._txt)
+                    if instr:
+                        self._log.appendPlainText(
+                            tr("Instrument: {name}").format(name=instr))
+                except Exception:
+                    pass
                 self._log.appendPlainText(f"[OK] Wrote {out}")
                 _remember_dir(self._settings, self.TOOL_KEY, out.parent)
                 self._finish(True)

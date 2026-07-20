@@ -75,12 +75,23 @@ def test_report_cube_corners(chart):
     assert er > eg and er > eb                          # clearly reddish
 
 
-def test_report_without_reference(tmp_path):
-    # No .ti2 → no ΔE stats, but white/black still reported.
+def test_report_with_design_reference_is_marked(chart):
+    # A .ti2 beside the .ti3 → compared against the chart's design.
+    r = build_report(chart)
+    assert r["reference_source"] == "design"
+
+
+def test_report_without_reference_uses_device_values(tmp_path):
+    # No .ti2 → the report is self-contained: it derives the expected colour
+    # from the measurement's own device RGB, so ΔE is still available (Knut).
     (tmp_path / "c.ti3").write_text(_TI3)
     r = build_report(tmp_path / "c.ti3")
-    assert "de00" not in r
+    assert r["reference_source"] == "device"
+    assert r["de00"]["n"] == 3
     assert r["paper_white"]["loc"] == "A1"
+    # White/black measured near their sRGB estimate → small ΔE; the red patch,
+    # measured off from sRGB red, is the worst.
+    assert r["worst_patches"][0]["loc"] == "A3"
 
 
 def test_save_list_and_compare(chart, tmp_path):

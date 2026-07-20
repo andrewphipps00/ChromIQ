@@ -1,5 +1,24 @@
 # Changelog
 
+## v3.13.12-beta.27
+
+- **Imported i1Profiler measurements now work in the Measurement Report on their
+  own (Knut).** Measure a chart in i1Profiler (for an i1iSis or i1iO that lays
+  out its own chart), export it, convert it with Tools → “Convert i1Profiler →
+  TI3”, and add the .ti3 to the report — you get the full colour-accuracy
+  figures with no extra reference file. ChromIQ works out each patch's expected
+  colour from the measured device values, the same reference a chart's own
+  design file (.ti2) carries; if a matching .ti2 happens to sit beside the .ti3,
+  that's used instead. This removes the old need for a hand-matched .ti2.
+- **The instrument is carried across.** “Convert i1Profiler → TI3” now reads the
+  instrument from the i1Profiler file and stamps it into the .ti3, so Report
+  Scope shows the real instrument (e.g. “i1Pro 2”). Files that name none show
+  “i1Profiler (unspecified)”.
+- **Convert i1Profiler → TI3 keeps things together.** The tool now suggests the
+  same folder as your i1Profiler file, so the converted .ti3 and its report can
+  live alongside your i1Profiler data, separate from ChromIQ's profile folders.
+- Device values on the 0–255 scale i1Profiler exports are handled correctly.
+
 ## v3.13.12-beta.26
 
 - **The load and reveal-folder buttons moved to the header.** On the Measure and

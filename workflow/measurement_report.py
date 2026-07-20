@@ -30,7 +30,7 @@ from workflow.ti3_analysis import (
 
 log = get_logger(__name__)
 
-REPORT_SCHEMA = 3
+REPORT_SCHEMA = 4
 
 # A cube corner counts as "present" in the chart when the nearest measured patch
 # sits within this many device units (0..100, per channel) of the ideal corner.
@@ -179,7 +179,36 @@ def build_report(ti3_path: str | Path, worst_n: int = 16) -> dict:
         "hex": _srgb_hex(tuple(data.xyz[bi])),
     }
 
+    # Device RGB, normalised to Argyll's 0..100 device scale. i1Profiler
+    # measurement exports carry 0..255 code values; ChromIQ's own charts are
+    # already 0..100. Normalise once so corner detection and the device-RGB
+    # reference fallback below are correct regardless of the source (Knut).
+    rgb100 = None
+    if data.rgb is not None and len(data.rgb):
+        rgb100 = np.asarray(data.rgb, dtype=float)
+        if float(rgb100.max()) > 101.0:
+            rgb100 = rgb100 * (100.0 / 255.0)
+
+    # Expected reference: the chart's design colours from the sibling .ti2,
+    # matched by SAMPLE_ID. When no .ti2 matches — a stand-alone or imported
+    # i1Profiler measurement with no design file beside it — synthesise the
+    # reference from the measurement's OWN device RGB, treated as sRGB exactly
+    # the way the .ti2's design XYZ is (workflow/i1profiler_import._patch_xyz).
+    # That makes the colour-accuracy figures work with no .ti2 and no patch-ID
+    # matching, so an imported measurement is self-contained (Knut).
     ref = _reference_labs(ti3_path.with_suffix(".ti2"))
+    ref_source = "design"
+    matched_ids = sum(1 for sid in data.sample_ids if sid in ref) if ref else 0
+    if not matched_ids and rgb100 is not None:
+        from workflow.i1profiler_import import _patch_xyz
+        ref = {}
+        for i, sid in enumerate(data.sample_ids):
+            r, g, b = (float(v) for v in rgb100[i])
+            ref[sid] = xyz_to_lab(tuple(v / 100.0 for v in _patch_xyz(r, g, b)))
+        ref_source = "device"
+    # "design" = compared against the chart's own .ti2; "device" = compared
+    # against the sRGB estimate of the measured device values (imported files).
+    report["reference_source"] = ref_source
 
     # The eight cube corners (paper white, composite black, the six ink
     # primaries/secondaries) — nearest patch to each corner by device RGB. Each
@@ -187,8 +216,8 @@ def build_report(ti3_path: str | Path, worst_n: int = 16) -> dict:
     # colour and ΔE00, so the report says something about the inks, not only the
     # instrument (Knut). rgb is device 0..100.
     report["corners"] = []
-    if data.rgb is not None and len(data.rgb):
-        rgb = np.asarray(data.rgb, dtype=float)
+    if rgb100 is not None:
+        rgb = rgb100
         for name, target in CUBE_CORNERS:
             diffs = np.abs(rgb - np.array(target))
             ci = int((diffs ** 2).sum(axis=1).argmin())

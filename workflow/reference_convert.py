@@ -89,7 +89,78 @@ def convert_i1profiler_measurement(path: str | Path, argyll_bin: str | Path,
         raise ReferenceConvertError(
             "txt2ti3 ran but produced no .ti3 — is this an i1Profiler "
             "measurement export?")
+    stamp_instrument_from_source(out, p)
     return out
+
+
+# i1Profiler / X-Rite CGATS values that mean "no instrument recorded".
+_UNKNOWN_INSTRUMENTATION = {
+    "", "not specified", "unspecified", "unknown", "n/a", "na", "none",
+}
+# What an imported measurement shows in the report when the source names no
+# instrument — clearer than a blank, and honest that it came from outside.
+_IMPORTED_INSTRUMENT_FALLBACK = "i1Profiler (unspecified)"
+
+
+def read_instrumentation(txt_path: str | Path) -> "str | None":
+    """The i1Profiler / X-Rite ``INSTRUMENTATION`` header value (e.g.
+    ``"i1Pro 2"``), or ``None`` when the file names no real instrument."""
+    try:
+        text = Path(txt_path).read_text(errors="replace")
+    except OSError:
+        return None
+    m = re.search(r'^\s*INSTRUMENTATION\s+"?(.*?)"?\s*$', text,
+                  re.IGNORECASE | re.MULTILINE)
+    if not m:
+        return None
+    val = m.group(1).strip()
+    return None if val.lower() in _UNKNOWN_INSTRUMENTATION else val
+
+
+# txt2ti3 hard-codes this as the TARGET_INSTRUMENT for every file it writes
+# (profile/txt2ti3.c: `add_kword(…, "TARGET_INSTRUMENT", inst_name(instSpectrolino))`,
+# with a source comment noting it *could* read the file's INSTRUMENTATION but
+# doesn't). So a "Spectrolino" tag on a converted .ti3 is a placeholder, not the
+# real instrument — treat it as absent and replace it.
+_TXT2TI3_PLACEHOLDER_INSTRUMENT = "Spectrolino"
+
+
+def stamp_instrument_from_source(ti3_path: str | Path, source_txt: str | Path,
+                                 fallback: str = _IMPORTED_INSTRUMENT_FALLBACK
+                                 ) -> str:
+    """Give a converted ``.ti3`` a ``TARGET_INSTRUMENT`` the measurement report
+    can show. ``txt2ti3`` doesn't carry the real instrument across — it stamps a
+    hard-coded ``"Spectrolino"`` placeholder — so read the instrument from the
+    source export's ``INSTRUMENTATION`` header and write it in; when the source
+    names no real instrument, use *fallback* so imported files still identify
+    themselves in Report Scope. A genuine, non-placeholder ``TARGET_INSTRUMENT``
+    already on the file is kept. Returns the value the file ends up with.
+    """
+    ti3_path = Path(ti3_path)
+    try:
+        text = ti3_path.read_text(errors="replace")
+    except OSError:
+        return ""
+    m = re.search(r'^\s*TARGET_INSTRUMENT\s+"?(.*?)"?\s*$', text,
+                  re.IGNORECASE | re.MULTILINE)
+    existing = m.group(1).strip() if m else None
+    if existing and existing != _TXT2TI3_PLACEHOLDER_INSTRUMENT:
+        return existing                       # a real instrument — leave it
+    name = read_instrumentation(source_txt) or fallback
+    if m:
+        # Replace txt2ti3's placeholder value in place (its KEYWORD line stays).
+        text = re.sub(r'^(\s*TARGET_INSTRUMENT\s+).*$', rf'\1"{name}"', text,
+                      count=1, flags=re.MULTILINE)
+        ti3_path.write_text(text)
+    else:
+        # No tag at all: insert one, declared with a KEYWORD line so ArgyllCMS
+        # tools still parse the file (mirrors ti3_analysis.mark_verification_ti3).
+        lines = text.splitlines()
+        at = 1 if lines and lines[0].strip().upper().startswith("CTI3") else 0
+        lines[at:at] = ['KEYWORD "TARGET_INSTRUMENT"',
+                        f'TARGET_INSTRUMENT "{name}"']
+        ti3_path.write_text("\n".join(lines) + "\n")
+    return name
 
 
 def _run(argyll_bin: Path, tool: str, args: list[str],
