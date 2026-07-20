@@ -2565,9 +2565,22 @@ class TabChart(QWidget):
             if self._settings.get("i1pro_chromiq_clip_style", False):
                 self._engine_clip_saved = True
                 self._settings.set("i1pro_chromiq_clip_style", False)
-        elif getattr(self, "_engine_clip_saved", False):
-            self._settings.set("i1pro_chromiq_clip_style", True)
-            self._engine_clip_saved = False
+            # Same for the legacy printtarg-only "Print info in left clip area":
+            # left over checked, it forces use_engine False and silently flips the
+            # frame back to printtarg while the engine toggle still reads ON (Knut).
+            chk = getattr(self, "_manual_left_clip_check", None)
+            if chk is not None and chk.isChecked():
+                self._engine_leftclip_saved = True
+                chk.setChecked(False)
+        else:
+            if getattr(self, "_engine_clip_saved", False):
+                self._settings.set("i1pro_chromiq_clip_style", True)
+                self._engine_clip_saved = False
+            if getattr(self, "_engine_leftclip_saved", False):
+                chk = getattr(self, "_manual_left_clip_check", None)
+                if chk is not None:
+                    chk.setChecked(True)
+                self._engine_leftclip_saved = False
         # Convert the shared layout settings across the toggle so the layout you
         # dialled in on one side isn't lost on the other (Knut #3). Only the
         # convertible fields move (instrument, paper, margins, patch scale, clip
@@ -2577,6 +2590,9 @@ class TabChart(QWidget):
             self._convert_printtarg_to_engine()
         elif was_on and not on:
             self._convert_engine_to_printtarg()
+        # Re-evaluate the left-clip row: it must hide while the engine is on and
+        # reappear (with the user's restored choice) when it goes off.
+        self._update_manual_lb_visibility()
         self._refresh_manual_command_preview()
 
     def _convert_printtarg_to_engine(self) -> None:
@@ -3946,12 +3962,19 @@ class TabChart(QWidget):
         # runs there, no opt-in needed). Otherwise visible only when -L is
         # OFF on a suitable i1Pro chart.
         if getattr(self, "_manual_left_clip_row", None) is not None:
+            from workflow.chart_creator import ENGINE_INSTRUMENTS
             paper = (self._manual_paper_pw.get_raw_value()
                      if self._manual_paper_pw is not None else "A4") or "A4"
             lb_on = (bool(self._manual_lb_pw.get_raw_value())
                      if self._manual_lb_pw is not None else False)
+            # Hidden while the ChromIQ layout engine is on: the engine has its own
+            # Clip-border content, and this legacy printtarg-only option would
+            # otherwise silently force the printtarg path and flip the frame (Knut).
+            engine_on = (bool(self._settings.get("use_chromiq_layout_engine", False))
+                         and instr in ENGINE_INSTRUMENTS)
             show_left_clip = (
                 not chromiq_clip
+                and not engine_on
                 and instr in {"i1", "p3"}
                 and not lb_on
                 and paper in ALLOWED_LEFT_CLIP_PAPERS
