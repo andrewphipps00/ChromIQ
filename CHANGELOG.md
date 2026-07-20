@@ -1,5 +1,19 @@
 # Changelog
 
+## v3.13.12-beta.26
+
+- **The load and reveal-folder buttons moved to the header.** On the Measure and
+  Build Profile tabs the “load chart / load measurement” and “reveal folder”
+  icons now sit in the top-right of the header, at the tab title's height — the
+  same place they already live on Print Chart. The Create Chart tab's four
+  header icons moved there too, so all four step tabs match.
+- **Fixed: “Print info in left clip area” fighting the layout engine (Knut).**
+  Turning on the ChromIQ layout engine while that older printtarg-only option was
+  still ticked could silently flip the panel back to the printtarg parameters,
+  even though the engine switch still read ON. The engine has its own Clip-border
+  content, so the “Print info in left clip area” row is now hidden while the
+  engine is on (your choice comes back if you switch the engine off).
+
 ## v3.13.12-beta.25
 
 - **Settings — new “Reports” tab.** The measurement-report options live here now:
