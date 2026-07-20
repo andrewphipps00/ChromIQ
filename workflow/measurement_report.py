@@ -361,8 +361,8 @@ def accuracy_verdict(de00: dict, avg_thr: float, max_thr: float) -> "tuple[list,
 
 
 def _run_label(r: dict) -> str:
-    """A run's ``"Profile" @ date`` label for warning lists."""
-    return f'"{r.get("chart") or "?"}" @ {str(r.get("created") or "")[:19]}'
+    """A run's ``Profile @ date`` label for warning lists (no quotes)."""
+    return f'{r.get("chart") or "?"} @ {str(r.get("created") or "")[:19]}'
 
 
 def report_scope(runs: "list[dict]") -> dict:

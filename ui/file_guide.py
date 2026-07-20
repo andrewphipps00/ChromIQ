@@ -129,7 +129,8 @@ def _rows():
             ("Refine_Strips_{name}.txt", "runs/runN/reports", tr("The list of strips to re-measure after a check; the guided refinement reads it back."), tr("Check & Refine")),
             ("Verify_Profile_1_{name}.txt", "runs/runN/reports", tr("A readable report from “Verify a profile” — verdict, scores, full output. Numbered so repeated checks keep a history."), tr("Verify a profile (Tools)")),
             ("Verify_Reference_1_{name}.txt", "runs/runN/reports", tr("A readable report from “Verify against reference” — result summary and full output."), tr("Verify against reference (Tools)")),
-            ("report_*.json", "runs/runN/reports", tr("Dated measurement reports (accuracy & drift), when “Save a measurement report” is on. Compared over time in the Measurement report window."), tr("Measure tab")),
+            ("report_*.json", "runs/runN/reports", tr("Dated measurement reports (accuracy & drift), saved automatically after each measurement (Settings → Reports). The Measurement Report tool reads these back — it builds its figures from the run's .ti3, needs the chart's .ti2 beside it for the ΔE, and reads the instrument name from the .ti3 — and plots how the printer drifts over time."), tr("Measure tab")),
+            ("measurement_report_*.pdf", "runs/runN/reports  ·  reports/ (project)", tr("A printable PDF of a measurement report, written when you press “Save report as PDF”. An all-runs report belongs to the whole printer, so it goes in a reports folder next to runs/; a single-run report goes in that run's own reports folder."), tr("Measurement Report tool")),
         ]),
         (tr("exports/ — files for other programs"), [
             ("{name}-colours.txt", "runs/runN/exports", tr("The chart's colours as a plain hex list (RGB charts). Can be pasted back into the New-chart dialog."), tr("Create Chart (best-effort)")),

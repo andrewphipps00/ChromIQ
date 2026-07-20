@@ -10,13 +10,14 @@ the same chart can be compared, revealing ink / printer / instrument drift.
 from __future__ import annotations
 
 import html
+from datetime import datetime
 from pathlib import Path
 
 from PyQt6.QtCore import QPointF, QRectF, Qt
 from PyQt6.QtGui import QColor, QFont, QPainter, QPen
 from PyQt6.QtWidgets import (
-    QCheckBox, QDialog, QFileDialog, QFrame, QHBoxLayout, QLabel, QPushButton,
-    QTabWidget, QTextBrowser, QVBoxLayout, QWidget,
+    QCheckBox, QDialog, QFileDialog, QFrame, QHBoxLayout, QLabel, QListWidget,
+    QPushButton, QTabWidget, QTextBrowser, QVBoxLayout, QWidget,
 )
 
 from core.i18n import tr
@@ -125,10 +126,11 @@ class _TrendChart(QWidget):
         self._y_max: "float | None" = None
         self._dec = 1
         self._auto = False
+        self._thresholds: "tuple[float, float] | None" = None
         self.setMinimumHeight(210)
 
     def set_data(self, series, metrics, dark=True, y_max=None, dec=1,
-                 auto=False) -> None:
+                 auto=False, thresholds=None) -> None:
         def has_any(pt) -> bool:
             return any(acc(pt) is not None for _, _, acc in metrics)
         self._series = [p for p in (series or []) if has_any(p)]
@@ -140,6 +142,9 @@ class _TrendChart(QWidget):
         # anchoring at 0, so a small paper-white/black drift is actually visible
         # (Knut). ΔE charts keep their 0-anchored axis.
         self._auto = auto
+        # (avg, max) Pass thresholds drawn as dotted guide lines (accuracy chart),
+        # or None (Knut).
+        self._thresholds = thresholds
         # NB: visibility is owned by the container (the tab widget), NOT the
         # chart — a per-widget setVisible here fought the tab stack and made all
         # three pages paint on top of each other before layout settled.
@@ -148,10 +153,20 @@ class _TrendChart(QWidget):
     def has_trend(self) -> bool:
         return len(self._series) >= 2
 
+    def _draw_legend(self, p, fg, L, w, T) -> None:
+        fm = p.fontMetrics()
+        lx, ly = L + 4, T - 12
+        for lbl, col, _acc in self._metrics:
+            adv = 26 + fm.horizontalAdvance(lbl)
+            if lx + adv > L + w:
+                lx = L + 4; ly += 13
+            p.setBrush(col); p.setPen(Qt.PenStyle.NoPen)
+            p.drawEllipse(QPointF(lx + 4, ly), 3.0, 3.0)
+            p.setPen(QPen(fg, 1.0))
+            p.drawText(QPointF(lx + 12, ly + 4), lbl)
+            lx += adv
+
     def paintEvent(self, _ev) -> None:  # noqa: N802
-        pts = self._series
-        if len(pts) < 2:
-            return
         fg = QColor(210, 210, 210) if self._dark else QColor(60, 60, 60)
         grid = QColor(255, 255, 255, 28) if self._dark else QColor(0, 0, 0, 22)
         p = QPainter(self)
@@ -162,6 +177,28 @@ class _TrendChart(QWidget):
         L, R, T, B = 40.0, 12.0, 24.0, 26.0
         w = max(1.0, self.width() - L - R)
         h = max(1.0, self.height() - T - B)
+        pts = self._series
+        # Empty state: an empty plot (frame + gridlines) with the legend and a
+        # clear message that the trend needs at least two runs (Knut).
+        if len(pts) < 2:
+            self._draw_legend(p, fg, L, w, T)
+            p.setPen(QPen(grid, 1.0))
+            p.setBrush(Qt.BrushStyle.NoBrush)   # the legend left a coloured brush
+            p.drawRect(QRectF(L, T, w, h))
+            for frac in (0.25, 0.5, 0.75):
+                yy = T + h * frac
+                p.drawLine(QPointF(L, yy), QPointF(L + w, yy))
+            muted = QColor(150, 150, 150) if self._dark else QColor(120, 120, 120)
+            p.setPen(QPen(muted, 1.0))
+            p.drawText(
+                QRectF(L + 10, T, w - 20, h),
+                Qt.AlignmentFlag.AlignCenter | Qt.TextFlag.TextWordWrap,
+                tr("Chart rendering require minimum two measurement runs. Add "
+                   "more measurements, or if the currently loaded profile "
+                   "contains multiple runs, enable the checkbox “Show all "
+                   "measurement runs”."))
+            p.end()
+            return
         vals = [v for pt in pts for _, _, acc in self._metrics
                 if (v := acc(pt)) is not None]
         if self._auto and vals:
@@ -203,6 +240,20 @@ class _TrendChart(QWidget):
             for q in poly:
                 p.drawEllipse(q, 2.4, 2.4)
 
+        # Pass-threshold guide lines (accuracy chart only) — dotted, and only
+        # while they fall inside the visible y-range (Knut).
+        if self._thresholds:
+            tpen = QPen(QColor(150, 150, 150) if self._dark else QColor(120, 120, 120))
+            tpen.setStyle(Qt.PenStyle.DotLine); tpen.setWidthF(1.2)
+            for tv, tlab in zip(self._thresholds, (tr("Avg"), tr("Max"))):
+                if isinstance(tv, (int, float)) and vmin <= tv <= vmax:
+                    yy = T + h * (1.0 - (tv - vmin) / span)
+                    p.setPen(tpen)
+                    p.drawLine(QPointF(L, yy), QPointF(L + w, yy))
+                    p.setPen(QPen(fg, 1.0))
+                    p.drawText(QPointF(L + w - p.fontMetrics().horizontalAdvance(tlab)
+                                       - 2, yy - 2.0), tlab)
+
         # X axis: a tick under EVERY measurement point plus as many dated labels
         # (YYYY-MM-DD) as fit without overlapping — always the first and last —
         # so you can read at WHICH date each change happened, not just the range
@@ -241,16 +292,7 @@ class _TrendChart(QWidget):
                 occupied.append((left, right))
 
         # Legend (wraps across as many rows as needed for 8 corners).
-        lx, ly = L + 4, T - 12
-        for lbl, col, _acc in self._metrics:
-            adv = 26 + fm.horizontalAdvance(lbl)
-            if lx + adv > L + w:
-                lx = L + 4; ly += 13
-            p.setBrush(col); p.setPen(Qt.PenStyle.NoPen)
-            p.drawEllipse(QPointF(lx + 4, ly), 3.0, 3.0)
-            p.setPen(QPen(fg, 1.0))
-            p.drawText(QPointF(lx + 12, ly + 4), lbl)
-            lx += adv
+        self._draw_legend(p, fg, L, w, T)
         p.end()
 
 
@@ -263,6 +305,10 @@ class MeasurementReportDialog(QDialog):
         self._trend_series: list = []
         self._history: list = []
         self._project_dirs: set = set()
+        # Each source is one profile's measurements: {"name", "dir", "runs"}.
+        # The list-field mirrors this; _history is their runs, oldest-first.
+        self._sources: "list[dict]" = []
+        self._created = datetime.now().isoformat(timespec="seconds")
         self.setWindowTitle(tr("Measurement Report"))
         self.setMinimumSize(760, 640)
         self.setWindowFlags(
@@ -287,6 +333,16 @@ class MeasurementReportDialog(QDialog):
             "results start slipping, that's your sign the printer has drifted far "
             "enough to re-profile. A tiny verification chart is enough — you're "
             "watching the trend, not building a profile.\n\n"
+            "Building the report\n"
+            "The report covers a list of profiles' measurements, shown in the "
+            "list box. Use “Add Profile's Measurements…” to add a profile (pick "
+            "any of its .ti3 files and ChromIQ gathers all its runs), and "
+            "“Remove Profile's Measurements…” / “Clear List” to take profiles out. "
+            "“Show all measurement runs” switches between the single loaded "
+            "measurement and every run of every listed profile. The trend charts "
+            "need at least two runs — with a single run they show an empty chart "
+            "and say so. Only combine profiles from the SAME printer (see "
+            "below).\n\n"
             "The sections\n"
             "  • Report Scope — which profiles and instruments are in the report, "
             "the run count and date range. IMPORTANT: the report cannot tell which "
@@ -306,7 +362,8 @@ class MeasurementReportDialog(QDialog):
             "clearly wrong.\n"
             "  • Trend over time — the same metrics plotted across every saved "
             "measurement, so a slow rise or a sudden jump stands out at a glance.\n"
-            "  • Side-by-side comparison — every metric for every run in one table.\n"
+            "  • Overview of Measurement Metrics — every metric for every run in "
+            "one table.\n"
             "  • Detailed data per run (optional) — the full breakdown for each "
             "run: the accuracy table, paper white & black, the cube corners and "
             "the sixteen worst patches.\n\n"
@@ -357,22 +414,58 @@ class MeasurementReportDialog(QDialog):
         intro.setWordWrap(True)
         v.addWidget(intro)
 
-        # Two rows so the (now five) controls never clip: sourcing on top,
-        # output below (Knut — beta.21 buttons were cut on both sides).
-        btn_row = QHBoxLayout()
-        self._open_btn = QPushButton(tr("Open another measurement (.ti3)…"), self)
-        self._open_btn.clicked.connect(self._on_open)
-        btn_row.addWidget(self._open_btn)
-        self._add_btn = QPushButton(tr("Add another project's runs…"), self)
-        self._add_btn.setToolTip(tr(
-            "Fold another profile folder's saved measurements into the trend and "
-            "PDF — for the SAME printer kept in a different project. Pick any "
-            ".ti3 from that project."))
+        # Sourcing: add / remove / clear the profiles whose measurements the
+        # report covers. Each list entry is one profile's runs (Knut).
+        add_row = QHBoxLayout()
+        self._add_btn = QPushButton(tr("Add Profile's Measurements…"), self)
         self._add_btn.clicked.connect(self._on_add_project)
-        self._add_btn.setEnabled(False)
-        btn_row.addWidget(self._add_btn)
-        btn_row.addStretch(1)
-        v.addLayout(btn_row)
+        add_row.addWidget(self._add_btn)
+        self._remove_btn = QPushButton(tr("Remove Profile's Measurements…"), self)
+        self._remove_btn.clicked.connect(self._on_remove_profile)
+        self._remove_btn.setEnabled(False)
+        add_row.addWidget(self._remove_btn)
+        self._clear_btn = QPushButton(tr("Clear List"), self)
+        self._clear_btn.clicked.connect(self._on_clear_list)
+        self._clear_btn.setEnabled(False)
+        add_row.addWidget(self._clear_btn)
+        add_row.addWidget(TooltipButton(
+            tr("Adding profiles' measurements"),
+            tr("Build the report from one or more profiles' measurements.\n\n"
+               "Add Profile's Measurements… — pick any measurement file (.ti3) "
+               "from a profile. ChromIQ gathers EVERY saved measurement of that "
+               "profile (all its runs) and adds the profile to the list below. "
+               "You can add as many profiles as you like.\n\n"
+               "Where the runs come from: a ChromIQ profile lives in its own "
+               "folder with a runs/ sub-folder (run1, run2, …), and each run "
+               "keeps its saved reports in a reports/ folder. Point at any run's "
+               ".ti3 and ChromIQ finds the whole profile's history automatically. "
+               "The instrument shown in the report is read from each measurement "
+               "file itself, and the colour figures need the chart's design file "
+               "(.ti2) next to the .ti3 — without it you still get paper white "
+               "and black, but no ΔE.\n\n"
+               "Using i1Profiler measurements: convert each measurement to a .ti3 "
+               "(Tools → “Convert i1Profiler → TI3”), keep its .ti2 beside it, and "
+               "put the runs in a runs/run1, runs/run2, … layout so they're read "
+               "as one profile; otherwise add each .ti3 on its own.\n\n"
+               "Remove Profile's Measurements… — select a profile in the list and "
+               "remove it (its runs leave the report). Clear List empties the "
+               "whole report.\n\n"
+               "Important: the report cannot tell which printer a measurement "
+               "came from — only add profiles from the SAME printer. A clear "
+               "Printer Profile Name (set on the Create Chart tab) makes them easy "
+               "to recognise; the report also warns you if the runs use different "
+               "instruments or a chart is missing cube corners."),
+            self, color=SPEC_GREEN))
+        add_row.addStretch(1)
+        v.addLayout(add_row)
+
+        self._profile_list = QListWidget(self)
+        self._profile_list.setMaximumHeight(96)
+        self._profile_list.setToolTip(tr(
+            "The profiles whose measurements this report covers. Select one and "
+            "use “Remove Profile's Measurements…” to drop it."))
+        self._profile_list.itemSelectionChanged.connect(self._update_source_buttons)
+        v.addWidget(self._profile_list)
 
         out_row = QHBoxLayout()
         self._pdf_btn = QPushButton(tr("Save report as PDF…"), self)
@@ -384,12 +477,19 @@ class MeasurementReportDialog(QDialog):
         self._reveal_btn.setEnabled(False)
         out_row.addWidget(self._reveal_btn)
         out_row.addWidget(TooltipButton(
-            tr("Reveal folder"),
-            tr("Opens the profile's folder in your file manager, so you can "
-               "browse to the reports folder and open any PDF you saved. When "
-               "“Show all measurement runs” is on, reports are written to a "
-               "reports folder next to the profile's runs; when it is off, they "
-               "go in the loaded run's own reports folder."),
+            tr("Saving and finding the report"),
+            tr("Save report as PDF… — writes the whole report (this window's "
+               "contents, laid out for print with the ChromIQ heading and page "
+               "numbers) to a PDF and opens it. The charts are included only when "
+               "the report has two or more runs.\n\n"
+               "Where it is saved: when “Show all measurement runs” is on, the PDF "
+               "belongs to the whole printer and goes in a reports folder next to "
+               "the profile's runs; when it is off, it goes in the loaded run's "
+               "own reports folder. You choose the exact place and name in the "
+               "save dialog.\n\n"
+               "Reveal folder — opens that profile folder in your file manager so "
+               "you can browse to the reports folder and open any PDF you saved "
+               "earlier."),
             self, color=SPEC_GREEN))
         out_row.addStretch(1)
         v.addLayout(out_row)
@@ -402,7 +502,7 @@ class MeasurementReportDialog(QDialog):
             "When on, the report covers every saved measurement of this printer "
             "(Report Scope, Report Results and the side-by-side comparison span "
             "them all). When off, only the loaded measurement is shown."))
-        self._all_runs_check.toggled.connect(lambda _=None: self._render())
+        self._all_runs_check.toggled.connect(lambda _=None: self._refresh())
         opt_row.addWidget(self._all_runs_check)
         self._detail_check = QCheckBox(tr("Show detailed data for each run"), self)
         self._detail_check.setChecked(False)
@@ -429,7 +529,7 @@ class MeasurementReportDialog(QDialog):
         self._avg_thr_spin.setDecimals(1); self._avg_thr_spin.setRange(0.1, 100.0)
         self._avg_thr_spin.setSingleStep(0.5); self._avg_thr_spin.setSuffix(" ΔE")
         self._avg_thr_spin.setValue(avg0)
-        self._avg_thr_spin.valueChanged.connect(lambda _=None: self._render())
+        self._avg_thr_spin.valueChanged.connect(lambda _=None: self._refresh())
         thr_row.addWidget(self._avg_thr_spin)
         thr_row.addSpacing(14)
         thr_row.addWidget(QLabel(tr("Maximum:"), self))
@@ -437,7 +537,7 @@ class MeasurementReportDialog(QDialog):
         self._max_thr_spin.setDecimals(1); self._max_thr_spin.setRange(0.1, 100.0)
         self._max_thr_spin.setSingleStep(0.5); self._max_thr_spin.setSuffix(" ΔE")
         self._max_thr_spin.setValue(max0)
-        self._max_thr_spin.valueChanged.connect(lambda _=None: self._render())
+        self._max_thr_spin.valueChanged.connect(lambda _=None: self._refresh())
         thr_row.addWidget(self._max_thr_spin)
         thr_row.addWidget(TooltipButton(
             tr("Pass thresholds"),
@@ -504,94 +604,119 @@ class MeasurementReportDialog(QDialog):
         if initial_ti3 is not None and Path(initial_ti3).exists():
             self._load(Path(initial_ti3))
 
-    # ------------------------------------------------------------------
-    def _on_open(self) -> None:
-        path = open_file_dialog(
-            self, tr("Open a measurement"), tr("Measurement files (*.ti3)"),
-            extra_path=self._settings.get("custom_output_path", ""))
-        if not path:
-            return
-        self._load(Path(path))
-
-    def _load(self, path: Path) -> None:
-        from workflow.measurement_report import (
-            build_report, list_project_reports,
-        )
+    # ---- sources (one per profile) ----------------------------------------
+    def _gather_runs(self, ti3: Path) -> "tuple[str, list]":
+        """``(profile name, runs oldest-first)`` for the profile that owns *ti3*:
+        every saved report across the profile's runs, or the freshly built one
+        when nothing is saved yet (a stand-alone / i1Profiler .ti3)."""
         import json
+        from workflow.measurement_report import build_report, list_project_reports
+        runs: list[dict] = []
+        for p in list_project_reports(ti3.parent):
+            try:
+                runs.append(json.loads(p.read_text()))
+            except Exception:  # noqa: BLE001
+                continue
+        if not runs:
+            runs = [build_report(ti3)]
+        runs.sort(key=lambda r: str(r.get("created") or ""))
+        name = runs[-1].get("chart") or ti3.stem
+        return name, runs
+
+    def _add_source(self, ti3: Path) -> None:
+        """Add one profile's measurements (a list entry). No-op if that folder is
+        already in the report."""
+        run_dir = ti3.parent
+        if any(s["dir"] == run_dir for s in self._sources):
+            return
         try:
-            self._report = build_report(path)
+            name, runs = self._gather_runs(ti3)
         except Exception as exc:  # noqa: BLE001
             self._view.setHtml(self._error_html(str(exc)))
             return
-        self._ti3 = Path(path)
-        # The printer's full history: every saved report across all runs of this
-        # project, oldest first (#40) — the runs the report and trend cover.
-        history: list[dict] = []
-        for p in list_project_reports(self._ti3.parent):
-            try:
-                history.append(json.loads(p.read_text()))
-            except Exception:  # noqa: BLE001
-                continue
-        self._history = history                 # every saved run, for the report
-        self._project_dirs = {self._ti3.parent}  # folders folded into the trend
+        if not runs:
+            return
+        self._sources.append({"name": name, "dir": run_dir, "runs": runs})
+        if self._ti3 is None:
+            self._ti3 = ti3
+        self._report = self._sources[0]["runs"][-1]     # single-run / PDF anchor
+        self._rebuild_from_sources()
 
+    def _rebuild_from_sources(self) -> None:
+        """Recompute the history, the profile list and button states, then repaint
+        the trend + report."""
+        self._history = sorted(
+            (r for s in self._sources for r in s["runs"]),
+            key=lambda r: str(r.get("created") or ""))
+        self._project_dirs = {s["dir"] for s in self._sources}
+        self._profile_list.clear()
+        for s in self._sources:
+            n = len(s["runs"])
+            self._profile_list.addItem(
+                f'{s["name"]}  ·  {n} '
+                + (tr("run") if n == 1 else tr("runs")))
+        has = bool(self._sources)
+        self._pdf_btn.setEnabled(has)
+        self._reveal_btn.setEnabled(has)
+        self._clear_btn.setEnabled(has)
+        self._update_source_buttons()
+        self._refresh()
+
+    def _update_source_buttons(self) -> None:
+        self._remove_btn.setEnabled(bool(self._profile_list.selectedItems()))
+
+    def _load(self, path: Path) -> None:
+        """Open the report on a measurement — the profile that owns it becomes the
+        first list entry."""
+        self._add_source(Path(path))
+
+    def _on_add_project(self) -> None:
+        path = open_file_dialog(
+            self, tr("Add a profile's measurements (pick any of its .ti3 files)"),
+            tr("Measurement files (*.ti3)"),
+            extra_path=self._settings.get("custom_output_path", ""))
+        if path:
+            self._add_source(Path(path))
+
+    def _on_remove_profile(self) -> None:
+        rows = sorted((self._profile_list.row(i)
+                       for i in self._profile_list.selectedItems()), reverse=True)
+        for r in rows:
+            if 0 <= r < len(self._sources):
+                del self._sources[r]
+        if self._sources:
+            first = self._sources[0]
+            self._report = first["runs"][-1]
+            self._ti3 = first["dir"] / f'{first["name"]}.ti3'
+        else:
+            self._report, self._ti3 = None, None
+        self._rebuild_from_sources()
+
+    def _on_clear_list(self) -> None:
+        self._sources = []
+        self._report, self._ti3 = None, None
+        self._rebuild_from_sources()
+
+    def _refresh(self) -> None:
+        """Repaint both the trend charts and the report body (they share the same
+        run set, so both react to Show-all / thresholds / the profile list)."""
         self._refresh_trend()
         self._render()
-        self._pdf_btn.setEnabled(True)
-        self._add_btn.setEnabled(True)
-        self._reveal_btn.setEnabled(True)
 
     def _render(self) -> None:
-        """(Re)build the on-screen report — the SAME body sequence as the PDF,
-        minus the trend charts (they're the tabs above). Called on load and
-        whenever a control that changes the report changes (Knut)."""
-        if not self._report:
+        if not self._sources:
             self._view.setHtml(self._empty_html())
             return
         self._view.setHtml(
             self._report_body_html(self._runs_for_report(), for_pdf=False))
 
     def _refresh_trend(self) -> None:
-        """Recompute the trend series from the current history (which may span
-        several project folders once the user has added some) and repaint."""
+        """Repaint the trend charts from the report's current run set."""
         from ui.theme import resolve_mode
         from workflow.measurement_report import report_trend
         dark = resolve_mode(self._settings.get("appearance", "auto")) != "light"
-        # Oldest-first by the report's own date, across whatever folders are in.
-        self._history.sort(key=lambda r: str(r.get("created") or ""))
-        self._trend_series = report_trend(self._history)
+        self._trend_series = report_trend(self._runs_for_report())
         self._update_trends(self._trend_series, dark)
-
-    def _on_add_project(self) -> None:
-        """Manual multi-printer: fold another profile folder's saved reports into
-        the trend + PDF (for the same printer kept in a different project)."""
-        import json
-        from workflow.measurement_report import list_project_reports
-        path = open_file_dialog(
-            self, tr("Add a project (pick any of its .ti3 files)"),
-            tr("Measurement files (*.ti3)"),
-            extra_path=self._settings.get("custom_output_path", ""))
-        if not path:
-            return
-        run_dir = Path(path).parent
-        if run_dir in self._project_dirs:
-            return                                # already included
-        self._project_dirs.add(run_dir)
-        seen = {(r.get("chart"), r.get("created")) for r in self._history}
-        added = 0
-        for p in list_project_reports(run_dir):
-            try:
-                r = json.loads(p.read_text())
-            except Exception:  # noqa: BLE001
-                continue
-            if (r.get("chart"), r.get("created")) not in seen:
-                self._history.append(r)
-                seen.add((r.get("chart"), r.get("created")))
-                added += 1
-        self._refresh_trend()
-        self._render()
-        self._add_btn.setText(tr("Added — {n} projects in trend").format(
-            n=len(self._project_dirs)))
 
     def _trend_configs(self) -> list:
         """The four grouped charts as ``(chart, title, metrics, y_max, dec, auto)``
@@ -707,6 +832,37 @@ class MeasurementReportDialog(QDialog):
         body_h = page_h - header_h - footer_h
         doc.setPageSize(QSizeF(page_w, body_h))
 
+        # Keep whole tables on one page (Knut #PDF4): Qt ignores CSS
+        # page-break-inside, but it honours a frame's page-break policy, so nudge
+        # each table that straddles a page boundary onto the next page (topmost
+        # first) and re-lay-out until none split. Tables taller than a page can't
+        # be helped and are left to flow.
+        from PyQt6.QtGui import QTextFormat, QTextTable
+
+        def _straddling_tables():
+            lay = doc.documentLayout()
+            found = []
+            stack = [doc.rootFrame()]
+            while stack:
+                for ch in stack.pop().childFrames():
+                    stack.append(ch)
+                    if isinstance(ch, QTextTable):
+                        r = lay.frameBoundingRect(ch)
+                        if (r.height() < body_h - 1
+                                and int(r.top() // body_h)
+                                != int((r.bottom() - 1) // body_h)):
+                            found.append((r.top(), ch))
+            found.sort(key=lambda t: t[0])
+            return [t for _, t in found]
+
+        for _ in range(400):
+            straddlers = _straddling_tables()
+            if not straddlers:
+                break
+            fmt = straddlers[0].frameFormat()
+            fmt.setPageBreakPolicy(QTextFormat.PageBreakFlag.PageBreak_AlwaysBefore)
+            straddlers[0].setFrameFormat(fmt)
+
         units = self._scope_header_units(runs)   # profile names + measurements/date
         head_font = QFont(); head_font.setPixelSize(8)
         foot_font = QFont(); foot_font.setPixelSize(10)
@@ -779,18 +935,20 @@ class MeasurementReportDialog(QDialog):
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))
 
     def _scope_header_units(self, runs: list) -> list:
-        """The per-page header units (Knut): each profile name in quotes, then the
-        total measurement count + date range as one unit — wrapped by whole units
-        in the painter so a long list flows onto a second header line."""
+        """The per-page header units (Knut): each profile name (no quotes), then
+        the run count + date range as one unit — wrapped by whole units in the
+        painter. Profiles sharing a name collapse to a single entry (#PDF6)."""
         from workflow.measurement_report import report_scope
         sc = report_scope(runs)
-        profs = sc["profiles"]
-        units = [f'“{p["name"]}”' + ("," if i < len(profs) - 1 else "")
-                 for i, p in enumerate(profs)]
+        names = list(dict.fromkeys(p["name"] for p in sc["profiles"]))  # de-dup, ordered
+        units = [n + ("," if i < len(names) - 1 else "")
+                 for i, n in enumerate(names)]
         d0, d1 = sc["date_range"]
-        units.append("  " + tr("{n} measurements").format(n=sc["total"])
-                     + f" ({d0} – {d1})")
-        # Add a trailing space to each name unit so they don't run together.
+        n = sc["total"]
+        units.append("  " + tr("{n} measurement run").format(n=n) if n == 1
+                     else "  " + tr("{n} measurement runs").format(n=n))
+        units[-1] += f" ({d0} – {d1})"
+        # Trailing space on the name units so they don't run together.
         return [(u + " ") if u.endswith(",") else u for u in units]
 
     # ---- report composition (shared by the window and the PDF) --------------
@@ -819,17 +977,23 @@ class MeasurementReportDialog(QDialog):
         a rule under the header row and a light-grey background on every other
         data row (Knut)."""
         thb = "border-bottom:1.5px solid #bbb;white-space:nowrap"
+        # Date headers inherit the table cellpadding (4 px) like the number cells
+        # below them, so they line up on the right; the Metric header keeps its
+        # own wide right pad to match the metric column (Knut #PDF3).
         th = ("<tr><th align='left' style='" + thb + ";padding:2px 14px 3px 0'>"
               + html.escape(tr("Metric")) + "</th>"
-              + "".join("<th align='right' style='" + thb + ";padding:2px 8px 3px'>"
+              + "".join("<th align='right' style='" + thb + "'>"
                         + html.escape(d) + "</th>" for d in dates) + "</tr>")
         body = [th]
         for i, (label, cells) in enumerate(data_rows):
             bg = f" style='background:{self._ZEBRA_BG}'" if i % 2 == 1 else ""
             body.append(f"<tr{bg}><td style='white-space:nowrap;padding-right:14px'>"
                         + html.escape(label) + "</td>" + "".join(cells) + "</tr>")
+        # page-break-inside:avoid keeps a whole chunk-table together — if it won't
+        # fit, it moves to the next page rather than splitting rows (Knut #PDF4).
         return ("<table cellpadding='4' cellspacing='0' style='border-collapse:"
-                "collapse;font-size:11px;margin-bottom:10px'>"
+                "collapse;font-size:11px;margin-bottom:10px;"
+                "page-break-inside:avoid'>"
                 + "".join(body) + "</table>")
 
     def _chunked_metric_tables(self, runs: list, row_getters: list) -> str:
@@ -850,9 +1014,10 @@ class MeasurementReportDialog(QDialog):
         from workflow.measurement_report import report_scope
         sc = report_scope(runs)
         items = "".join(
-            "<li>“" + html.escape(p["name"]) + "”, "
+            "<li>" + html.escape(p["name"]) + ", "
             + html.escape(tr("Instrument: {inst}").format(inst=p["instrument"]))
-            + f" <span style='color:#888'>· {p['n']} " + html.escape(tr("runs"))
+            + f" <span style='color:#888'>· {p['n']} "
+            + html.escape(tr("run") if p["n"] == 1 else tr("runs"))
             + "</span></li>"
             for p in sc["profiles"])
         d0, d1 = sc["date_range"]
@@ -903,14 +1068,15 @@ class MeasurementReportDialog(QDialog):
                 + "".join(blocks) + "</div>")
 
     def _how_to_read_html(self) -> str:
-        """The plain-language guide, boxed like before (Knut keeps it up front)."""
-        guide = (
-            _h2(tr("How to read this report"))
-            + "<p>" + html.escape(tr(
+        """The plain-language guide. The heading sits OUTSIDE its background frame,
+        with a blank line above it like every other section heading (Knut)."""
+        body = (
+            "<p>" + html.escape(tr(
                 "This report compares what your instrument measured against the "
-                "colours the chart was designed to have. Every number is a colour "
-                "difference (ΔE00): 0 is a perfect match, 1–2 is barely visible, "
-                "and 10+ is clearly wrong.")) + "</p>"
+                "chart's design colours (the reference values the chart was built "
+                "from). Every number is a colour difference (ΔE00): 0 is a perfect "
+                "match, 1–2 is barely visible, and 10 or more is clearly "
+                "different.")) + "</p>"
             "<ul>"
             "<li>" + html.escape(tr(
                 "Colour accuracy — the ΔE00 across the patches, split so you can "
@@ -926,15 +1092,31 @@ class MeasurementReportDialog(QDialog):
                 "the instrument.")) + "</li>"
             "</ul>"
             "<p>" + html.escape(tr(
-                "On a printer a single ΔE against the design isn't meaningful on "
-                "its own — a printer doesn't reproduce sRGB. But the design "
-                "reference never changes, so comparing dated reports of the same "
-                "chart is a clean drift signal. Save a report after each "
-                "measurement to build that history. Screen and print colours here "
-                "are approximate; the numbers come from your measurement file and "
-                "are exact.")) + "</p>")
-        return ("<table width='100%' cellpadding='12' cellspacing='0'>"
-                "<tr><td style='background:#f4f7f6'>" + guide + "</td></tr></table>")
+                "What the numbers mean depends on how the chart was printed:")) + "</p>"
+            "<ul>"
+            "<li>" + html.escape(tr(
+                "A profiling chart is printed WITHOUT colour management (the raw "
+                "print you measure to build a profile). It is not expected to match "
+                "the design closely, so the ΔE can look large — that's normal. Here "
+                "it is the CHANGE between dated reports that matters, not a single "
+                "value.")) + "</li>"
+            "<li>" + html.escape(tr(
+                "A verification chart is printed THROUGH your finished profile "
+                "(colour management on). It SHOULD match the design closely, so low "
+                "ΔE and passes mean the profile is still accurate; rising numbers "
+                "over time tell you when it's worth re-profiling.")) + "</li>"
+            "</ul>"
+            "<p>" + html.escape(tr(
+                "Because the design reference never changes, comparing dated "
+                "reports of the same chart on the same printer is a clean, reliable "
+                "signal of drift — ageing inks, a wandering printer, or an "
+                "instrument going off. Save a report after each measurement to "
+                "build that history. Screen and print colours here are "
+                "approximate; the numbers come from your measurement file and are "
+                "exact.")) + "</p>")
+        return (_h2(tr("How to read this report"))
+                + "<table width='100%' cellpadding='12' cellspacing='0'>"
+                "<tr><td style='background:#f4f7f6'>" + body + "</td></tr></table>")
 
     def _report_results_html(self, runs: list) -> str:
         """Report Results: a Pass/Fail grid, rows = the five threshold metrics,
@@ -957,10 +1139,22 @@ class MeasurementReportDialog(QDialog):
 
         row_getters = [(_METRIC_LABELS[k](), (lambda r, k=k: pf(r, k)))
                        for k in _ACCURACY_ROW_KEYS]
+        detail_on = (getattr(self, "_detail_check", None) is not None
+                     and self._detail_check.isChecked())
+        if detail_on:
+            intro = tr("The following results are extracted from the detailed "
+                       "Colour accuracy data shown below for each measurement run.")
+        elif len(runs) <= 1:
+            intro = tr("The following results are extracted from detailed data for "
+                       "the included measurements in this report. To show this data "
+                       "create this report again while enabling the checkbox “Show "
+                       "detailed data for each run”.")
+        else:
+            intro = tr("The following results are extracted from detailed data "
+                       "(Colour accuracy) for the included measurements in this "
+                       "report.")
         return (_h2(tr("Report Results"))
-                + "<div style='color:#555;margin-bottom:4px'>" + html.escape(tr(
-                    "The following results are extracted from section “Colour "
-                    "accuracy” for each measurement run included for this report."))
+                + "<div style='color:#555;margin-bottom:4px'>" + html.escape(intro)
                 + "</div>" + self._chunked_metric_tables(runs, row_getters))
 
     def _comparison_table_html(self, runs: list) -> str:
@@ -989,36 +1183,29 @@ class MeasurementReportDialog(QDialog):
         for code in ("W", "K", "R", "G", "B", "C", "M", "Y"):
             lbl = tr("{corner} ΔE00").format(corner=_CORNER_LABELS[code]())
             row_getters.append((lbl, num((lambda r, c=code: corner_de(r, c)), 2)))
-        return (_h2(tr("Side-by-side comparison"), page_break=True)
+        return (_h2(tr("Overview of Measurement Metrics"), page_break=True)
                 + self._chunked_metric_tables(runs, row_getters))
 
     def _report_body_html(self, runs: list, *, for_pdf: bool,
-                          charts_html: str = "") -> str:
+                          charts_html: str = "", created: "str | None" = None) -> str:
         """The full report body, shared by the window and the PDF in ONE sequence
-        (Knut): title/heading → Report Scope → How to read → Report Results →
-        trend charts (PDF) → Side-by-side (>1 run) → Detailed (opt-in)."""
+        (Knut): Created → Report Scope → How to read → Report Results → trend
+        charts (PDF) → Overview of Measurement Metrics (>1 run) → Detailed
+        (opt-in). The profile names / date range live in Report Scope now."""
         if not runs:
             return self._empty_html()
-        total = len(runs)
-        d0 = str(runs[0].get("created") or "")[:10]
-        d1 = str(runs[-1].get("created") or "")[:10]
-        span = ""
-        if total > 1:
-            span = (" &nbsp;·&nbsp; " + tr("{n} measurements").format(n=total)
-                    + f" ({html.escape(d0)} – {html.escape(d1)})")
-        # ── heading ──
+        # A plain "Created: …" line — at the top of the window body, and under
+        # the title + spectrum line in the PDF (Knut). The profile line that used
+        # to be here is dropped; Report Scope already lists it.
+        when = html.escape((created or self._created).replace("T", " "))
+        created_line = ("<div style='margin:2px 0 0'>"
+                        + html.escape(tr("Created:")) + " " + when + "</div>")
         if for_pdf:
             head = (f"<div style='font-size:22px;font-weight:bold;color:{_HEAD}'>"
                     + html.escape(tr("Measurement Report")) + "</div>"
-                    f"<div style='font-size:12px;color:#777;margin:2px 0 4px'>"
-                    + html.escape(runs[0].get("chart") or "") + span + "</div>"
-                    + _colour_line_html() + "<br>")
+                    + _colour_line_html() + created_line + "<br>")
         else:
-            head = (f"<h2 style='margin:0 0 2px'>"
-                    + html.escape(runs[0].get("chart") or "") + "</h2>"
-                    f"<div style='color:#888;font-size:12px'>"
-                    + tr("{n} measurements").format(n=total)
-                    + f" ({html.escape(d0)} – {html.escape(d1)})</div>")
+            head = created_line
         parts = [head, self._scope_html(runs), self._how_to_read_html(),
                  self._report_results_html(runs)]
         if for_pdf and charts_html:
@@ -1028,7 +1215,7 @@ class MeasurementReportDialog(QDialog):
                     "A rising average or shifting white/black/colour over time "
                     "points to ageing inks, printer drift, or instrument drift."))
                 + "</div>" + charts_html)
-        if total > 1:
+        if len(runs) > 1:
             parts.append(self._comparison_table_html(runs))
         if getattr(self, "_detail_check", None) is not None \
                 and self._detail_check.isChecked():
@@ -1040,13 +1227,18 @@ class MeasurementReportDialog(QDialog):
         return self._report_body_html(runs, for_pdf=True, charts_html=charts_html)
 
     def _update_trends(self, series: list, dark: bool) -> None:
-        """Feed the three grouped trend charts their own metric sets (#40, Knut)."""
+        """Feed the grouped trend charts their metric sets. The tabs stay visible
+        whenever a report is loaded — with a single run they show an empty chart
+        and an explanatory message (Knut). The accuracy chart also gets the Pass
+        thresholds as dotted guide lines."""
+        avg_thr, max_thr = self._thresholds()
         for chart, _title, metrics, y_max, dec, auto in self._trend_configs():
+            thr = (avg_thr, max_thr) if chart is self._trend_de else None
             chart.set_data(series, metrics, dark=dark, y_max=y_max, dec=dec,
-                           auto=auto)
-        has = self._trend_de.has_trend()
-        self._trend_label.setVisible(has)
-        self._trend_tabs.setVisible(has)
+                           auto=auto, thresholds=thr)
+        show = bool(self._sources)
+        self._trend_label.setVisible(show)
+        self._trend_tabs.setVisible(show)
 
     # ------------------------------------------------------------------
     def _empty_html(self) -> str:
