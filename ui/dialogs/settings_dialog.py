@@ -1211,7 +1211,11 @@ class SettingsDialog(QDialog):
         intro.setStyleSheet("color: #909090; font-size: 11px;")
         v.addWidget(intro)
 
-        # Auto-save (moved here from the Beta tab).
+        # Auto-save (moved here from the Beta tab), in its own section so it lines
+        # up with the defaults frame below (Knut).
+        save_grp = QGroupBox(tr("Automatic Saving"), self)
+        sg = QVBoxLayout(save_grp)
+        sg.setSpacing(8)
         self._save_report_check = QCheckBox(
             tr("Save a measurement report after each measurement"), self)
         _rep_row = QHBoxLayout()
@@ -1236,7 +1240,8 @@ class SettingsDialog(QDialog):
             "files. Turn it off if you don't want this history.\n\n"
             "Default: on"),
             self))
-        v.addLayout(_rep_row)
+        sg.addLayout(_rep_row)
+        v.addWidget(save_grp)
 
         # Default Pass thresholds the Measurement Report opens with (Knut).
         defaults_grp = QGroupBox(tr("Measurement Report Defaults"), self)
