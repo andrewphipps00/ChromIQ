@@ -1153,7 +1153,9 @@ class MeasurementReportDialog(QDialog):
             intro = tr("The following results are extracted from detailed data "
                        "(Colour accuracy) for the included measurements in this "
                        "report.")
-        return (_h2(tr("Report Results"))
+        # Always start Report Results on a fresh page — the how-to-read section
+        # can be long, so it reads cleaner on its own page (Knut).
+        return (_h2(tr("Report Results"), page_break=True)
                 + "<div style='color:#555;margin-bottom:4px'>" + html.escape(intro)
                 + "</div>" + self._chunked_metric_tables(runs, row_getters))
 
