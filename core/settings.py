@@ -167,6 +167,10 @@ DEFAULTS: dict[str, Any] = {
     # run's reports/ folder after every measurement, so reports of the same
     # chart accrue and can be compared over time (ink/printer/instrument drift).
     "save_measurement_report":   True,
+    # Measurement Report Pass thresholds (ΔE00) — the defaults the report opens
+    # with; the user can change them here and per-report in the window (Knut).
+    "report_pass_threshold_avg": 2.0,
+    "report_pass_threshold_max": 3.0,
     # Patch-reading error limit (#126, Knut): the ΔE at which a just-measured
     # patch gets the red warning outline in the engine's live split-patch
     # preview. Generous by default so only near-certain misreads are flagged.

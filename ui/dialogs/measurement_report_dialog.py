@@ -419,12 +419,16 @@ class MeasurementReportDialog(QDialog):
         # metrics, the maximum threshold the two maximum metrics (Knut).
         from ui.widgets import NoScrollDoubleSpinBox
         from workflow.measurement_report import DEFAULT_PASS_AVG, DEFAULT_PASS_MAX
+        # Open with the user's configured defaults (Settings → Reports), falling
+        # back to the built-in 2.0 / 3.0 (Knut).
+        avg0 = float(settings.get("report_pass_threshold_avg", DEFAULT_PASS_AVG))
+        max0 = float(settings.get("report_pass_threshold_max", DEFAULT_PASS_MAX))
         thr_row = QHBoxLayout()
         thr_row.addWidget(QLabel(tr("Pass threshold — Average:"), self))
         self._avg_thr_spin = NoScrollDoubleSpinBox(self)
         self._avg_thr_spin.setDecimals(1); self._avg_thr_spin.setRange(0.1, 100.0)
         self._avg_thr_spin.setSingleStep(0.5); self._avg_thr_spin.setSuffix(" ΔE")
-        self._avg_thr_spin.setValue(DEFAULT_PASS_AVG)
+        self._avg_thr_spin.setValue(avg0)
         self._avg_thr_spin.valueChanged.connect(lambda _=None: self._render())
         thr_row.addWidget(self._avg_thr_spin)
         thr_row.addSpacing(14)
@@ -432,7 +436,7 @@ class MeasurementReportDialog(QDialog):
         self._max_thr_spin = NoScrollDoubleSpinBox(self)
         self._max_thr_spin.setDecimals(1); self._max_thr_spin.setRange(0.1, 100.0)
         self._max_thr_spin.setSingleStep(0.5); self._max_thr_spin.setSuffix(" ΔE")
-        self._max_thr_spin.setValue(DEFAULT_PASS_MAX)
+        self._max_thr_spin.setValue(max0)
         self._max_thr_spin.valueChanged.connect(lambda _=None: self._render())
         thr_row.addWidget(self._max_thr_spin)
         thr_row.addWidget(TooltipButton(

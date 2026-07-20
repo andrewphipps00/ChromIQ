@@ -796,32 +796,7 @@ class SettingsDialog(QDialog):
             self))
         _beta.addLayout(_sn_row)
 
-        # Measurement report auto-save (#126, Knut).
-        self._save_report_check = QCheckBox(
-            tr("Save a measurement report after each measurement"), self)
-        _rep_row = QHBoxLayout()
-        _rep_row.addWidget(self._save_report_check)
-        _rep_row.addStretch()
-        _rep_row.addWidget(TooltipButton(
-            tr("Save a measurement report after each measurement"),
-            tr("When this is on, ChromIQ automatically writes a small dated "
-            "report next to each chart every time you finish measuring it "
-            "(in a “reports” folder beside the chart). Each report records how "
-            "close the measurement came to the chart's design colours — a "
-            "Pass/Fail check of the colour accuracy, the worst patches, the "
-            "cube corners, and the paper white and black.\n\n"
-            "Why keep it on? Because the reports then build up over time, and "
-            "the Measurement Report tool can plot how a chart's measurements "
-            "change from one to the next — a gradual rise, or a shift in white "
-            "or black, is a sign of ageing inks, a drifting printer, or a "
-            "drifting instrument. It's especially handy for regular "
-            "verification measurements: the report shows you when the results "
-            "have slipped far enough that re-profiling is worth it.\n\n"
-            "It costs nothing noticeable and never changes your measurement "
-            "files. Turn it off if you don't want this history.\n\n"
-            "Default: on"),
-            self))
-        _beta.addLayout(_rep_row)
+        # (The measurement-report options moved to their own Reports tab, Knut.)
         _beta.addStretch()
 
         self._native_print_check = QCheckBox(tr("Use default macOS printer dialog"), self)
@@ -1050,6 +1025,8 @@ class SettingsDialog(QDialog):
                           tr("Scanner Limits"))
         self._tabs.addTab(self._scroll_wrap(self._build_paths_tab()),
                           tr("Paths"))
+        self._tabs.addTab(self._scroll_wrap(self._build_reports_tab()),
+                          tr("Reports"))
         self._tabs.addTab(self._scroll_wrap(self._beta_page), tr("Beta"))
         # Run the (deferred) Chart Layout estimate the first time that tab is
         # actually opened — it's suspended during build to keep the window quick.
@@ -1216,6 +1193,86 @@ class SettingsDialog(QDialog):
         box.setDefaultButton(QMessageBox.StandardButton.Ok)
         if box.exec() != QMessageBox.StandardButton.Ok:
             self._profile_engine_check.setChecked(False)
+
+    def _build_reports_tab(self) -> QWidget:
+        """Measurement-report settings (Knut): the auto-save toggle, moved here
+        from Beta, and the default Pass thresholds the report opens with. A home
+        for any further report settings later."""
+        page = QWidget()
+        v = QVBoxLayout(page)
+        v.setSpacing(12)
+        v.setContentsMargins(12, 12, 12, 12)
+
+        intro = QLabel(tr(
+            "Settings for the Measurement Report — the tool that checks a "
+            "measured chart against its design colours and tracks how a printer "
+            "drifts over time."), self)
+        intro.setWordWrap(True)
+        intro.setStyleSheet("color: #909090; font-size: 11px;")
+        v.addWidget(intro)
+
+        # Auto-save (moved here from the Beta tab).
+        self._save_report_check = QCheckBox(
+            tr("Save a measurement report after each measurement"), self)
+        _rep_row = QHBoxLayout()
+        _rep_row.addWidget(self._save_report_check)
+        _rep_row.addStretch()
+        _rep_row.addWidget(TooltipButton(
+            tr("Save a measurement report after each measurement"),
+            tr("When this is on, ChromIQ automatically writes a small dated "
+            "report next to each chart every time you finish measuring it "
+            "(in a “reports” folder beside the chart). Each report records how "
+            "close the measurement came to the chart's design colours — a "
+            "Pass/Fail check of the colour accuracy, the worst patches, the "
+            "cube corners, and the paper white and black.\n\n"
+            "Why keep it on? Because the reports then build up over time, and "
+            "the Measurement Report tool can plot how a chart's measurements "
+            "change from one to the next — a gradual rise, or a shift in white "
+            "or black, is a sign of ageing inks, a drifting printer, or a "
+            "drifting instrument. It's especially handy for regular "
+            "verification measurements: the report shows you when the results "
+            "have slipped far enough that re-profiling is worth it.\n\n"
+            "It costs nothing noticeable and never changes your measurement "
+            "files. Turn it off if you don't want this history.\n\n"
+            "Default: on"),
+            self))
+        v.addLayout(_rep_row)
+
+        # Default Pass thresholds the Measurement Report opens with (Knut).
+        defaults_grp = QGroupBox(tr("Measurement Report Defaults"), self)
+        gl = QVBoxLayout(defaults_grp)
+        gl.setSpacing(8)
+        thr_row = QHBoxLayout()
+        thr_row.addWidget(QLabel(tr("Pass threshold — Average:"), self))
+        self._report_avg_thr_spin = NoScrollDoubleSpinBox(self)
+        self._report_avg_thr_spin.setDecimals(1)
+        self._report_avg_thr_spin.setRange(0.1, 100.0)
+        self._report_avg_thr_spin.setSingleStep(0.5)
+        self._report_avg_thr_spin.setSuffix(" ΔE")
+        thr_row.addWidget(self._report_avg_thr_spin)
+        thr_row.addSpacing(14)
+        thr_row.addWidget(QLabel(tr("Maximum:"), self))
+        self._report_max_thr_spin = NoScrollDoubleSpinBox(self)
+        self._report_max_thr_spin.setDecimals(1)
+        self._report_max_thr_spin.setRange(0.1, 100.0)
+        self._report_max_thr_spin.setSingleStep(0.5)
+        self._report_max_thr_spin.setSuffix(" ΔE")
+        thr_row.addWidget(self._report_max_thr_spin)
+        thr_row.addWidget(TooltipButton(
+            tr("Pass thresholds"),
+            tr("The colour-accuracy verdict. A metric passes when its measured "
+               "ΔE00 is at or below its threshold. The Average threshold is "
+               "compared against the three average metrics (all patches, the best "
+               "95%, and the worst 5%); the Maximum threshold against the two "
+               "maximum metrics (all patches, and the best 95%). Typical starting "
+               "points are 2.0 for the average and 3.0 for the maximum — tighten "
+               "them for critical work, loosen them for a quick health check."),
+            self))
+        thr_row.addStretch()
+        gl.addLayout(thr_row)
+        v.addWidget(defaults_grp)
+        v.addStretch()
+        return page
 
     def _build_paths_tab(self) -> QWidget:
         """Every folder ChromIQ reads or writes, in one place (Knut, #108):
@@ -1907,6 +1964,10 @@ class SettingsDialog(QDialog):
             str(s.get("chartread_engine", "argyll")) == "chromiq")
         self._save_report_check.setChecked(
             bool(s.get("save_measurement_report", True)))
+        self._report_avg_thr_spin.setValue(
+            float(s.get("report_pass_threshold_avg", 2.0)))
+        self._report_max_thr_spin.setValue(
+            float(s.get("report_pass_threshold_max", 3.0)))
         self._patch_warn_spin.setValue(
             float(s.get("patch_read_warn_de", 50.0)))
         self._fast_connect_check.setChecked(
@@ -2625,6 +2686,8 @@ class SettingsDialog(QDialog):
         s.set("chartread_engine",
               "chromiq" if self._chartread_engine_check.isChecked() else "argyll")
         s.set("save_measurement_report", self._save_report_check.isChecked())
+        s.set("report_pass_threshold_avg", float(self._report_avg_thr_spin.value()))
+        s.set("report_pass_threshold_max", float(self._report_max_thr_spin.value()))
         s.set("patch_read_warn_de", float(self._patch_warn_spin.value()))
         s.set("fast_instrument_connect", self._fast_connect_check.isChecked())
         s.set("misalign_safenet", self._safenet_check.isChecked())
