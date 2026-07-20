@@ -117,12 +117,15 @@ def read_instrumentation(txt_path: str | Path) -> "str | None":
     return None if val.lower() in _UNKNOWN_INSTRUMENTATION else val
 
 
-# txt2ti3 hard-codes this as the TARGET_INSTRUMENT for every file it writes
-# (profile/txt2ti3.c: `add_kword(…, "TARGET_INSTRUMENT", inst_name(instSpectrolino))`,
-# with a source comment noting it *could* read the file's INSTRUMENTATION but
-# doesn't). So a "Spectrolino" tag on a converted .ti3 is a placeholder, not the
-# real instrument — treat it as absent and replace it.
-_TXT2TI3_PLACEHOLDER_INSTRUMENT = "Spectrolino"
+# txt2ti3 hard-codes the Spectrolino as the TARGET_INSTRUMENT of every file it
+# writes (profile/txt2ti3.c: `add_kword(…, "TARGET_INSTRUMENT",
+# inst_name(instSpectrolino))`, with a source comment noting it *could* read the
+# file's INSTRUMENTATION but doesn't). Argyll's inst_name returns the LONG name
+# "GretagMacbeth Spectrolino" (not the bare "Spectrolino"), so match on the
+# substring — any "…Spectrolino…" tag on a converted .ti3 is that placeholder, not
+# the real instrument, and must be replaced.
+def _is_txt2ti3_placeholder_instrument(value: "str | None") -> bool:
+    return not value or "spectrolino" in value.lower()
 
 
 def stamp_instrument_from_source(ti3_path: str | Path, source_txt: str | Path,
@@ -144,7 +147,7 @@ def stamp_instrument_from_source(ti3_path: str | Path, source_txt: str | Path,
     m = re.search(r'^\s*TARGET_INSTRUMENT\s+"?(.*?)"?\s*$', text,
                   re.IGNORECASE | re.MULTILINE)
     existing = m.group(1).strip() if m else None
-    if existing and existing != _TXT2TI3_PLACEHOLDER_INSTRUMENT:
+    if existing and not _is_txt2ti3_placeholder_instrument(existing):
         return existing                       # a real instrument — leave it
     name = read_instrumentation(source_txt) or fallback
     if m:

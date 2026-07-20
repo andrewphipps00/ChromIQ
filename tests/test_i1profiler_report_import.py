@@ -93,20 +93,20 @@ def test_stamp_instrument_no_op_when_already_present(tmp_path: Path):
 
 
 def test_stamp_instrument_overrides_txt2ti3_placeholder(tmp_path: Path):
-    # txt2ti3 always hard-codes TARGET_INSTRUMENT "Spectrolino" — that's a
+    # txt2ti3 always hard-codes TARGET_INSTRUMENT "GretagMacbeth Spectrolino" — that's a
     # placeholder, not the real instrument, so it must be replaced with the one
     # named in the source file (Knut).
     src = _measurement_txt(tmp_path, "i1iSis")
     ti3 = tmp_path / "chart.ti3"
     ti3.write_text(_TI3_255.replace(
         "NUMBER_OF_FIELDS 7",
-        'KEYWORD "TARGET_INSTRUMENT"\nTARGET_INSTRUMENT "Spectrolino"\n\n'
+        'KEYWORD "TARGET_INSTRUMENT"\nTARGET_INSTRUMENT "GretagMacbeth Spectrolino"\n\n'
         "NUMBER_OF_FIELDS 7"))
     got = stamp_instrument_from_source(ti3, src)
     assert got == "i1iSis"
     text = ti3.read_text()
     assert 'TARGET_INSTRUMENT "i1iSis"' in text
-    assert "Spectrolino" not in text
+    assert "spectrolino" not in text.lower()
     assert build_report(ti3)["instrument"] == "i1iSis"
 
 
@@ -116,8 +116,8 @@ def test_stamp_instrument_placeholder_falls_back(tmp_path: Path):
     ti3 = tmp_path / "chart.ti3"
     ti3.write_text(_TI3_255.replace(
         "NUMBER_OF_FIELDS 7",
-        'KEYWORD "TARGET_INSTRUMENT"\nTARGET_INSTRUMENT "Spectrolino"\n\n'
+        'KEYWORD "TARGET_INSTRUMENT"\nTARGET_INSTRUMENT "GretagMacbeth Spectrolino"\n\n'
         "NUMBER_OF_FIELDS 7"))
     got = stamp_instrument_from_source(ti3, src)
     assert got == "i1Profiler (unspecified)"
-    assert "Spectrolino" not in ti3.read_text()
+    assert "spectrolino" not in ti3.read_text().lower()
