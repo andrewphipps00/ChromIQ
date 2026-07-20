@@ -1,5 +1,37 @@
 # Changelog
 
+## v3.13.12-beta.28
+
+- **Measurement Report — fixed: a project full of valid charts showed "no design
+  reference" and an empty trend (Knut).** Reports saved by an older ChromIQ used
+  an older metric format; the report window now rebuilds those from each run's own
+  measurement, so the colour-accuracy figures and the drift trend appear as they
+  should. The saved dates are kept, so the timeline is unchanged.
+- **Report trend — threshold labels tidied.** The Avg / Max labels on the Pass-
+  threshold guide lines now sit in the left margin, aligned with the y-axis
+  numbers and centred on their dotted line, and still follow the line as you
+  change the thresholds. The Pass-threshold help also notes the defaults come from
+  Settings → Reports.
+- **Report — clearer about the reference for imported measurements.** When a
+  measurement has no design file (.ti2) beside it, the report derives the
+  reference from the file's **device (design) values** — the fixed code values
+  sent to the printer, identical for every run — so it stays just as static across
+  runs as a .ti2 would. Wording corrected throughout to make that plain.
+- **Create Chart — "Use instrument margins" now works in "Prioritise patch size"
+  too (Knut).** Previously, with instrument margins on, that layout mode pushed
+  the patch area too far down and pinned the strip labels at the instrument
+  margin. The strip labels now sit at the page text-edge and the patch area starts
+  at the margin — matching "Prioritise chart area". The instrument ruler cap still
+  applies, so the strip stays scannable.
+- **Create Chart — clip-border "Example custom table".** The clip-border Text box
+  is now multi-line (with a scrollbar), and a new Content option loads a ready-made
+  record — the same table the old "Print info in left clip area" printed (chart
+  summary, print-driver reminder, and fill-in lines for date / printer / ink set /
+  profile name / paper / driver) — into the editable box for you to adjust. The
+  Insert menu gained a "New line" item.
+- **Print Chart — icon order.** The header icons are now load test chart, load
+  image, reveal folder.
+
 ## v3.13.12-beta.27
 
 - **Imported i1Profiler measurements now work in the Measurement Report on their
