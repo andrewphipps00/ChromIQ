@@ -1,5 +1,32 @@
 # Changelog
 
+## v3.13.12-beta.22
+
+- **Measurement report — a lot tidier and more useful.** The buttons no longer
+  clip their text, and "Save report as PDF" keeps its label instead of turning
+  into the saved filename. A new **Reveal folder** button opens the profile's
+  folder so you can browse to your saved reports. When "Include all measurement
+  runs" is on, the PDF is saved to a `reports` folder next to the profile's runs
+  (a report for the whole printer), otherwise to the loaded run's own `reports`
+  folder; it is named `measurement_report_…` and opens automatically after
+  saving.
+- **Report PDF — built for print.** The Paper-white and Darkest-black trend
+  charts now scale to the data (rounded to 0.1) instead of starting at 0, so a
+  small drift is actually visible, and all four charts fit on one page. Each
+  major section starts on a fresh page, every page has a centred "Page X of Y"
+  footer, a comparison table too wide for the page continues in stacked tables
+  below, and the worst patches (now 16) are shown as two columns side by side to
+  save space.
+- **Patch-flagging limit default is now 50 ΔE** (was 20). With the smarter
+  adaptive flagging, 20 still lit up legitimately-vivid patches on scanner/print
+  work; 50 is the value that gives a clean, useful red outline. If you had raised
+  the old default it moves to 50; a value you deliberately lowered is kept.
+- **Hexagonal SpectroScan charts** — "Show only measured patches" no longer wipes
+  the A–F column labels across the top.
+- **ColorMunki offset charts (scanner/camera profiling)** — the alignment grid
+  now includes the top-most and bottom-most spacer, so its total height matches
+  the printed chart on a chart with every second column shifted.
+
 ## v3.13.12-beta.21
 
 - **Measured-patch flagging is much smarter.** The live red outline compares a
