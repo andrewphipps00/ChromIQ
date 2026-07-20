@@ -24,6 +24,9 @@
   report reads it — handy for verification tracking.
 - Worst-patches and cube-corner tables now share the same column order
   (Patch · Expected · Measured · ΔE).
+- **Faster startup.** The app no longer re-polishes its whole widget tree a
+  second time at launch when the theme hasn't changed — about two seconds off a
+  cold start (measured 8.1 s → 6.0 s on Windows-arm64; every platform benefits).
 
 ## v3.13.12-beta.23
 
