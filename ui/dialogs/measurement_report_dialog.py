@@ -800,11 +800,13 @@ class MeasurementReportDialog(QDialog):
             # Render each grouped chart off-screen (the live tabs only lay out the
             # current one) and embed it as a resource. Kept compact so all four
             # trend charts fit on the one trend page (Knut).
+            avg_thr, max_thr = self._thresholds()
             for i, (_c, title, metrics, y_max, dec, auto) in enumerate(self._trend_configs()):
                 tmp = _TrendChart()
                 tmp.resize(640, 176)
+                thr = (avg_thr, max_thr) if _c is self._trend_de else None
                 tmp.set_data(self._trend_series, metrics, dark=False,
-                             y_max=y_max, dec=dec, auto=auto)
+                             y_max=y_max, dec=dec, auto=auto, thresholds=thr)
                 img = tmp.grab().toImage()
                 url = QUrl(f"chart://{i}")
                 doc.addResource(QTextDocument.ResourceType.ImageResource, url, img)
