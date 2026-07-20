@@ -1123,6 +1123,35 @@ class TabChart(QWidget):
         left_layout.setContentsMargins(16, 12, 16, 12)
         left_layout.setSpacing(8)
 
+        # Load-profile / load-layout / built-in-presets / reveal-folder icons in
+        # the header's upper-right (title height), matching the Measure, Build
+        # Profile and Print tabs (Basti). They used to sit next to the
+        # Guided / Manual switch.
+        from ui.widgets import RevealFolderButton
+        _hdr_trailing = QWidget(left)
+        _ht = QHBoxLayout(_hdr_trailing)
+        _ht.setContentsMargins(0, 0, 0, 0)
+        _ht.setSpacing(6)
+        self._load_profile_btn = self._make_load_profile_button(_hdr_trailing)
+        _ht.addWidget(self._load_profile_btn)
+        self._load_ti1_btn = PatchGridButton(SPEC_MAGENTA, _hdr_trailing)
+        self._load_ti1_btn.setToolTip(
+            tr("Load patch set.\n"
+               "Open an existing chart layout (its patch set) and lay it\n"
+               "out — targen is skipped. Accepts an Argyll .ti1, or an\n"
+               "i1Profiler RGB set (.pxf or CGATS .txt), which are\n"
+               "converted to .ti1 automatically."))
+        self._load_ti1_btn.clicked.connect(self._on_load_ti1)
+        _ht.addWidget(self._load_ti1_btn)
+        self._builtin_preset_btn = BuiltinPresetButton(_hdr_trailing)
+        self._builtin_preset_btn.clicked.connect(self._open_builtin_preset_overlay)
+        _ht.addWidget(self._builtin_preset_btn)
+        self._reveal_folder_btn = RevealFolderButton(SPEC_MAGENTA, _hdr_trailing)
+        self._reveal_folder_btn.setToolTip(tr(
+            "Open the folder holding the generated chart's files (the TIFF "
+            "pages, .ti1/.ti2 and sidecars) in your file manager."))
+        self._reveal_folder_btn.clicked.connect(self._reveal_chart_folder)
+        _ht.addWidget(self._reveal_folder_btn)
         left_layout.addWidget(TabHeader(
             tr("STEP 01 · GENERATE CHART"), tr("Create test chart"), "#ff4573", left,
             tooltip_title=tr("Step 1 — Make a test chart"),
@@ -1148,15 +1177,14 @@ class TabChart(QWidget):
                 "a new name instead). Your work is saved automatically; there's no "
                 "Save button to remember.\n\n"
                 "Coming back to a profile later?\n"
-                "Click the magenta folder button (just left of the star, top right) "
+                "Click the magenta folder button in the header (top right) "
                 "to reopen a profile you started before — its chart, measurements "
                 "and any finished profile are all exactly where you left them. It "
                 "asks for the profile's \"project.json\" file inside your ChromIQ "
                 "folder.\n\n"
                 "You have three ways to make a chart — from quickest to most "
                 "hands-on:\n\n"
-                "★  Built-in presets — the star button at the right end of the "
-                "Guided / Manual switch.\n"
+                "★  Built-in presets — the star button in the header, top right.\n"
                 "Click it to open a little menu of ready-made, professionally tuned "
                 "charts, grouped by the measuring instrument they're made for "
                 "(i1Pro or ColorMunki). Pick one and ChromIQ drops the finished "
@@ -1178,6 +1206,7 @@ class TabChart(QWidget):
                 "read it back).\n\n"
                 "Next step: print the TIFF on tab 2."
             ),
+            trailing_widget=_hdr_trailing,
         ))
 
         # Mode switcher (wrapped in a widget so it can be hidden in calibration mode)
@@ -1208,41 +1237,7 @@ class TabChart(QWidget):
         mode_row.addWidget(self._guided_btn)
         mode_row.addWidget(self._manual_btn)
         mode_row.addStretch()
-        # Folder button (left of the star): reopen a printer profile started
-        # earlier to carry on with it another day (#70, Knut). Saving is
-        # automatic, so there's no matching Save button.
-        self._load_profile_btn = self._make_load_profile_button(self._mode_row_widget)
-        mode_row.addWidget(self._load_profile_btn)
-        # Grid button (between folder and star): load an existing patch set /
-        # chart layout (.ti1 or i1Profiler) and lay it out, skipping targen. The
-        # 3×3 grid glyph reads as a chart of patches; magenta matches the tab so
-        # folder · grid · star read as a trio (#70, Knut). Replaces the old
-        # bottom-row "Load patch set…" button.
-        self._load_ti1_btn = PatchGridButton(SPEC_MAGENTA, self._mode_row_widget)
-        self._load_ti1_btn.setToolTip(
-            tr("Load patch set.\n"
-               "Open an existing chart layout (its patch set) and lay it\n"
-               "out — targen is skipped. Accepts an Argyll .ti1, or an\n"
-               "i1Profiler RGB set (.pxf or CGATS .txt), which are\n"
-               "converted to .ti1 automatically."))
-        self._load_ti1_btn.clicked.connect(self._on_load_ti1)
-        mode_row.addWidget(self._load_ti1_btn)
-        # Far-right star button: opens the Built-in presets overlay, listing the
-        # bundled prebuilt charts grouped by instrument. Picking one runs the
-        # exact same flow as choosing it in the Manual presets dropdown.
-        self._builtin_preset_btn = BuiltinPresetButton(self._mode_row_widget)
-        self._builtin_preset_btn.clicked.connect(self._open_builtin_preset_overlay)
-        mode_row.addWidget(self._builtin_preset_btn)
-        # "Reveal folder" — sits at the very right of the icon row with the other
-        # load/preset glyphs (Sebastian). The chart's files are written deep under
-        # the working folder; put their location one click away (Knut).
-        from ui.widgets import RevealFolderButton
-        self._reveal_folder_btn = RevealFolderButton(SPEC_MAGENTA, self._mode_row_widget)
-        self._reveal_folder_btn.setToolTip(tr(
-            "Open the folder holding the generated chart's files (the TIFF "
-            "pages, .ti1/.ti2 and sidecars) in your file manager."))
-        self._reveal_folder_btn.clicked.connect(self._reveal_chart_folder)
-        mode_row.addWidget(self._reveal_folder_btn)
+        # (The load / preset / reveal icons moved to the header's upper-right.)
         left_layout.addWidget(self._mode_row_widget)
 
         # Stacked panel

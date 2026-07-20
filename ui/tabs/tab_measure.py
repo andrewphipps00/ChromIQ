@@ -1003,6 +1003,31 @@ class TabMeasure(QWidget):
         top_layout = QVBoxLayout(top_widget)
         top_layout.setContentsMargins(16, 12, 16, 6)
         top_layout.setSpacing(8)
+        # Load-chart + reveal-folder icons in the header's upper-right, like the
+        # Create Chart and Print Chart tabs (Knut/Basti). The selected file still
+        # shows in the Chart File frame below.
+        from ui.widgets import PatchGridButton, RevealFolderButton
+        self._load_ti1_btn = PatchGridButton(_TAB_COLOR, top_widget, page=True)
+        self._load_ti1_btn.setToolTip(tr(
+            "Load a chart file (.ti2) to measure.\n\n"
+            "This is the laid-out chart ChromIQ made for you in Create Chart — "
+            "the same one you printed. Pick it here and the preview shows the "
+            "page(s) so you can read them strip by strip. The finished "
+            "measurements are saved as a .ti3 file for building the profile."))
+        self._load_ti1_btn.clicked.connect(self._on_load_ti2)
+        self._reveal_btn = RevealFolderButton(_TAB_COLOR, top_widget)
+        self._reveal_btn.setToolTip(tr(
+            "Open this chart's folder in Finder / your file manager — where "
+            "the chart, its measurements and the finished profile all live. "
+            "Handy for finding the printable pages, or the ICC profile after "
+            "you build it."))
+        self._reveal_btn.clicked.connect(self._reveal_chart_folder)
+        _hdr_trailing = QWidget(top_widget)
+        _ht = QHBoxLayout(_hdr_trailing)
+        _ht.setContentsMargins(0, 0, 0, 0)
+        _ht.setSpacing(6)
+        _ht.addWidget(self._load_ti1_btn)
+        _ht.addWidget(self._reveal_btn)
         top_layout.addWidget(TabHeader(
             tr("STEP 03 · MEASURE CHART"), tr("Measure printed chart"), "#56d6a5", top_widget,
             tooltip_title=tr("Step 3 — Measure the print"),
@@ -1029,6 +1054,7 @@ class TabMeasure(QWidget):
                 "prompt. Don't rush — accurate reads now mean an accurate profile.\n\n"
                 "Next step: build the ICC profile on tab 4.")
             ),
+            trailing_widget=_hdr_trailing,
         ))
         _mode_font = QFont()
         _mode_font.setFamilies(["Menlo", "Consolas", "Courier New", "monospace"])
@@ -1063,31 +1089,12 @@ class TabMeasure(QWidget):
         file_grp.setFlat(True)
         fg = QVBoxLayout(file_grp)
         fg.setContentsMargins(8, 6, 8, 8)
+        # The load + reveal buttons now live in the header's upper-right; this
+        # frame just shows which chart is selected.
         file_row = QHBoxLayout()
-        from ui.widgets import PatchGridButton
-        # Same grid-of-patches glyph the Print tab's "load test chart" button uses,
-        # in the Measure tab's green accent (Basti) — a chart is a chart.
-        self._load_ti1_btn = PatchGridButton(_TAB_COLOR, file_outer, page=True)
-        self._load_ti1_btn.setToolTip(tr(
-            "Load a chart file (.ti2) to measure.\n\n"
-            "This is the laid-out chart ChromIQ made for you in Create Chart — "
-            "the same one you printed. Pick it here and the preview shows the "
-            "page(s) so you can read them strip by strip. The finished "
-            "measurements are saved as a .ti3 file for building the profile."))
-        self._load_ti1_btn.clicked.connect(self._on_load_ti2)
         self._ti1_lbl = ElidingLabel(tr("No file selected"), file_outer)
         self._ti1_lbl.setStyleSheet("color: #909090; font-size: 11px;")
-        file_row.addWidget(self._load_ti1_btn)
         file_row.addWidget(self._ti1_lbl, stretch=1)
-        from ui.widgets import RevealFolderButton
-        self._reveal_btn = RevealFolderButton(_TAB_COLOR, file_outer)
-        self._reveal_btn.setToolTip(tr(
-            "Open this chart's folder in Finder / your file manager — where "
-            "the chart, its measurements and the finished profile all live. "
-            "Handy for finding the printable pages, or the ICC profile after "
-            "you build it."))
-        self._reveal_btn.clicked.connect(self._reveal_chart_folder)
-        file_row.addWidget(self._reveal_btn)
         fg.addLayout(file_row)
         fo_layout.addWidget(file_grp)
         lc_layout.addWidget(file_outer)

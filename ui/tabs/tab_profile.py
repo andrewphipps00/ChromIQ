@@ -337,10 +337,43 @@ class TabProfile(QWidget):
         root.setContentsMargins(16, 12, 16, 12)
         root.setSpacing(8)
 
+        # Load-measurement + reveal-folder icons in the header's upper-right, like
+        # the Create Chart and Print Chart tabs (Knut/Basti). The selected file
+        # still shows in the Measurement Data frame below.
+        from ui.widgets import MeasuredChartButton, RevealFolderButton
+        self._load_btn = MeasuredChartButton(SPEC_CYAN, self)
+        self._load_btn.setToolTip(tr(
+            "Load your measurement data (.ti3, or an i1Profiler .txt export).\n\n"
+            "This is the file the Measure tab saved after reading your printed "
+            "chart — the patch colours your instrument actually measured. "
+            "ChromIQ builds the ICC profile from it. If a matching chart (.ti2) "
+            "sits next to it, ChromIQ picks it up automatically."))
+        self._load_btn.clicked.connect(self._on_load_ti3)
+        self._reveal_btn = RevealFolderButton(SPEC_CYAN, self)
+        self._reveal_btn.setToolTip(tr(
+            "Open this chart's folder in Finder / your file manager — where "
+            "the measurement and the finished ICC profile live. Handy for "
+            "finding the profile after you build it, to install or share it."))
+        self._reveal_btn.clicked.connect(self._reveal_folder)
+        _hdr_trailing = QWidget(self)
+        _ht = QHBoxLayout(_hdr_trailing)
+        _ht.setContentsMargins(0, 0, 0, 0)
+        _ht.setSpacing(6)
+        # The measured-chart glyph's grid is nudged up to free room for its tick,
+        # so it reads a couple of px high next to the reveal arrow — drop it a
+        # touch to line the two up (Basti).
+        _load_wrap = QWidget(_hdr_trailing)
+        _lw = QVBoxLayout(_load_wrap)
+        _lw.setContentsMargins(0, 3, 0, 0)
+        _lw.setSpacing(0)
+        _lw.addWidget(self._load_btn)
+        _ht.addWidget(_load_wrap)
+        _ht.addWidget(self._reveal_btn)
         self._header = TabHeader(
             tr("STEP 04 · CREATE ICC PROFILE"), tr("Build ICC profile"), "#37bcd6", self,
             tooltip_title=tr(_TOOLTIP_TITLE_NORMAL),
             tooltip_body=tr(_TOOLTIP_BODY_NORMAL),
+            trailing_widget=_hdr_trailing,
         )
         root.addWidget(self._header)
 
@@ -403,28 +436,12 @@ class TabProfile(QWidget):
 
         self._file_grp = file_grp = QGroupBox(tr("Measurement Data (.ti3 / i1Profiler .txt)"), colprof_container)
         fg = QHBoxLayout(file_grp)
-        from ui.widgets import MeasuredChartButton
-        self._load_btn = MeasuredChartButton(SPEC_CYAN, file_grp)
-        self._load_btn.setToolTip(tr(
-            "Load your measurement data (.ti3, or an i1Profiler .txt export).\n\n"
-            "This is the file the Measure tab saved after reading your printed "
-            "chart — the patch colours your instrument actually measured. "
-            "ChromIQ builds the ICC profile from it. If a matching chart (.ti2) "
-            "sits next to it, ChromIQ picks it up automatically."))
-        self._load_btn.clicked.connect(self._on_load_ti3)
+        # The load + reveal buttons now live in the header's upper-right; this
+        # frame just shows which measurement is selected.
         self._file_lbl = QLabel(tr("No file selected"), file_grp)
         self._file_lbl.setStyleSheet("color: #909090; font-size: 11px;")
         self._file_lbl.setWordWrap(True)
-        fg.addWidget(self._load_btn)
         fg.addWidget(self._file_lbl, stretch=1)
-        from ui.widgets import RevealFolderButton
-        self._reveal_btn = RevealFolderButton(SPEC_CYAN, file_grp)
-        self._reveal_btn.setToolTip(tr(
-            "Open this chart's folder in Finder / your file manager — where "
-            "the measurement and the finished ICC profile live. Handy for "
-            "finding the profile after you build it, to install or share it."))
-        self._reveal_btn.clicked.connect(self._reveal_folder)
-        fg.addWidget(self._reveal_btn)
         cc.addWidget(file_grp)
 
         self._stack = QStackedWidget(colprof_container)
