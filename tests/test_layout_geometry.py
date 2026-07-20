@@ -257,11 +257,12 @@ def test_furniture_reserves_affect_capacity():
     w, h = geometry_papers(paper)
 
     def cap(**over):
-        # Furniture reserves only apply in patch-first (printtarg-style) mode;
-        # area-first is "margins are the law" and ignores them (Knut #93), so this
-        # furniture test pins patch-first explicitly.
+        # Furniture reserves only apply in printtarg-style patch-first mode; law
+        # mode (area-first OR "Use instrument margins") treats the margin box as the
+        # law and puts furniture inside it (Knut), so pin patch-first with user
+        # margins to exercise the reserve path.
         r = LayoutRecipe(instrument="i1", paper=paper, layout_mode="patch_first",
-                         **over)
+                         use_instrument_margins=False, **over)
         g = instruments.geom_from_build_kwargs(r.build_kwargs())
         return geometry.patches_per_sheet(g, w, h)
 
@@ -519,16 +520,21 @@ def test_area_first_fills_box_past_ruler_cap():
 
 
 def test_patch_first_keeps_ruler_cap():
-    """Patch-first (printtarg-style) still caps the strip at the instrument ruler
-    so the chart stays scannable — only area-first removes the cap (Knut #93)."""
+    """Patch-first still caps the strip at the instrument ruler so the chart stays
+    scannable — in BOTH margin modes. Only area-first fills past the ruler (Knut).
+    The invariant is fill_beyond_ruler=False for patch-first, even when "Use
+    instrument margins" makes the margins the law."""
     from workflow.layout_engine.presets import LayoutRecipe
-    r = LayoutRecipe(instrument="i1", paper="A4", clip_border=True,
-                     layout_mode="patch_first", patch_w_mm=7.2, patch_h_mm=7.2)
-    g = instruments.geom_from_build_kwargs(r.build_kwargs())
-    assert not g.margins_are_law
-    lay = geometry.compute(g, *A4, 100_000)
-    strip_len = lay.steps_in_pass * (g.plen + g.pspa)
-    assert strip_len <= g.ruler_mm + g.plen    # capped near the ruler
+    for use_instr in (True, False):
+        r = LayoutRecipe(instrument="i1", paper="A4", clip_border=True,
+                         layout_mode="patch_first", patch_w_mm=7.2, patch_h_mm=7.2,
+                         use_instrument_margins=use_instr)
+        g = instruments.geom_from_build_kwargs(r.build_kwargs())
+        assert g.fill_beyond_ruler is False        # patch-first never fills past ruler
+        assert g.margins_are_law is bool(use_instr)  # law follows instrument margins
+        lay = geometry.compute(g, *A4, 100_000)
+        strip_len = lay.steps_in_pass * (g.plen + g.pspa)
+        assert strip_len <= g.ruler_mm + g.plen    # capped near the ruler
 
 
 def test_clip_side_left_right():
@@ -589,16 +595,26 @@ def test_margins_are_law_only_in_area_first():
     assert lay_law.steps_in_pass > lay_old.steps_in_pass     # patches at the margin
 
 
-def test_geom_from_build_kwargs_law_follows_layout_mode():
-    """geom_from_build_kwargs sets margins_are_law from layout_mode, not from the
-    use_instrument_margins toggle (Knut #93)."""
+def test_geom_from_build_kwargs_law_follows_mode_or_instrument_margins():
+    """geom_from_build_kwargs sets margins_are_law from area-first OR "Use
+    instrument margins" — the instrument margin IS the whole top furniture zone, so
+    patch-first with instrument margins must also treat the margins as the law
+    (Knut beta.26). fill_beyond_ruler tracks area-first alone."""
     from workflow.layout_engine.presets import LayoutRecipe
-    af = LayoutRecipe(instrument="i1", paper="A4", layout_mode="area_first",
-                      use_instrument_margins=False)
-    pf = LayoutRecipe(instrument="i1", paper="A4", layout_mode="patch_first",
-                      use_instrument_margins=True)
-    assert instruments.geom_from_build_kwargs(af.build_kwargs()).margins_are_law
-    assert not instruments.geom_from_build_kwargs(pf.build_kwargs()).margins_are_law
+
+    def geom(mode, use_instr):
+        r = LayoutRecipe(instrument="i1", paper="A4", layout_mode=mode,
+                         use_instrument_margins=use_instr)
+        return instruments.geom_from_build_kwargs(r.build_kwargs())
+
+    # margins_are_law = area_first OR use_instrument_margins
+    assert geom("area_first", False).margins_are_law
+    assert geom("area_first", True).margins_are_law
+    assert geom("patch_first", True).margins_are_law         # the fixed case
+    assert not geom("patch_first", False).margins_are_law
+    # fill_beyond_ruler = area_first only (patch-first always honours the cap)
+    assert geom("area_first", True).fill_beyond_ruler
+    assert not geom("patch_first", True).fill_beyond_ruler
 
 
 def test_margins_are_law_patch_top_at_margin_and_labels_at_edge():
@@ -648,7 +664,10 @@ def test_margins_are_law_furniture_does_not_reduce_capacity():
     w, h = geometry_papers(paper)
 
     def cap(law, **over):
-        r = LayoutRecipe(instrument="i1", paper=paper,
+        # Pin use_instrument_margins=False so "law" is driven purely by the layout
+        # mode here: area-first = law (furniture inside the margin), patch-first with
+        # user margins = printtarg-style (furniture reserves reduce the count).
+        r = LayoutRecipe(instrument="i1", paper=paper, use_instrument_margins=False,
                          layout_mode="area_first" if law else "patch_first", **over)
         g = instruments.geom_from_build_kwargs(r.build_kwargs())
         return geometry.patches_per_sheet(g, w, h)

@@ -88,11 +88,12 @@ def compute(geom: Geom, paper_w_mm: float, paper_h_mm: float, npat: int,
         mints = max(g.margin_t + txhi + g.lcar, eff_lspa)
         minbs = max(g.margin_b, g.tspa, g.bottom_reserve_mm)
         arowl = ph - mints - minbs - 2.0 * g.hxeh - g.strip_indicator_gap
-    # The physical ruler cap (i1Pro 240 mm jig etc.) applies in patch-first mode.
-    # In area-first the margin box is the law: fill the whole box even if the
-    # strip ends up longer than the ruler (a violation warning flags that to the
-    # user — Knut #93), so the cap is NOT applied here.
-    if not g.margins_are_law and arowl > g.mxrowl:
+    # The physical ruler cap (i1Pro 240 mm jig etc.) applies in patch-first mode —
+    # ALSO when "Use instrument margins" makes the margins the law (its "max strip
+    # length" must still protect the jig). Only area-first fills past the ruler and
+    # flags a too-long strip with a warning, so the cap is keyed on fill_beyond_ruler
+    # (area-first), not on margins_are_law (Knut).
+    if not g.fill_beyond_ruler and arowl > g.mxrowl:
         arowl = g.mxrowl
 
     # Patches per pass. n patches need (n-1) between-spacers, plus a leading and

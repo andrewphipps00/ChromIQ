@@ -168,8 +168,14 @@ def test_guided_and_manual_colormunki_extra_high_same_patch_geometry(tmp_path: P
     # Patch-first parity: the dense ColorMunki patch SIZE is identical to Guided's
     # (the readable native dense-strip geometry — 10.4 mm patches, same spacing).
     gm_pf = instruments.geom_from_build_kwargs({**mkw, "layout_mode": "patch_first"})
+    # margins_are_law / fill_beyond_ruler are layout-BOX flags, not patch geometry:
+    # Guided here uses user margins while the Manual default recipe has "Use
+    # instrument margins" on, so those two flags legitimately differ — exclude them
+    # and assert the patch geometry proper is identical (Knut instrument-margins fix).
+    _BOX_FLAGS = {"margins_are_law", "fill_beyond_ruler"}
     diffs = [f.name for f in dataclasses.fields(instruments.Geom)
-             if getattr(gg, f.name) != getattr(gm_pf, f.name)]
+             if f.name not in _BOX_FLAGS
+             and getattr(gg, f.name) != getattr(gm_pf, f.name)]
     assert diffs == [], f"unexpected geometry diff: {diffs}"
     assert (gg.pwid, gg.plen, gg.rrsp, gg.pspa) == (gm_pf.pwid, gm_pf.plen,
                                                     gm_pf.rrsp, gm_pf.pspa)

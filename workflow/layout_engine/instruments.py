@@ -115,12 +115,19 @@ class Geom:
     text_edge_clip_mm: float = 4.0
     # "Margins are the law" mode (Knut): the patch area is exactly the margin box
     # (no hidden leader/trailer; strip labels live inside the top margin, anchored
-    # at the text-edge from the page edge). This is now driven by the LAYOUT MODE
-    # — it is ON for area-first ("Prioritise chart area, then fit patches to it")
-    # and OFF for patch-first (the historical printtarg-style engine). It is NOT
-    # tied to "Use instrument margins" anymore (that toggle only pre-fills the
-    # margin boxes once). Set in geom_from_build_kwargs from layout_mode.
+    # at the text-edge from the page edge). ON for area-first ("Prioritise chart
+    # area…") AND whenever "Use instrument margins" is on — in both cases the
+    # margin (e.g. the i1Pro 38 mm minimum) is the whole top furniture zone, so the
+    # label band + leader must NOT be reserved on top of it (that double-count
+    # pushed patches ~17 mm too far down and pinned labels at the margin — Knut).
+    # OFF only for patch-first with user margins (the historical printtarg-style
+    # engine). Set in geom_from_build_kwargs.
     margins_are_law: bool = False
+    # Fill the margin box even past the instrument's ruler cap (area-first only:
+    # the box is the law and a too-long strip is flagged, not shrunk). Patch-first
+    # ALWAYS honours the ruler cap, even under margins_are_law, so its "max strip
+    # length" still protects the i1Pro jig. Decoupled from margins_are_law (Knut).
+    fill_beyond_ruler: bool = False
     # Physical strip-length limit of the instrument's ruler/jig (mm); 0 = none
     # (ColorMunki/SpectroScan have no ruler). In area-first the strip is NOT capped
     # to this (the margin box is law — fill it), but a strip longer than the ruler
@@ -184,6 +191,7 @@ def build(
     text_edge_top: float = 4.0,
     text_edge_clip: float = 4.0,
     margins_are_law: bool = False,
+    fill_beyond_ruler: bool = False,
 ) -> Geom:
     """Resolve :class:`Geom`, applying ChromIQ extensions over the base geometry.
 
@@ -244,7 +252,8 @@ def build(
                    clip_side=clip_side or "left",
                    text_edge_top_mm=float(text_edge_top or 4.0),
                    text_edge_clip_mm=float(text_edge_clip or 4.0),
-                   margins_are_law=bool(margins_are_law))
+                   margins_are_law=bool(margins_are_law),
+                   fill_beyond_ruler=bool(fill_beyond_ruler))
 
 
 # Keys of a recipe ``build_kwargs()`` dict that affect the laid-out geometry —
@@ -289,11 +298,16 @@ def geom_from_build_kwargs(kw: dict, thresholds: dict | None = None) -> Geom:
         _sz = area_fit.derive_area_patch_size(kw)
         if _sz is not None:
             kw = {**kw, "patch_w": _sz[0], "patch_h": _sz[1]}
-    # "Margins are the law" is now decided by the LAYOUT MODE, not by the
-    # "Use instrument margins" toggle (Knut): area-first treats the margin box as
-    # the exact patch area; patch-first keeps the printtarg-style furniture.
-    law = (kw.get("layout_mode") == "area_first")
-    geom = build(kw["instrument"], margins_are_law=law,
+    # "Margins are the law" (margin box = exact patch area, labels inside the top
+    # margin at the text-edge) applies for area-first AND whenever "Use instrument
+    # margins" is on: the instrument margin already IS the whole top furniture zone,
+    # so reserving the label band + leader on top of it double-counts and pushes the
+    # patches down while pinning labels at the margin (Knut). The ruler cap, though,
+    # must still bind in patch-first even under margins_are_law — only area-first
+    # fills past the ruler (and warns), so that stays keyed on the layout mode.
+    area_first = (kw.get("layout_mode") == "area_first")
+    law = area_first or bool(kw.get("use_instrument_margins"))
+    geom = build(kw["instrument"], margins_are_law=law, fill_beyond_ruler=area_first,
                  **{k: v for k, v in kw.items() if k in GEOM_BUILD_KEYS})
     from . import raster   # lazy: raster imports this module
     return raster.apply_furniture_reserves(geom, kw)
