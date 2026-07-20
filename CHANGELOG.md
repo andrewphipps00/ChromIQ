@@ -1,5 +1,30 @@
 # Changelog
 
+## v3.13.12-beta.24
+
+- **Measurement Report — a big rework (Knut).** The window and the PDF now show
+  the same report in one sequence:
+  - **Report Scope** — the profiles and instruments included, the run count and
+    date range, with red warnings if the runs mix instruments or a chart is
+    missing cube corners (the report can't tell printers apart, so it's up to you
+    to include runs from one printer — name your Printer Profile Names clearly).
+  - **Report Results** — a Pass/Fail grid of each colour-accuracy metric against
+    each run, green for pass, red for fail.
+  - **Colour accuracy** — a revised metric set: average and maximum ΔE over all
+    patches, over the best 95 %, and over the worst 5 %, each judged against a
+    Pass threshold (Average default 2.0, Maximum default 3.0, both adjustable).
+  - Trend charts now plot all five metrics; the side-by-side comparison keeps to
+    six dated columns with zebra rows and a wide Metric column; optional detailed
+    data per run, each run on its own page.
+- **PDF identity.** The ChromIQ wordmark sits top-right of every page, with the
+  five-part spectrum line under the title on page 1 and across the top of later
+  pages, a per-page header naming the profiles and date range, and page numbers.
+- **Import i1Profiler measurements.** Convert an i1Profiler measurement to a .ti3
+  (Tools → “Convert i1Profiler → TI3”), keep the chart's .ti2 beside it, and this
+  report reads it — handy for verification tracking.
+- Worst-patches and cube-corner tables now share the same column order
+  (Patch · Expected · Measured · ΔE).
+
 ## v3.13.12-beta.23
 
 - **Measurement Report window restyled** to match the other Tools windows: a
