@@ -107,6 +107,20 @@ def test_clip_text_grows_to_fill_thickness_when_length_has_room():
     assert thickness_span > 0.5 * W                # grows to fill (was ~0.34·W)
 
 
+def test_clip_text_justifies_lines_to_fill_thickness_when_length_bound():
+    """A long line caps the font size (length-bound); the few lines must still
+    spread across the strip thickness so the outer lines reach the text-edge on
+    the sides, not sit packed in the middle (Knut, 8.1 mm → ~4 mm)."""
+    from workflow.layout_engine.raster import _vtext
+    W, H = 260, 3413
+    long_header = ("ChromIQ Chart 667 RGB target on A4 - PRINT: borderless, "
+                   "100% size (no scaling), color management OFF")
+    txt = "\n".join([long_header, "date: ____", "profile name: ____"])
+    bbox = _vtext(txt, "Inter", W, H).getbbox()
+    assert bbox is not None
+    assert (bbox[2] - bbox[0]) > 0.9 * W        # lines fill the strip thickness
+
+
 def test_clip_flip_180_persists_and_flips_render(app):
     """The clip flip-180 toggle round-trips through the recipe (so it saves as a
     default and inside a preset) and actually turns the clip content over (Knut)."""

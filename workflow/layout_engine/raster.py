@@ -514,7 +514,7 @@ def _vtext(text: str, font_family: str, width_px: int, height_px: int,
     # (the stacked lines), LEN along it (the longest line). A small hair guards
     # glyph overshoot. (Knut: the text must reach the text-edge on the sides too,
     # not just top/bottom.)
-    THICK, LEN = 0.98, 0.99
+    THICK, LEN = 0.98, 0.995
     if size_px and size_px > 0:
         size = max(8, int(size_px))                      # manual size (#125)
     else:
@@ -542,13 +542,21 @@ def _vtext(text: str, font_family: str, width_px: int, height_px: int,
         size = int(size * 0.95)
         if size <= 8:
             break
-    line_h = size * 1.2
-    block_h = line_h * len(lines)
-    cy = (width_px - block_h) / 2
+    # Position the lines ACROSS the strip thickness. A long line caps the font
+    # size (it's length-bound), which would leave the few lines packed in the
+    # middle with big side margins; instead JUSTIFY them so the outer lines' ink
+    # reaches the text-edge on the sides too, filling the strip width (Knut).
+    fill_h = width_px * THICK
+    top = (width_px - fill_h) / 2
+    if n >= 2:
+        pad = size * 0.42                       # keep the outer glyphs' ink inside
+        first_c, last_c = top + pad, top + fill_h - pad
+        ys = [first_c + (last_c - first_c) * i / (n - 1) for i in range(n)]
+    else:
+        ys = [width_px / 2]
     cx = (height_px * 0.04 if valign == "top" else height_px / 2)
     anchor = "lm" if valign == "top" else "mm"
-    for i, ln in enumerate(lines):
-        y = cy + line_h * (i + 0.5)
+    for ln, y in zip(lines, ys):
         try:
             d.text((cx, y), ln, font=f, fill=(0, 0, 0, 255), anchor=anchor)
         except Exception:  # pragma: no cover
