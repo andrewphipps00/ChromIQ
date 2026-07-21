@@ -3196,5 +3196,8 @@
   "This calibration step is optional. You can skip it and carry on measuring, but your readings may be a little less accurate without it.": "此校准步骤为可选。你可以跳过它并继续测量，但不做该步骤可能会使读数精度略有下降。",
   "What your instrument asked for:": "你的测量仪器要求：",
   "[Engine] ChromIQ's own measuring engine could not use your instrument ({reason}). Starting again with ArgyllCMS's chartread instead — just carry on measuring as usual.": "[Engine] ChromIQ 自有的测量引擎无法使用你的仪器（{reason}）。改用 ArgyllCMS 的 chartread 重新开始 — 照常继续测量即可。",
-  "[Engine] Switched to ArgyllCMS chartread because ChromIQ's own measuring engine could not use your instrument ({reason}). Measuring continues as normal; you can turn the ChromIQ engine off for good in Settings if this keeps happening.": "[Engine] 已切换到 ArgyllCMS 的 chartread，因为 ChromIQ 自有的测量引擎无法使用你的仪器（{reason}）。测量将照常继续；若经常发生，可在设置中彻底关闭 ChromIQ 引擎。"
+  "[Engine] Switched to ArgyllCMS chartread because ChromIQ's own measuring engine could not use your instrument ({reason}). Measuring continues as normal; you can turn the ChromIQ engine off for good in Settings if this keeps happening.": "[Engine] 已切换到 ArgyllCMS 的 chartread，因为 ChromIQ 自有的测量引擎无法使用你的仪器（{reason}）。测量将照常继续；若经常发生，可在设置中彻底关闭 ChromIQ 引擎。",
+  "[Engine] Calibration did not succeed after {total} attempts. Stopping here so you can check the instrument.": "[Engine] 尝试 {total} 次后校准仍未成功。在此停止，以便你检查测量仪器。",
+  "[Engine] Calibration didn't succeed ({detail}). Trying again automatically — attempt {attempt} of {total}. Leave the instrument where it is.": "[Engine] 校准未成功（{detail}）。正在自动重试 — 第 {attempt} 次，共 {total} 次。请让仪器保持原位。",
+  "no reason given": "未说明原因"
 }

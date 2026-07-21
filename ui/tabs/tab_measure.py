@@ -875,6 +875,7 @@ class TabMeasure(QWidget):
         # B-status. Non-blocking informational messages
         self._manager.info_message.connect(self._on_info_message)
         self._manager.engine_fell_back.connect(self._on_engine_fell_back)
+        self._manager.calibration_retrying.connect(self._on_calibration_retrying)
         # D. Spot / XY mode defensive handlers
         self._manager.xy_place_sheet.connect(self._on_xy_place_sheet)
         self._manager.spot_ready.connect(self._on_spot_ready)
@@ -3567,6 +3568,12 @@ class TabMeasure(QWidget):
 
     def _on_mode_set_failed(self, msg: str) -> None:
         self._mode_set_failed_msg = msg
+
+    def _on_calibration_retrying(self, attempt: int, total: int) -> None:
+        """A failed calibration is being retried automatically. The log already
+        carries the detail; this keeps the cursor on it so the user sees why the
+        app pauses for a moment instead of thinking it has frozen."""
+        self._log.ensureCursorVisible()
 
     def _on_engine_fell_back(self, reason: str) -> None:
         """ChromIQ's engine could not drive the instrument, so the run restarted

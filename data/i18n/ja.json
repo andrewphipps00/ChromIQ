@@ -3196,5 +3196,8 @@
   "This calibration step is optional. You can skip it and carry on measuring, but your readings may be a little less accurate without it.": "このキャリブレーション手順は省略できます。スキップして測定を続けられますが、行わないと測定値の精度がやや落ちる場合があります。",
   "What your instrument asked for:": "測定器が要求した内容:",
   "[Engine] ChromIQ's own measuring engine could not use your instrument ({reason}). Starting again with ArgyllCMS's chartread instead — just carry on measuring as usual.": "[Engine] ChromIQ 独自の測定エンジンが測定器を使用できませんでした（{reason}）。代わりに ArgyllCMS の chartread で始め直します — そのままいつもどおり測定を続けてください。",
-  "[Engine] Switched to ArgyllCMS chartread because ChromIQ's own measuring engine could not use your instrument ({reason}). Measuring continues as normal; you can turn the ChromIQ engine off for good in Settings if this keeps happening.": "[Engine] ChromIQ 独自の測定エンジンが測定器を使用できなかったため、ArgyllCMS の chartread に切り替えました（{reason}）。測定は通常どおり続きます。頻繁に起きる場合は、設定で ChromIQ エンジンを無効にできます。"
+  "[Engine] Switched to ArgyllCMS chartread because ChromIQ's own measuring engine could not use your instrument ({reason}). Measuring continues as normal; you can turn the ChromIQ engine off for good in Settings if this keeps happening.": "[Engine] ChromIQ 独自の測定エンジンが測定器を使用できなかったため、ArgyllCMS の chartread に切り替えました（{reason}）。測定は通常どおり続きます。頻繁に起きる場合は、設定で ChromIQ エンジンを無効にできます。",
+  "[Engine] Calibration did not succeed after {total} attempts. Stopping here so you can check the instrument.": "[Engine] {total} 回試みましたがキャリブレーションに成功しませんでした。測定器を確認できるよう、ここで停止します。",
+  "[Engine] Calibration didn't succeed ({detail}). Trying again automatically — attempt {attempt} of {total}. Leave the instrument where it is.": "[Engine] キャリブレーションに成功しませんでした（{detail}）。自動で再試行します — {total} 回中 {attempt} 回目。測定器はそのままにしておいてください。",
+  "no reason given": "理由は示されていません"
 }

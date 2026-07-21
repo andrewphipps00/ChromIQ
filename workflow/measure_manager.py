@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable
 
-from PyQt6.QtCore import QObject, pyqtSignal
+from PyQt6.QtCore import QObject, QTimer, pyqtSignal
 
 from core.logger import get_logger
 from core.strip_utils import letter_to_idx
@@ -114,6 +114,15 @@ def _instrument_text(raw: object) -> str:
     return text
 
 
+# Automatic calibration retries (mavtop). An ageing bus-powered instrument can
+# fail its calibration simply because the lamp strike browses out the USB rail,
+# then succeed moments later — retrying costs seconds and often gets the user
+# through. Also load-bearing: the engine BLOCKS waiting for an answer after a
+# failed calibration, so something must always reply or the run deadlocks.
+CAL_AUTO_RETRIES = 3            # attempts after the first = 4 tries in total
+CAL_RETRY_PAUSE_MS = 2000       # let a sagging USB rail recover before retrying
+
+
 @dataclass
 class MeasureParams:
     ti1_path: Path
@@ -149,6 +158,8 @@ class MeasureManager(QObject):
     # The engine could not use the instrument, so the run was restarted on stock
     # ArgyllCMS chartread. Carries the reason, for the log/status line.
     engine_fell_back       = pyqtSignal(str)
+    # A failed calibration is being retried automatically: (attempt, of_total).
+    calibration_retrying   = pyqtSignal(int, int)
     calibration_done       = pyqtSignal()    # emitted when instrument calibration completes
     strip_error            = pyqtSignal(str) # emitted on strip read failure; carries the reason string
     instrument_disconnected = pyqtSignal()   # emitted on USB communication failure
@@ -214,6 +225,7 @@ class MeasureManager(QObject):
         self._engine_saw_event: bool = False
         self._engine_fallback_used: bool = False
         self._user_quit: bool = False
+        self._cal_retries_left: int = CAL_AUTO_RETRIES
 
     # ------------------------------------------------------------------
 
@@ -238,6 +250,7 @@ class MeasureManager(QObject):
         self._engine_saw_event = False
         self._engine_fallback_used = False
         self._user_quit = False
+        self._cal_retries_left = CAL_AUTO_RETRIES
 
         def _on_finish(code: int) -> None:
             self._pending_post_retry_key = None
@@ -296,6 +309,60 @@ class MeasureManager(QObject):
             on_finish=on_finish,
             use_pty=True,
         )
+
+    def _handle_cal_failed(self, detail: str,
+                           on_line: Callable[[str], None]) -> None:
+        """Answer the engine after a failed calibration, retrying a few times.
+
+        The engine blocks waiting for a reply here (``cq_wait_char``), so this
+        must ALWAYS send something — otherwise the run deadlocks: the helper
+        waits for a key that never comes, and the failure dialog never appears
+        because it only runs once the process has exited.
+
+        Why retry at all: an ageing bus-powered instrument can fail calibration
+        because the lamp strike momentarily browns out the USB rail, and succeed
+        seconds later (mavtop's i1Pro1 passes roughly one attempt in four). A few
+        automatic attempts turn that from a dead end into a short pause. Once the
+        attempts are used up the failure is reported as before, and quitting lets
+        the run end so the stock-chartread fallback can still take over."""
+        if not self._engine_active or self._user_quit:
+            self.inst_init_failed.emit(detail)
+            return
+
+        if self._cal_retries_left <= 0:
+            log.warning("calibration failed after %d attempts: %s",
+                        CAL_AUTO_RETRIES + 1, detail or "unknown")
+            on_line(tr(
+                "[Engine] Calibration did not succeed after {total} attempts. "
+                "Stopping here so you can check the instrument."
+            ).format(total=CAL_AUTO_RETRIES + 1))
+            self.inst_init_failed.emit(detail)
+            # Sent as a COMMAND, not a key: this is our decision, not the user's,
+            # so it must not mark the run as user-aborted — that flag would stop
+            # the stock-chartread fallback from getting its turn.
+            self.send_command({"cmd": "quit"})
+            return
+
+        self._cal_retries_left -= 1
+        attempt = CAL_AUTO_RETRIES - self._cal_retries_left
+        log.info("calibration failed (%s) — automatic retry %d/%d",
+                 detail or "unknown", attempt, CAL_AUTO_RETRIES)
+        on_line(tr(
+            "[Engine] Calibration didn't succeed ({detail}). Trying again "
+            "automatically — attempt {attempt} of {total}. Leave the instrument "
+            "where it is."
+        ).format(detail=detail or tr("no reason given"),
+                 attempt=attempt, total=CAL_AUTO_RETRIES))
+        self.calibration_retrying.emit(attempt, CAL_AUTO_RETRIES)
+        # A pause gives a sagging USB rail time to recover; a single-shot timer
+        # keeps the UI responsive instead of blocking on a sleep.
+        QTimer.singleShot(CAL_RETRY_PAUSE_MS, self._send_cal_retry)
+
+    def _send_cal_retry(self) -> None:
+        """Tell the engine to try the calibration again, unless the run ended."""
+        if not self._engine_active or self._user_quit:
+            return
+        self.send_command({"cmd": "retry"})
 
     def _engine_should_fall_back(self, code: int) -> bool:
         """Whether a finished engine run should be retried on stock chartread.
@@ -497,7 +564,7 @@ class MeasureManager(QObject):
             elif ekind == "cal_failed":
                 detail = ev.get("detail", "")
                 self._engine_fatal = detail or "calibration failed"
-                self.inst_init_failed.emit(detail)
+                self._handle_cal_failed(detail, on_line)
 
         elif kind == "cal_required":
             self.calibration_prompt.emit(str(ev.get("cond", "")),
@@ -511,6 +578,7 @@ class MeasureManager(QObject):
 
         elif kind in ("cal_done", "cal_message"):
             if kind == "cal_done":
+                self._cal_retries_left = CAL_AUTO_RETRIES
                 self.calibration_done.emit()
 
         elif kind == "done":

@@ -1,5 +1,21 @@
 # Changelog
 
+## v3.14.2
+
+- **A failed calibration no longer leaves measuring stuck (mavtop).** When the
+  ChromIQ engine reported a failed calibration it waited for an answer that
+  ChromIQ never sent, so the run stopped dead — no error, no way forward, and
+  the message explaining what happened never appeared because it is only shown
+  once a run has finished. ChromIQ now always answers.
+- **Calibration is retried automatically (mavtop).** An older bus-powered
+  instrument can fail to calibrate simply because striking the lamp briefly
+  draws more power than the USB port supplies, and then succeed moments later.
+  Rather than stopping at the first failure, ChromIQ now tries up to four times,
+  pausing a couple of seconds between attempts so the instrument can recover,
+  and tells you in the log what it is doing. Only if all four attempts fail does
+  it report the problem — and it can then still fall back to ArgyllCMS's own
+  chartread. Leave the instrument where it is while it retries.
+
 ## v3.14.1
 
 - **Measurement Report — the cube corners are the chart's real ideals again

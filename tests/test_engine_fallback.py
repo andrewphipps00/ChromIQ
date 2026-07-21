@@ -221,3 +221,101 @@ def test_a_real_instruction_is_passed_through(tmp_path):
     _feed_engine(mgr, {"event": "cal_required", "cond": "man_ref_white",
                        "id": "Place instrument on white reference"}, lines)
     assert seen[0][1] == "Place instrument on white reference"
+
+
+# --- automatic calibration retry ------------------------------------------
+# The engine BLOCKS waiting for an answer after a failed calibration, so a
+# reply must always be sent or the run deadlocks — the failure dialog only
+# runs once the process has exited, which then never happens.
+
+@pytest.fixture(autouse=True)
+def _fast_retry_pause(monkeypatch):
+    """Keep the real timer in play but drop its 2 s pause to milliseconds, so
+    the suite doesn't spend half a minute waiting for USB rails to recover."""
+    import workflow.measure_manager as mm
+    monkeypatch.setattr(mm, "CAL_RETRY_PAUSE_MS", 5)
+
+
+def _drain_timers(ms: int = 60) -> None:
+    """Let the retry's single-shot timer fire."""
+    from PyQt6.QtCore import QCoreApplication, QElapsedTimer
+    t = QElapsedTimer()
+    t.start()
+    while t.elapsed() < ms:
+        QCoreApplication.processEvents()
+
+
+def test_failed_calibration_is_retried_automatically(tmp_path):
+    """Normal case for a flaky instrument: retry instead of giving up."""
+    from workflow.measure_manager import CAL_AUTO_RETRIES
+    mgr, runner, lines, finished = _start_engine_run(tmp_path)
+    seen: list[tuple] = []
+    mgr.calibration_retrying.connect(lambda *a: seen.append(a))
+
+    _feed_engine(mgr, {"event": "error", "kind": "cal_failed",
+                       "detail": "no answer from device"}, lines)
+    _drain_timers()
+
+    assert seen == [(1, CAL_AUTO_RETRIES)]
+    assert '{"cmd": "retry"}' in "".join(runner.writes)
+    assert any("attempt 1" in ln for ln in lines)
+
+
+def test_retries_are_bounded_then_the_run_is_ended(tmp_path):
+    """After the budget is spent, report the failure and unblock the engine."""
+    from workflow.measure_manager import CAL_AUTO_RETRIES
+    mgr, runner, lines, finished = _start_engine_run(tmp_path)
+    failures: list[str] = []
+    mgr.inst_init_failed.connect(failures.append)
+
+    for _ in range(CAL_AUTO_RETRIES + 1):
+        _feed_engine(mgr, {"event": "error", "kind": "cal_failed",
+                           "detail": "no answer"}, lines)
+        _drain_timers()
+
+    assert len(failures) == 1, "the user is told exactly once, at the end"
+    writes = "".join(runner.writes)
+    assert writes.count('"retry"') == CAL_AUTO_RETRIES
+    assert '{"cmd": "quit"}' in writes, "the engine must never be left blocked"
+
+
+def test_a_successful_calibration_restores_the_retry_budget(tmp_path):
+    """Instruments can calibrate more than once; each step gets its own tries."""
+    from workflow.measure_manager import CAL_AUTO_RETRIES
+    mgr, runner, lines, _ = _start_engine_run(tmp_path)
+    _feed_engine(mgr, {"event": "error", "kind": "cal_failed", "detail": "x"}, lines)
+    _drain_timers()
+    assert mgr._cal_retries_left == CAL_AUTO_RETRIES - 1
+
+    _feed_engine(mgr, {"event": "cal_done"}, lines)
+    assert mgr._cal_retries_left == CAL_AUTO_RETRIES
+
+
+def test_no_retry_after_the_user_stopped_the_run(tmp_path):
+    """A deliberate stop must not be second-guessed by an automatic retry."""
+    mgr, runner, lines, _ = _start_engine_run(tmp_path)
+    failures: list[str] = []
+    mgr.inst_init_failed.connect(failures.append)
+
+    mgr.send_key("\x1b")
+    runner.writes.clear()
+    _feed_engine(mgr, {"event": "error", "kind": "cal_failed", "detail": "x"}, lines)
+    _drain_timers()
+
+    assert failures == ["x"]
+    assert '"retry"' not in "".join(runner.writes)
+
+
+def test_the_automatic_quit_still_allows_the_argyll_fallback(tmp_path):
+    """Ending the run ourselves must not look like a user abort, or the
+    stock-chartread fallback would never get its turn."""
+    from workflow.measure_manager import CAL_AUTO_RETRIES
+    mgr, runner, lines, finished = _start_engine_run(tmp_path)
+    for _ in range(CAL_AUTO_RETRIES + 1):
+        _feed_engine(mgr, {"event": "error", "kind": "cal_failed",
+                           "detail": "no answer"}, lines)
+        _drain_timers()
+
+    assert mgr._user_quit is False
+    _finish(runner, 1)
+    assert len(runner.runs) == 2 and runner.runs[1]["tool"] == "chartread"
