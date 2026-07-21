@@ -57,10 +57,11 @@ _TI3_FILTER = "Measurements (*.ti3);;All files (*)"
 _PATCHSET_FILTER = ("Patch sets (*.ti1 *.txt *.pxf);;TI1 (*.ti1);;"
                     "i1Profiler CGATS (*.txt);;i1Profiler CxF (*.pxf);;All files (*)")
 _TIFF_FILTER = "Chart pages (*.tif *.tiff);;All files (*)"
-# The i1Profiler-mode measurement may be a ready .ti3 or the raw i1Profiler
-# export (.txt) — ChromIQ converts the latter with txt2ti3 on the spot.
-_MEAS_FILTER = ("Measurements (*.ti3 *.txt);;TI3 (*.ti3);;"
-                "i1Profiler measurement (*.txt);;All files (*)")
+# The i1Profiler-mode measurement may be a ready .ti3, or an i1Profiler
+# measurement — its native saved file (.mxf) or a .txt / .cxf export — which
+# ChromIQ converts on the spot (no export step needed).
+_MEAS_FILTER = ("Measurements (*.ti3 *.mxf *.txt *.cxf);;TI3 (*.ti3);;"
+                "i1Profiler measurement (*.mxf *.txt *.cxf);;All files (*)")
 
 
 def _chart_base(ti3: Path) -> Path:
@@ -330,15 +331,16 @@ class ScaninTargetDialog(_ToolDialogBase):
         mh.addStretch(1)
         mh.addWidget(self._tip(
             tr("Your measurement"),
-            tr("The measurement of the printed chart. You can pick i1Profiler's "
-            "own measurement export (.txt) straight from i1Profiler — ChromIQ "
-            "converts it for you — or a .ti3 you already converted with Tools → "
-            "Convert i1Profiler → TI3. This is where the true colours come from. "
-            "ChromIQ matches it to the chart by patch number, so use the "
-            "measurement of this very chart.")), 0, Qt.AlignmentFlag.AlignVCenter)
+            tr("The measurement of the printed chart. You can pick an i1Profiler "
+            "measurement straight from i1Profiler — its own saved file (.mxf, no "
+            "export step needed) or a .txt / .cxf export — and ChromIQ converts "
+            "it for you, or pick a .ti3 you converted earlier. This is where the "
+            "true colours come from. ChromIQ matches it to the chart by patch "
+            "number, so use the measurement of this very chart.")),
+            0, Qt.AlignmentFlag.AlignVCenter)
         pb.addLayout(mh)
         self._meas_field = QLineEdit(self)
-        self._meas_field.setPlaceholderText(tr("Pick i1Profiler's measurement (.txt) or a converted .ti3…"))
+        self._meas_field.setPlaceholderText(tr("Pick i1Profiler's measurement (.mxf / .txt / .cxf) or a .ti3…"))
         pb.addLayout(self._pick_row(self._meas_field, self._pick_meas))
 
         self._i1p_note = self._hint("")
