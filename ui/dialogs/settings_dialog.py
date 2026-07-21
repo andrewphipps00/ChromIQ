@@ -730,6 +730,48 @@ class SettingsDialog(QDialog):
             self))
         _beta.addLayout(_pw_row)
 
+        # Automatic calibration retries (#126, mavtop): how many times a failed
+        # instrument calibration is retried before giving up.
+        self._cal_retries_spin = NoScrollSpinBox(self)
+        self._cal_retries_spin.setRange(0, 20)
+        self._cal_retries_spin.setFixedWidth(110)
+        _car_row = QHBoxLayout()
+        _car_row.addWidget(QLabel(
+            tr("Retry a failed calibration up to:"), self))
+        _car_row.addWidget(self._cal_retries_spin)
+        _car_row.addWidget(QLabel(tr("times"), self))
+        _car_row.addStretch()
+        _car_row.addWidget(TooltipButton(
+            tr("Automatic calibration retries"),
+            tr("Before you can measure a chart, your instrument calibrates "
+            "itself — for most instruments that means a quick reading of the "
+            "white tile on its base or dock. Usually it works first time and "
+            "you never think about it.\n\n"
+            "Sometimes, though, a calibration fails for a reason that clears "
+            "itself moments later. This is especially common with older "
+            "instruments like the original i1Pro: striking its lamp draws a "
+            "burst of power, and on a lamp that has aged, or through a USB port "
+            "that can't quite supply that burst, the very first attempt can "
+            "read poorly — while the next attempt, with the lamp already warm, "
+            "succeeds.\n\n"
+            "Rather than stopping at the first failure, ChromIQ can simply try "
+            "the calibration again a few times, pausing a couple of seconds "
+            "between attempts so the instrument can settle. You don't need to "
+            "do anything while it retries — just leave the instrument where it "
+            "is. Each attempt is noted in the log.\n\n"
+            "This setting is how many extra attempts it makes before giving "
+            "up. For example, 3 means up to four tries in total. If your "
+            "instrument's lamp needs several strikes to burn in, raise this — "
+            "some old i1Pro units are happy at 10. If all the attempts fail, "
+            "ChromIQ reports the problem and, where it can, falls back to "
+            "ArgyllCMS's own reader so you can still measure.\n\n"
+            "Set it to 0 to turn automatic retries off entirely. This only "
+            "affects the ChromIQ chart-reading engine.\n\n"
+            "Default: 3 (four attempts in total)"),
+            self,
+            min_width=620))
+        _beta.addLayout(_car_row)
+
         # Faster instrument connection: skip Argyll's slow serial-port probe.
         self._fast_connect_check = QCheckBox(
             tr("Faster instrument connection"), self)
@@ -1975,6 +2017,7 @@ class SettingsDialog(QDialog):
             float(s.get("report_pass_threshold_max", 3.0)))
         self._patch_warn_spin.setValue(
             float(s.get("patch_read_warn_de", 50.0)))
+        self._cal_retries_spin.setValue(int(s.get("cal_auto_retries", 3)))
         self._fast_connect_check.setChecked(
             bool(s.get("fast_instrument_connect", True)))
         self._safenet_check.setChecked(bool(s.get("misalign_safenet", False)))
@@ -2694,6 +2737,7 @@ class SettingsDialog(QDialog):
         s.set("report_pass_threshold_avg", float(self._report_avg_thr_spin.value()))
         s.set("report_pass_threshold_max", float(self._report_max_thr_spin.value()))
         s.set("patch_read_warn_de", float(self._patch_warn_spin.value()))
+        s.set("cal_auto_retries", int(self._cal_retries_spin.value()))
         s.set("fast_instrument_connect", self._fast_connect_check.isChecked())
         s.set("misalign_safenet", self._safenet_check.isChecked())
         s.set("use_native_print_dialog",   self._native_print_check.isChecked())

@@ -5400,6 +5400,7 @@ class TabMeasure(QWidget):
                    "Everything works as before."))
             return p
         p.engine_safenet = bool(self._settings.get("misalign_safenet", False))
+        p.cal_auto_retries = int(self._settings.get("cal_auto_retries", 3))
         import os as _os
         replay = _os.environ.get("CHROMIQ_REPLAY")
         if replay:

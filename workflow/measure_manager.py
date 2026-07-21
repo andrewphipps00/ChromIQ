@@ -121,6 +121,7 @@ def _instrument_text(raw: object) -> str:
 # failed calibration, so something must always reply or the run deadlocks.
 CAL_AUTO_RETRIES = 3            # attempts after the first = 4 tries in total
 CAL_RETRY_PAUSE_MS = 2000       # let a sagging USB rail recover before retrying
+CAL_AUTO_RETRIES_MAX = 20       # ceiling on the user-set count, so it can't loop
 
 
 @dataclass
@@ -145,6 +146,10 @@ class MeasureParams:
     # Opt-in misalignment safety net (#50): pass --safenet to the helper so it
     # warns when a strip would fit dramatically better shifted by a patch.
     engine_safenet: bool = False
+    # How many times to retry a failed calibration automatically before giving
+    # up (mavtop's i1Pro1 lamp can need several strikes to burn in). Falls back
+    # to CAL_AUTO_RETRIES when the caller doesn't set it.
+    cal_auto_retries: int | None = None
 
 
 class MeasureManager(QObject):
@@ -225,6 +230,7 @@ class MeasureManager(QObject):
         self._engine_saw_event: bool = False
         self._engine_fallback_used: bool = False
         self._user_quit: bool = False
+        self._cal_auto_retries: int = CAL_AUTO_RETRIES
         self._cal_retries_left: int = CAL_AUTO_RETRIES
 
     # ------------------------------------------------------------------
@@ -250,7 +256,12 @@ class MeasureManager(QObject):
         self._engine_saw_event = False
         self._engine_fallback_used = False
         self._user_quit = False
-        self._cal_retries_left = CAL_AUTO_RETRIES
+        # The user can raise this for an ageing instrument (Settings → Beta);
+        # clamp so a bad value can't disable retries or loop for ever.
+        want = params.cal_auto_retries
+        self._cal_auto_retries = (CAL_AUTO_RETRIES if want is None
+                                  else max(0, min(int(want), CAL_AUTO_RETRIES_MAX)))
+        self._cal_retries_left = self._cal_auto_retries
 
         def _on_finish(code: int) -> None:
             self._pending_post_retry_key = None
@@ -331,11 +342,11 @@ class MeasureManager(QObject):
 
         if self._cal_retries_left <= 0:
             log.warning("calibration failed after %d attempts: %s",
-                        CAL_AUTO_RETRIES + 1, detail or "unknown")
+                        self._cal_auto_retries + 1, detail or "unknown")
             on_line(tr(
                 "[Engine] Calibration did not succeed after {total} attempts. "
                 "Stopping here so you can check the instrument."
-            ).format(total=CAL_AUTO_RETRIES + 1))
+            ).format(total=self._cal_auto_retries + 1))
             self.inst_init_failed.emit(detail)
             # Sent as a COMMAND, not a key: this is our decision, not the user's,
             # so it must not mark the run as user-aborted — that flag would stop
@@ -344,15 +355,15 @@ class MeasureManager(QObject):
             return
 
         self._cal_retries_left -= 1
-        attempt = CAL_AUTO_RETRIES - self._cal_retries_left
+        attempt = self._cal_auto_retries - self._cal_retries_left
         log.info("calibration failed (%s) — automatic retry %d/%d",
-                 detail or "unknown", attempt, CAL_AUTO_RETRIES)
+                 detail or "unknown", attempt, self._cal_auto_retries)
         on_line(tr(
             "[Engine] Calibration didn't succeed ({detail}). Trying again "
             "automatically — attempt {attempt} of {total}. Leave the instrument "
             "where it is."
         ).format(detail=detail or tr("no reason given"),
-                 attempt=attempt, total=CAL_AUTO_RETRIES))
+                 attempt=attempt, total=self._cal_auto_retries))
         self.calibration_retrying.emit(attempt, CAL_AUTO_RETRIES)
         # A pause gives a sagging USB rail time to recover; a single-shot timer
         # keeps the UI responsive instead of blocking on a sleep.
@@ -578,7 +589,7 @@ class MeasureManager(QObject):
 
         elif kind in ("cal_done", "cal_message"):
             if kind == "cal_done":
-                self._cal_retries_left = CAL_AUTO_RETRIES
+                self._cal_retries_left = self._cal_auto_retries
                 self.calibration_done.emit()
 
         elif kind == "done":

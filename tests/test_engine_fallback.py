@@ -319,3 +319,57 @@ def test_the_automatic_quit_still_allows_the_argyll_fallback(tmp_path):
     assert mgr._user_quit is False
     _finish(runner, 1)
     assert len(runner.runs) == 2 and runner.runs[1]["tool"] == "chartread"
+
+
+# --- configurable retry count (mavtop: "make it 10") ----------------------
+
+def _start_engine_run_retries(tmp_path, retries):
+    """Like _start_engine_run but with an explicit per-run retry budget."""
+    runner = _RecordingRunner()
+    mgr = MeasureManager(runner)
+    mgr._guided_state = "disabled"
+    ti1 = tmp_path / "chart.ti1"
+    ti1.write_text("")
+    params = MeasureParams(ti1_path=ti1,
+                           engine_helper=Path("/fake/chromiq-chartread"),
+                           cal_auto_retries=retries)
+    mgr.start(params, [].append, [].append)
+    return mgr, runner
+
+
+def test_retry_count_follows_the_setting(tmp_path):
+    """mavtop's request: raising the setting raises the number of attempts."""
+    mgr, runner = _start_engine_run_retries(tmp_path, 10)
+    for _ in range(11):                       # 10 retries + the final give-up
+        _feed_engine(mgr, {"event": "error", "kind": "cal_failed",
+                           "detail": "misread"}, [])
+        _drain_timers()
+    writes = "".join(runner.writes)
+    assert writes.count('"retry"') == 10
+    assert '{"cmd": "quit"}' in writes
+
+
+def test_retries_can_be_turned_off(tmp_path):
+    """0 = no retries: report the failure immediately and end the run."""
+    mgr, runner = _start_engine_run_retries(tmp_path, 0)
+    failures: list[str] = []
+    mgr.inst_init_failed.connect(failures.append)
+    _feed_engine(mgr, {"event": "error", "kind": "cal_failed",
+                       "detail": "misread"}, [])
+    _drain_timers()
+    assert '"retry"' not in "".join(runner.writes)
+    assert failures == ["misread"]
+
+
+def test_an_absurd_setting_is_clamped(tmp_path):
+    """A value past the ceiling must not let the run loop for ever."""
+    from workflow.measure_manager import CAL_AUTO_RETRIES_MAX
+    mgr, runner = _start_engine_run_retries(tmp_path, 9999)
+    assert mgr._cal_auto_retries == CAL_AUTO_RETRIES_MAX
+
+
+def test_default_budget_when_unset(tmp_path):
+    """No per-run value → the built-in default, so old callers are unaffected."""
+    from workflow.measure_manager import CAL_AUTO_RETRIES
+    mgr, runner, lines, finished = _start_engine_run(tmp_path)  # sets no retries
+    assert mgr._cal_auto_retries == CAL_AUTO_RETRIES

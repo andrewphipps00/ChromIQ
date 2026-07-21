@@ -1,5 +1,15 @@
 # Changelog
 
+## v3.14.3
+
+- **The number of automatic calibration retries is now adjustable (mavtop).**
+  ChromIQ retries a failed instrument calibration a few times before giving up,
+  which rescues an ageing instrument whose lamp needs a couple of strikes to burn
+  in. That count is now a setting (Settings → Beta → “Retry a failed calibration
+  up to…”), so an old i1Pro that wants ten attempts can have them. Default is 3
+  (four tries in total); set it to 0 to turn retries off. It only affects the
+  ChromIQ chart-reading engine.
+
 ## v3.14.2
 
 - **A failed calibration no longer leaves measuring stuck (mavtop).** When the

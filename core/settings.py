@@ -162,6 +162,11 @@ DEFAULTS: dict[str, Any] = {
     # (macOS Bluetooth/debug ports, Linux rfcomm) so a USB spectro connects
     # nearly instantly. Default on; real USB-serial adapters are never excluded.
     "fast_instrument_connect":   True,
+    # Automatic calibration retries (#126, mavtop): how many extra times the
+    # chart-reading engine retries a failed instrument calibration before giving
+    # up. An ageing i1Pro's lamp can need several strikes to burn in, so a higher
+    # value rescues instruments that fail the first attempt. 3 = 4 tries in total.
+    "cal_auto_retries":          3,
     # Measurement report (#126, Knut): when True, ChromIQ builds and saves a
     # dated accuracy report (mean/worst ΔE, worst patches, white/black) to the
     # run's reports/ folder after every measurement, so reports of the same
