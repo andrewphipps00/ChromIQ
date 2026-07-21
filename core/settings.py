@@ -152,12 +152,12 @@ DEFAULTS: dict[str, Any] = {
     # chromiq-gammap helper running Argyll's real gamut mapper (bit-exact,
     # slower). Falls back to "fast" when the helper binary isn't present.
     "gammap_mode":               "fast",
-    # Chart-reading engine for the Measure tab (#126): "argyll" = stock
-    # chartread over a PTY (the classic path); "chromiq" = the bundled
-    # chromiq-chartread fork (JSON protocol, per-strip autosave, direct
-    # strip jumps, live patch feedback). Falls back to "argyll" when the
-    # helper binary isn't present.
-    "chartread_engine":          "argyll",
+    # Chart-reading engine for the Measure tab (#126): "chromiq" = the bundled
+    # chromiq-chartread fork (JSON protocol, per-strip autosave, direct strip
+    # jumps, live patch feedback) — the default from v3.14.0; "argyll" = stock
+    # chartread over a PTY (the classic path). Falls back to "argyll" at runtime
+    # when the helper binary isn't present.
+    "chartread_engine":          "chromiq",
     # Faster instrument connection: skip Argyll's slow phantom-serial-port probe
     # (macOS Bluetooth/debug ports, Linux rfcomm) so a USB spectro connects
     # nearly instantly. Default on; real USB-serial adapters are never excluded.
@@ -481,7 +481,7 @@ def thresholds_for_combo(
 # Bump when a shipped default changes in a way that must reach users who have
 # the OLD default persisted. Settings → Save writes every key, so a stored
 # value otherwise pins a user to the old behaviour for good.
-SETTINGS_SCHEMA = 10
+SETTINGS_SCHEMA = 11
 
 # key → the old default(s) it must no longer be stuck on. Only a stored value
 # EQUAL to one of the old defaults is dropped (so it falls through to the new
@@ -552,6 +552,8 @@ class AppSettings:
             dropped.append("patch_read_warn_de (raised value now too high)")
         if self._migrate_save_report_default():
             dropped.append("save_measurement_report (now on by default)")
+        if self._migrate_chartread_engine_default():
+            dropped.append("chartread_engine (ChromIQ engine now the default)")
         self._qs.setValue("settings_schema", SETTINGS_SCHEMA)
         if dropped:
             log.info("Settings migrated to schema %d; dropped stale defaults: %s",
@@ -571,6 +573,18 @@ class AppSettings:
                                   and raw.strip().lower() in ("true", "1", "yes"))
         if not is_true:
             self._qs.remove("save_measurement_report")
+            return True
+        return False
+
+    def _migrate_chartread_engine_default(self) -> bool:
+        """schema 11 (v3.14.0): the ChromIQ chart-reading engine (#126) is now the
+        default. A stored echo of the old ``"argyll"`` default is dropped so it
+        resolves to the new ``"chromiq"``; any other stored value (an explicit
+        choice) is left untouched. Runtime still falls back to argyll when the
+        helper binary is missing."""
+        raw = self._qs.value("chartread_engine", None)
+        if isinstance(raw, str) and raw.strip().lower() == "argyll":
+            self._qs.remove("chartread_engine")
             return True
         return False
 
