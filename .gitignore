@@ -66,3 +66,10 @@ assets/app_icon.ico
 
 # Frozen schema-1 test fixture (#127) — must override the binary ignores above
 !tests/golden/project_v1/**
+
+# Accidental test-scratch output at repo root
+/dialog_out/
+/dlg2/
+/mxfdlg/
+/mxf_*.ti3
+/scratch_*.py
