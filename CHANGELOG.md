@@ -1,5 +1,24 @@
 # Changelog
 
+## v3.13.12-beta.33
+
+- **Measurement Report — add many measurements at once (Knut).** The picker is
+  multi-select now, and several loose measurements in the same folder each add as
+  their own trend point (before, only one per folder was taken). Works for
+  ChromIQ .ti3 and i1Profiler .mxf / .txt / .cxf, mixed.
+- **Measurement Report — more accurate colour for imported measurements (Knut).**
+  When there's no design file, the reference derived from the device values was
+  compared under the wrong white point, inflating every imported measurement's
+  ΔE by about 1.5. It's now adapted to the same white point as the measurement,
+  so the figures are correct (a white patch reads neutral). Saved reports refresh
+  automatically.
+- **Clip border — the text fills the sides too (Knut).** Auto-sized clip text
+  reached the top and bottom edges but stopped short on the left/right; it now
+  grows to fill the strip's width up to the same "Text distance from edge", so
+  short records use the whole strip.
+- **Build Profile — the Load tooltip now names the i1Profiler formats** it
+  accepts (.mxf / .txt / .cxf).
+
 ## v3.13.12-beta.32
 
 - **Measurement Report now takes i1Profiler measurements directly (Knut).** The
