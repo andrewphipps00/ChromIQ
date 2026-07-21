@@ -30,9 +30,6 @@ and part of the stable release. Highlights since v3.13.11:
   clip border — auto-filled record strip, a 180° flip so a right-side border
   reads the right way up, text that now reaches the edges on every side — plus
   instrument-margin handling and an editable example table.
-- **Profiles for CMYK and CMYK+N printers.** End-to-end support for printers
-  driven by their inks, including a built-in profile engine for six inks and
-  beyond, N-channel profcheck and a gamut helper.
 - **Tidier working folders.** Each profile now keeps its reports, exports and
   tool intermediates in their own sub-folders; older projects are migrated
   automatically the first time you open them.
