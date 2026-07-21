@@ -454,7 +454,9 @@ def _vwordmark(extra_lines: list[str], width_px: int, height_px: int,
         # Total stacked height: wordmark line + each extra line at its own size.
         stack_h = size * 1.25 + (len(extra_lines)
                                  * (esize if esize else size) * 1.25)
-        if stack_h <= width_px * 0.92 and widest <= height_px * 0.95:
+        # Fill (almost) the full clip length: the area already keeps the text-edge
+        # distance from the page edge, so don't inset a second time (Knut).
+        if stack_h <= width_px * 0.92 and widest <= height_px * 0.99:
             break
         size = int(size * 0.9)
         if size <= 10:
@@ -514,7 +516,11 @@ def _vtext(text: str, font_family: str, width_px: int, height_px: int,
         line_h = size * 1.2
         block_h = line_h * len(lines)
         widest = max((d.textlength(ln, font=f) for ln in lines), default=0)
-        if block_h <= width_px * 0.9 and widest <= height_px * 0.95:
+        # The clip AREA already sits the clip text-edge distance in from the page
+        # edge (geometry.clip_area_mm), so fill (almost) its full length before
+        # shrinking — a second inset here made the text stop well short of the
+        # text-edge limit the user set (Knut). A 1% hair guards glyph overshoot.
+        if block_h <= width_px * 0.9 and widest <= height_px * 0.99:
             break
         size = int(size * 0.9)
         if size <= 8:

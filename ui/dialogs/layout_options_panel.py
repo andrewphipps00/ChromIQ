@@ -1600,9 +1600,9 @@ class LayoutOptionsPanel(QWidget):
             return f"{tr(label_key)}: {'_' * n}"
         header = (tr("ChromIQ Chart {patchcount} RGB target on {paper}") + " - "
                   + tr("PRINT: borderless, 100% size (no scaling), color management OFF"))
-        row1 = f"{field('date', 24)} {field('printer', 48)} {field('ink set', 48)}"
-        row2 = (f"{field('profile name', 37)} {field('paper type', 36)} "
-                f"{field('driver/resolution', 24)}")
+        row1 = f"{field('date', 24)} {field('printer', 53)} {field('ink set', 53)}"
+        row2 = (f"{field('profile name', 43)} {field('paper type', 36)} "
+                f"{field('driver/resolution', 29)}")
         return "\n".join([header, " ", row1, " ", row2])
 
     def _load_example_clip_table(self) -> None:

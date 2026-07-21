@@ -79,6 +79,20 @@ def test_new_line_insert_available_only_for_multiline(app):
     assert not any("New line" in t for t in actions(panel.insert_token_btn))
 
 
+def test_clip_text_fills_to_edge_distance():
+    """A long clip line fills (almost) the full clip length before shrinking —
+    the clip area already keeps the text-edge distance from the page edge, so the
+    renderer must not inset a second time and stop the text well short (Knut)."""
+    from workflow.layout_engine.raster import _vtext
+    H = 2000
+    line = "profile name: " + "_" * 43 + "  paper type: " + "_" * 36
+    overlay = _vtext(line, "Inter", 300, H)
+    bbox = overlay.getbbox()               # black-ink bounds; text reads up strip
+    assert bbox is not None
+    span = bbox[3] - bbox[1]               # extent along the clip length
+    assert span > 0.96 * H                 # reaches near the area edge (was ≤0.95)
+
+
 def test_clip_text_keeps_interior_blank_lines():
     """Blank lines between text lines survive (writing space for hand-filled
     fields); leading/trailing blanks are trimmed (Knut beta.28)."""
