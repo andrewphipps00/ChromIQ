@@ -689,10 +689,15 @@ class MeasurementReportDialog(QDialog):
             return ("dir", str(ti3.parent))
         return ("file", str(ti3))
 
-    def _append_source(self, ti3: Path) -> bool:
+    def _append_source(self, ti3: Path, origin: "Path | None" = None) -> bool:
         """Add one measurement to the source list (no repaint). Returns False if it
         is already present or has no runs. Raises on a gather error, so a batch add
-        can report which files failed."""
+        can report which files failed.
+
+        *origin* is the file the user actually picked (the same as *ti3* for a
+        ChromIQ .ti3, but the original .mxf/.txt/.cxf when *ti3* is a temp
+        conversion). The report is saved next to the origin, never the temp folder
+        (Knut)."""
         key = self._source_key(ti3)
         if any(s.get("key") == key for s in self._sources):
             return False
@@ -700,16 +705,16 @@ class MeasurementReportDialog(QDialog):
         if not runs:
             return False
         self._sources.append({"key": key, "name": name, "dir": ti3.parent,
-                              "ti3": ti3, "runs": runs})
+                              "ti3": ti3, "origin": Path(origin or ti3), "runs": runs})
         if self._ti3 is None:
             self._ti3 = ti3
         return True
 
-    def _add_source(self, ti3: Path) -> None:
+    def _add_source(self, ti3: Path, origin: "Path | None" = None) -> None:
         """Add a single measurement and repaint (used when opening the report on
         one file)."""
         try:
-            added = self._append_source(ti3)
+            added = self._append_source(ti3, origin)
         except Exception as exc:  # noqa: BLE001
             self._view.setHtml(self._error_html(str(exc)))
             return
@@ -755,7 +760,7 @@ class MeasurementReportDialog(QDialog):
         added, failed = 0, []
         for path in paths:
             try:
-                if self._append_source(self._as_ti3(Path(path))):
+                if self._append_source(self._as_ti3(Path(path)), origin=Path(path)):
                     added += 1
             except Exception as exc:  # noqa: BLE001
                 failed.append(f"{Path(path).name} — {exc}")
@@ -848,11 +853,20 @@ class MeasurementReportDialog(QDialog):
              corner_metrics, None, 1, False),
         ]
 
+    def _anchor_dir(self) -> Path:
+        """The folder the PDF and Reveal default to: the folder of the FIRST
+        source's ORIGINAL file — a ChromIQ run folder, or the user's own folder for
+        an imported measurement — never the temp folder an i1Profiler file is
+        converted into (Knut)."""
+        if self._sources:
+            return self._sources[0]["origin"].parent
+        return self._ti3.parent if self._ti3 else Path.cwd()
+
     def _profile_root(self) -> Path:
         """The profile's project folder (``<project>/runs/<id>`` → ``<project>``),
-        or the run folder itself for a browsed external ``.ti3`` that isn't in a
+        or the folder itself for a browsed/imported measurement that isn't in a
         ChromIQ project layout."""
-        run_dir = self._ti3.parent if self._ti3 else Path.cwd()
+        run_dir = self._anchor_dir()
         if run_dir.parent.name == "runs":
             return run_dir.parents[1]
         return run_dir
@@ -860,9 +874,10 @@ class MeasurementReportDialog(QDialog):
     def _report_dir(self) -> Path:
         """Where a PDF is saved (Knut): an all-runs report belongs to the whole
         profile, so it goes in a ``reports`` folder next to ``runs/``; a single-run
-        report goes in that run's own ``reports`` folder."""
+        report goes in that run's own ``reports`` folder. For an imported
+        measurement it goes in a ``reports`` folder next to the file itself."""
         from core.file_manager import reports_subdir
-        run_dir = self._ti3.parent
+        run_dir = self._anchor_dir()
         if self._all_runs_check.isChecked() and run_dir.parent.name == "runs":
             return reports_subdir(self._profile_root())
         return reports_subdir(run_dir)
@@ -872,7 +887,7 @@ class MeasurementReportDialog(QDialog):
         the reports folder and open saved PDFs (Knut)."""
         from PyQt6.QtCore import QUrl
         from PyQt6.QtGui import QDesktopServices
-        if self._ti3:
+        if self._sources or self._ti3:
             QDesktopServices.openUrl(QUrl.fromLocalFile(str(self._profile_root())))
 
     def _export_pdf(self) -> None:
@@ -1045,12 +1060,18 @@ class MeasurementReportDialog(QDialog):
         from workflow.measurement_report import report_scope
         sc = report_scope(runs)
         names = list(dict.fromkeys(p["name"] for p in sc["profiles"]))  # de-dup, ordered
-        units = [n + ("," if i < len(names) - 1 else "")
-                 for i, n in enumerate(names)]
         d0, d1 = sc["date_range"]
         n = sc["total"]
-        units.append("  " + tr("{n} measurement run").format(n=n) if n == 1
-                     else "  " + tr("{n} measurement runs").format(n=n))
+        # Listing every name gets unwieldy once there are many (e.g. a folder of
+        # imported measurements); past a handful, drop the names and let the run
+        # count + date range speak for the scope (Knut).
+        if len(names) <= 4:
+            units = [nm + ("," if i < len(names) - 1 else "")
+                     for i, nm in enumerate(names)]
+            units.append("  " + (tr("{n} measurement run").format(n=n) if n == 1
+                                  else tr("{n} measurement runs").format(n=n)))
+        else:
+            units = [tr("{n} measurement runs").format(n=n)]
         units[-1] += f" ({d0} – {d1})"
         # Trailing space on the name units so they don't run together.
         return [(u + " ") if u.endswith(",") else u for u in units]

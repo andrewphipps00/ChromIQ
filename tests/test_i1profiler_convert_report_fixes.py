@@ -98,6 +98,30 @@ def test_report_as_ti3_converts_i1profiler(qapp, settings, tmp_path, monkeypatch
     assert seen["src"] == txt
 
 
+def test_report_pdf_anchors_on_origin_not_temp(qapp, tmp_path, monkeypatch):
+    """Imported measurements convert into a temp folder, but the PDF / Reveal must
+    default to the user's ORIGINAL folder, never the temp one (Knut)."""
+    from ui.dialogs.measurement_report_dialog import MeasurementReportDialog as M
+
+    monkeypatch.setattr(
+        "workflow.measurement_report.list_project_reports", lambda d: [])
+    origin = tmp_path / "myfolder" / "Epson_2026-01-06.txt"
+    origin.parent.mkdir(parents=True)
+    origin.write_text("x")
+    temp_ti3 = tmp_path / "chromiq_report_xyz" / "Epson_2026-01-06.ti3"
+    temp_ti3.parent.mkdir()
+    temp_ti3.write_text("y")
+
+    host = types.SimpleNamespace(_sources=[], _ti3=None)
+    host._source_key = types.MethodType(M._source_key, host)
+    host._gather_runs = lambda t: (t.stem, [{"created": "2026-01-01"}])
+    types.MethodType(M._append_source, host)(temp_ti3, origin=origin)
+
+    anchor = types.MethodType(M._anchor_dir, host)()
+    assert anchor == origin.parent                 # user's folder…
+    assert anchor != temp_ti3.parent               # …not the temp conversion folder
+
+
 def test_report_as_ti3_raises_on_bad_file(qapp, settings, tmp_path, monkeypatch):
     """_as_ti3 raises on a bad file so the batch adder can list what failed."""
     from ui.dialogs.measurement_report_dialog import MeasurementReportDialog
