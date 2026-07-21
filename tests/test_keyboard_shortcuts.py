@@ -126,3 +126,20 @@ def test_keyboard_help_icon_paints(qapp):
     from ui.dialogs.welcome_dialog import WorkflowIcon
 
     assert not WorkflowIcon("keyboard_shortcuts").grab().isNull()
+
+
+# --- accessibility audit: no stray button focus on tab entry ----------------
+
+def test_no_stray_button_focus_on_tab_entry(win, qapp):
+    """The original bug: a button caught the initial focus when a tab opened, so
+    the space bar activated it. _on_tab_changed clears that (deferred). Verify no
+    tab lands focus on a button."""
+    from PyQt6.QtTest import QTest
+    from PyQt6.QtWidgets import QAbstractButton
+
+    for i in range(win._tabs.count()):
+        win._tabs.setCurrentIndex(i)
+        QTest.qWait(220)                     # let the 0/40/150 ms clear passes fire
+        fw = qapp.focusWidget()
+        assert not isinstance(fw, QAbstractButton), (
+            f"tab {i}: a {type(fw).__name__} holds focus — space bar would fire it")
