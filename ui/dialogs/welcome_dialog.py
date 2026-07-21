@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from PyQt6.QtCore import QRect, QSize, Qt, pyqtSignal
+from PyQt6.QtCore import QRect, QRectF, QSize, Qt, pyqtSignal
 from PyQt6.QtGui import (
     QColor, QFont, QFontMetrics, QFontMetricsF, QPainter, QPaintEvent, QPen,
 )
@@ -1207,21 +1207,28 @@ class WorkflowIcon(QWidget):
         elif self._key == "keyboard_shortcuts":
             # A keyboard: outlined body with a grid of small keys and one accent
             # key (the ⌘ modifier), matching the "modifier-first" shortcut rule.
+            # The key size is derived from the space INSIDE the frame so the grid
+            # always fits with margin (never spilling over the bottom edge).
+            bx, by, bw, bh = s * 0.12, s * 0.28, s * 0.76, s * 0.44
             p.setBrush(Qt.BrushStyle.NoBrush)
             p.setPen(QPen(fg, stroke))
-            bx, by, bw, bh = int(s * 0.12), int(s * 0.30), int(s * 0.76), int(s * 0.40)
-            p.drawRoundedRect(bx, by, bw, bh, 6, 6)
-            k = int(s * 0.10)                 # key size
-            gap = int(s * 0.045)
-            ox, oy = bx + gap, by + gap
-            for row in range(3):
-                for col in range(5):
+            p.drawRoundedRect(QRectF(bx, by, bw, bh), 6, 6)
+            cols, rows = 5, 3
+            inset, gap = s * 0.055, s * 0.028
+            k = min((bw - 2 * inset - (cols - 1) * gap) / cols,
+                    (bh - 2 * inset - (rows - 1) * gap) / rows)   # fits both axes
+            grid_w = cols * k + (cols - 1) * gap
+            grid_h = rows * k + (rows - 1) * gap
+            ox = bx + (bw - grid_w) / 2                            # centre the grid
+            oy = by + (bh - grid_h) / 2
+            p.setPen(QPen(fg, 1.4))
+            for row in range(rows):
+                for col in range(cols):
                     kx, ky = ox + col * (k + gap), oy + row * (k + gap)
                     # Accent the bottom-left key (stands in for ⌘).
-                    p.setBrush(accent if (row == 2 and col == 0)
+                    p.setBrush(accent if (row == rows - 1 and col == 0)
                                else Qt.BrushStyle.NoBrush)
-                    p.setPen(QPen(fg, 1.4))
-                    p.drawRoundedRect(kx, ky, k, k, 2, 2)
+                    p.drawRoundedRect(QRectF(kx, ky, k, k), 2, 2)
 
         p.end()
 
