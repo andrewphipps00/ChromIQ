@@ -1,5 +1,21 @@
 # Changelog
 
+## v3.13.12-beta.30
+
+- **Clip border — the writing lines fill the whole strip now (Knut).** The clip
+  text used to shrink and stop well short of the page's top and bottom edges. It
+  now runs right down to the clip text-edge distance you set before it reduces
+  the size, so a hand-fill record uses the full length of the strip.
+- **Clip border — "Flip 180°" (Knut).** A new checkbox next to the clip Side.
+  A clip on the Right side is printed upside-down by default so it reads the
+  right way up from that side of the sheet; tick this to turn any clip the other
+  way — e.g. so a right-side clip reads the same direction as the info line
+  stamped along the bottom. Works on the left side too. Saves as a default and
+  inside a preset.
+- **Clip border — "Example custom table" tweaks (Knut).** The ready-made record
+  now reads "ChromIQ Chart …" (not "ArgyllCMS …"), and the fill-in lines were
+  re-tuned (Profile name is longer).
+
 ## v3.13.12-beta.29
 
 - **Space bar no longer trips a button you didn't mean to press (Knut).** When a
