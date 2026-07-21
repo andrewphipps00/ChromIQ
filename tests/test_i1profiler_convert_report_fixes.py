@@ -98,7 +98,8 @@ def test_report_as_ti3_converts_i1profiler(qapp, settings, tmp_path, monkeypatch
     assert seen["src"] == txt
 
 
-def test_report_as_ti3_reports_conversion_error(qapp, settings, tmp_path, monkeypatch):
+def test_report_as_ti3_raises_on_bad_file(qapp, settings, tmp_path, monkeypatch):
+    """_as_ti3 raises on a bad file so the batch adder can list what failed."""
     from ui.dialogs.measurement_report_dialog import MeasurementReportDialog
 
     def boom(src, argyll, out_dir):
@@ -106,10 +107,46 @@ def test_report_as_ti3_reports_conversion_error(qapp, settings, tmp_path, monkey
 
     monkeypatch.setattr(
         "workflow.reference_convert.convert_i1profiler_measurement", boom)
-    shown = {}
-    host = types.SimpleNamespace(
-        _settings=settings,
-        _view=types.SimpleNamespace(setHtml=lambda h: shown.setdefault("html", h)),
-        _error_html=lambda msg: f"<err>{msg}</err>")
-    out = MeasurementReportDialog._as_ti3(host, tmp_path / "bad.txt")
-    assert out is None and "not an i1Profiler file" in shown["html"]
+    host = types.SimpleNamespace(_settings=settings)
+    with pytest.raises(ValueError):
+        MeasurementReportDialog._as_ti3(host, tmp_path / "bad.txt")
+
+
+# --- Knut beta.31/.32 follow-up: many measurements from one folder ----------
+
+def test_source_key_standalone_by_file_project_by_folder(qapp, tmp_path, monkeypatch):
+    """Standalone/imported measurements key by FILE (so several in one folder each
+    add); a ChromIQ project keys by FOLDER (all its runs = one source)."""
+    from ui.dialogs.measurement_report_dialog import MeasurementReportDialog as M
+
+    host = types.SimpleNamespace()
+    key = types.MethodType(M._source_key, host)
+    ti3 = tmp_path / "m.ti3"
+    ti3.write_text("x")
+    monkeypatch.setattr(
+        "workflow.measurement_report.list_project_reports", lambda d: [])
+    assert key(ti3) == ("file", str(ti3))
+    monkeypatch.setattr(
+        "workflow.measurement_report.list_project_reports",
+        lambda d: [tmp_path / "r.json"])
+    assert key(ti3) == ("dir", str(tmp_path))
+
+
+def test_several_loose_ti3_in_one_folder_each_add(qapp, tmp_path, monkeypatch):
+    """The bug: two .ti3 in the same folder collapsed to one. Now each adds; the
+    same file twice still dedups."""
+    from ui.dialogs.measurement_report_dialog import MeasurementReportDialog as M
+
+    monkeypatch.setattr(
+        "workflow.measurement_report.list_project_reports", lambda d: [])
+    a = tmp_path / "m1.ti3"; a.write_text("x")
+    b = tmp_path / "m2.ti3"; b.write_text("y")
+    host = types.SimpleNamespace(_sources=[], _ti3=None)
+    host._source_key = types.MethodType(M._source_key, host)
+    host._gather_runs = lambda ti3: (ti3.stem, [{"created": "2026-01-01"}])
+    append = types.MethodType(M._append_source, host)
+    assert append(a) is True
+    assert append(b) is True          # same folder, different file → both added
+    assert append(a) is False         # same file again → deduped
+    assert len(host._sources) == 2
+    assert {s["name"] for s in host._sources} == {"m1", "m2"}

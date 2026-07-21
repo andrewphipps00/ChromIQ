@@ -27,7 +27,7 @@ from ui.styles import BG_INPUT, BORDER, SPEC_GREEN, TAB_COLORS, TEXT_MAIN
 from ui.tab_header import dialog_masthead
 from ui.theme import resolve_mode
 from ui.tooltip_button import TooltipButton
-from ui.widgets import open_file_dialog
+from ui.widgets import open_files_dialog
 
 log = get_logger(__name__)
 
@@ -456,10 +456,11 @@ class MeasurementReportDialog(QDialog):
         add_row.addWidget(TooltipButton(
             tr("Adding profiles' measurements"),
             tr("Build the report from one or more profiles' measurements.\n\n"
-               "Add Profile's Measurements… — pick any measurement file — a "
-               ".ti3, or an i1Profiler measurement (.mxf, .txt or .cxf) which "
-               "ChromIQ converts for you. From a ChromIQ profile's .ti3 it "
-               "gathers EVERY saved measurement of that "
+               "Add Profile's Measurements… — pick one or more measurement "
+               "files (select several at once) — .ti3, or i1Profiler "
+               "measurements (.mxf, .txt or .cxf) which ChromIQ converts for "
+               "you. From a ChromIQ profile's .ti3 it gathers EVERY saved "
+               "measurement of that "
                "profile (all its runs) and adds the profile to the list below. "
                "You can add as many profiles as you like.\n\n"
                "Where the runs come from: a ChromIQ profile lives in its own "
@@ -678,24 +679,43 @@ class MeasurementReportDialog(QDialog):
         name = runs[-1].get("chart") or ti3.stem
         return name, runs
 
+    def _source_key(self, ti3: Path) -> tuple:
+        """Dedup identity for a measurement. A ChromIQ project (saved reports
+        across its runs/) is ONE source per FOLDER — all its runs. A standalone or
+        imported measurement is ONE source per FILE, so several loose measurements
+        in the same folder each add instead of collapsing to one (Knut)."""
+        from workflow.measurement_report import list_project_reports
+        if list_project_reports(ti3.parent):
+            return ("dir", str(ti3.parent))
+        return ("file", str(ti3))
+
+    def _append_source(self, ti3: Path) -> bool:
+        """Add one measurement to the source list (no repaint). Returns False if it
+        is already present or has no runs. Raises on a gather error, so a batch add
+        can report which files failed."""
+        key = self._source_key(ti3)
+        if any(s.get("key") == key for s in self._sources):
+            return False
+        name, runs = self._gather_runs(ti3)
+        if not runs:
+            return False
+        self._sources.append({"key": key, "name": name, "dir": ti3.parent,
+                              "ti3": ti3, "runs": runs})
+        if self._ti3 is None:
+            self._ti3 = ti3
+        return True
+
     def _add_source(self, ti3: Path) -> None:
-        """Add one profile's measurements (a list entry). No-op if that folder is
-        already in the report."""
-        run_dir = ti3.parent
-        if any(s["dir"] == run_dir for s in self._sources):
-            return
+        """Add a single measurement and repaint (used when opening the report on
+        one file)."""
         try:
-            name, runs = self._gather_runs(ti3)
+            added = self._append_source(ti3)
         except Exception as exc:  # noqa: BLE001
             self._view.setHtml(self._error_html(str(exc)))
             return
-        if not runs:
-            return
-        self._sources.append({"name": name, "dir": run_dir, "runs": runs})
-        if self._ti3 is None:
-            self._ti3 = ti3
-        self._report = self._sources[0]["runs"][-1]     # single-run / PDF anchor
-        self._rebuild_from_sources()
+        if added:
+            self._report = self._sources[0]["runs"][-1]     # single-run / PDF anchor
+            self._rebuild_from_sources()
 
     def _rebuild_from_sources(self) -> None:
         """Recompute the history, the profile list and button states, then repaint
@@ -726,22 +746,31 @@ class MeasurementReportDialog(QDialog):
         self._add_source(Path(path))
 
     def _on_add_project(self) -> None:
-        path = open_file_dialog(
-            self, tr("Add a measurement (.ti3, or an i1Profiler .mxf / .txt / .cxf)"),
+        paths = open_files_dialog(
+            self, tr("Add measurements (.ti3, or i1Profiler .mxf / .txt / .cxf)"),
             tr("Measurement data (*.ti3 *.mxf *.txt *.cxf);;All files (*)"),
             extra_path=self._settings.get("custom_output_path", ""))
-        if not path:
+        if not paths:
             return
-        ti3 = self._as_ti3(Path(path))
-        if ti3 is not None:
-            self._add_source(ti3)
+        added, failed = 0, []
+        for path in paths:
+            try:
+                if self._append_source(self._as_ti3(Path(path))):
+                    added += 1
+            except Exception as exc:  # noqa: BLE001
+                failed.append(f"{Path(path).name} — {exc}")
+        if added:
+            self._report = self._sources[0]["runs"][-1]
+            self._rebuild_from_sources()
+        if failed and not added:
+            self._view.setHtml(self._error_html(
+                tr("Could not add these measurements:") + "\n" + "\n".join(failed)))
 
-    def _as_ti3(self, src: Path) -> "Path | None":
+    def _as_ti3(self, src: Path) -> Path:
         """A .ti3 is used as-is; an i1Profiler measurement (.mxf / .txt / .cxf) is
         converted first — no export step (Knut). Each conversion lands in its own
-        temp folder so several measurements from ONE i1Profiler folder can each be
-        added (the report keys its sources by folder), giving a trend across
-        them."""
+        temp folder. Raises :class:`ReferenceConvertError` on a bad file, so the
+        batch adder can list what failed."""
         from workflow.reference_convert import (convert_i1profiler_measurement,
                                                 is_ti3)
         if is_ti3(src):
@@ -749,13 +778,7 @@ class MeasurementReportDialog(QDialog):
         import tempfile
         out_dir = Path(tempfile.mkdtemp(prefix="chromiq_report_"))
         argyll = self._settings.get("argyll_bin_path", "/Applications/Argyll/bin")
-        try:
-            return convert_i1profiler_measurement(src, argyll, out_dir)
-        except Exception as exc:  # noqa: BLE001
-            self._view.setHtml(self._error_html(
-                tr("Could not read “{name}” as an i1Profiler measurement:\n{err}")
-                .format(name=src.name, err=str(exc))))
-            return None
+        return convert_i1profiler_measurement(src, argyll, out_dir)
 
     def _on_remove_profile(self) -> None:
         rows = sorted((self._profile_list.row(i)
@@ -766,7 +789,7 @@ class MeasurementReportDialog(QDialog):
         if self._sources:
             first = self._sources[0]
             self._report = first["runs"][-1]
-            self._ti3 = first["dir"] / f'{first["name"]}.ti3'
+            self._ti3 = first.get("ti3") or first["dir"] / f'{first["name"]}.ti3'
         else:
             self._report, self._ti3 = None, None
         self._rebuild_from_sources()
