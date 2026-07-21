@@ -96,3 +96,33 @@ def test_cmd_digits_are_bound_for_each_tab(win):
     for i in range(1, win._tabs.count() + 1):
         want = QKeySequence(f"Ctrl+{i}").toString()
         assert want in bound, f"missing tab shortcut {want}"
+
+
+# --- the "Keyboard shortcuts" Help card -------------------------------------
+
+def test_keyboard_help_card_is_registered(qapp):
+    from ui.dialogs.welcome_dialog import WORKFLOWS
+
+    card = next((w for w in WORKFLOWS if w["key"] == "keyboard_shortcuts"), None)
+    assert card is not None and card["kind"] == "shortcuts"
+
+
+def test_keyboard_help_html_is_alphabetical_and_complete(qapp):
+    import re
+
+    from ui.keyboard_help import keyboard_shortcuts_html
+
+    h = keyboard_shortcuts_html()
+    assert "<table" in h
+    # Action cells are the second column; they must be sorted case-insensitively.
+    actions = re.findall(r"<td valign='top'>([^<]+)</td>", h)
+    assert actions == sorted(actions, key=str.lower)
+    # Every documented shortcut family is present.
+    for token in ("⌘1", "⌘,", "⌘T", "F1", "⌘Z"):
+        assert token in h, f"missing shortcut {token} in card"
+
+
+def test_keyboard_help_icon_paints(qapp):
+    from ui.dialogs.welcome_dialog import WorkflowIcon
+
+    assert not WorkflowIcon("keyboard_shortcuts").grab().isNull()

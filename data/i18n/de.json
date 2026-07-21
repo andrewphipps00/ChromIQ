@@ -3175,5 +3175,19 @@
   "ChromIQ Chart {patchcount} RGB target on {paper}": "ChromIQ-Chart {patchcount} RGB-Target auf {paper}",
   "Flip writing direction": "Schreibrichtung umdrehen",
   "Turns the clip-border content 180° from the way it normally reads. A clip border on the Right side is printed upside-down by default, so it reads the right way up when you look at the sheet from that side. If you'd rather it read the same direction as the info line stamped along the bottom of the sheet, tick this. It works on either side, so you can also flip a Left-side clip.": "Dreht den Inhalt des Klemmrands um 180° gegenüber der normalen Leserichtung. Ein Klemmrand auf der rechten Seite wird standardmäßig auf dem Kopf gedruckt, damit er richtig herum liest, wenn du das Blatt von dieser Seite ansiehst. Wenn er lieber in dieselbe Richtung lesen soll wie die Infozeile am unteren Blattrand, setz hier einen Haken. Es funktioniert auf beiden Seiten, du kannst also auch einen Klemmrand links umdrehen.",
-  "Flip 180°": "Um 180° drehen"
+  "Flip 180°": "Um 180° drehen",
+  "Shortcuts for getting around ChromIQ with the keyboard. ": "Kürzel, um sich mit der Tastatur in ChromIQ zu bewegen. ",
+  "On macOS ⌘ is the Command key.": "Auf macOS ist ⌘ die Command-Taste.",
+  "Run the current tab's main action (Generate · Print · Measure · Build · Check)": "Die Hauptaktion des aktuellen Tabs ausführen (Erstellen · Drucken · Messen · Erstellen · Prüfen)",
+  "Open Preferences (Settings)": "Einstellungen öffnen",
+  "Open Help (this window)": "Hilfe öffnen (dieses Fenster)",
+  "While you are measuring a chart, the keyboard drives the instrument instead: Space reads the next patch, ← and → move between strips, Enter confirms and Esc stops. The shortcuts above pause until the measurement is finished.": "Während du ein Chart misst, steuert die Tastatur stattdessen das Messgerät: Leertaste misst das nächste Feld, ← und → wechseln zwischen den Streifen, Enter bestätigt und Esc bricht ab. Die Kürzel oben pausieren, bis die Messung fertig ist.",
+  "Undo — in the chart layout editor": "Rückgängig — im Chart-Layout-Editor",
+  "Redo — in the chart layout editor": "Wiederholen — im Chart-Layout-Editor",
+  "Keyboard shortcuts": "Tastaturkürzel",
+  "Open the Tools menu": "Das Werkzeuge-Menü öffnen",
+  "Every keyboard shortcut in ChromIQ, listed alphabetically.": "Alle Tastaturkürzel in ChromIQ, alphabetisch aufgelistet.",
+  "Shortcut": "Kürzel",
+  "What it does": "Was es macht",
+  "Go to a tab (1 Create Chart · 2 Print Chart · 3 Measure · 4 Build Profile · 5 Check & Refine)": "Zu einem Tab springen (1 Chart erstellen · 2 Chart drucken · 3 Messen · 4 Profil erstellen · 5 Prüfen & Verfeinern)"
 }

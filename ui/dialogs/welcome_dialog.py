@@ -809,6 +809,21 @@ CMYK_N_CARD: dict = {
 WORKFLOWS.append(CMYK_N_CARD)
 
 
+# Keyboard shortcuts — its own card (Knut/Sebastian keyboard-accessibility pass),
+# an alphabetical HTML table sourced from ui.keyboard_help.
+from ui.keyboard_help import (keyboard_card_subtitle,  # noqa: E402
+                              keyboard_card_title)
+
+KEYBOARD_CARD: dict = {
+    "key": "keyboard_shortcuts",
+    "title": keyboard_card_title(),
+    "subtitle": keyboard_card_subtitle(),
+    "steps": [],
+    "kind": "shortcuts",
+}
+WORKFLOWS.append(KEYBOARD_CARD)
+
+
 # ---------------------------------------------------------------------------
 # Painted card icon — geometric placeholder per workflow
 # ---------------------------------------------------------------------------
@@ -1188,6 +1203,25 @@ class WorkflowIcon(QWidget):
             for col, dx, dy in drops:
                 p.setBrush(col)
                 p.drawEllipse(cx + dx - r, cy + dy - r, 2 * r, 2 * r)
+
+        elif self._key == "keyboard_shortcuts":
+            # A keyboard: outlined body with a grid of small keys and one accent
+            # key (the ⌘ modifier), matching the "modifier-first" shortcut rule.
+            p.setBrush(Qt.BrushStyle.NoBrush)
+            p.setPen(QPen(fg, stroke))
+            bx, by, bw, bh = int(s * 0.12), int(s * 0.30), int(s * 0.76), int(s * 0.40)
+            p.drawRoundedRect(bx, by, bw, bh, 6, 6)
+            k = int(s * 0.10)                 # key size
+            gap = int(s * 0.045)
+            ox, oy = bx + gap, by + gap
+            for row in range(3):
+                for col in range(5):
+                    kx, ky = ox + col * (k + gap), oy + row * (k + gap)
+                    # Accent the bottom-left key (stands in for ⌘).
+                    p.setBrush(accent if (row == 2 and col == 0)
+                               else Qt.BrushStyle.NoBrush)
+                    p.setPen(QPen(fg, 1.4))
+                    p.drawRoundedRect(kx, ky, k, k, 2, 2)
 
         p.end()
 
@@ -1643,12 +1677,16 @@ class WelcomeDialog(QDialog):
                                            key=lambda e: e[0].lower()):
                 self._steps_layout.addWidget(self._make_glossary_row(
                     term, definition))
-        elif wf.get("kind") in ("files", "richtext"):
-            # The folder guide (#125/#126) renders as an HTML table (Knut);
-            # the CMYK+N card is a flowing text page.
+        elif wf.get("kind") in ("files", "richtext", "shortcuts"):
+            # The folder guide (#125/#126) and the keyboard-shortcuts card render
+            # as HTML tables (Knut); the CMYK+N card is a flowing text page.
             if wf.get("kind") == "files":
                 from ui.file_guide import file_guide_html
                 body = QLabel(file_guide_html(), self._steps_host)
+                body.setTextFormat(Qt.TextFormat.RichText)
+            elif wf.get("kind") == "shortcuts":
+                from ui.keyboard_help import keyboard_shortcuts_html
+                body = QLabel(keyboard_shortcuts_html(), self._steps_host)
                 body.setTextFormat(Qt.TextFormat.RichText)
             else:
                 body = QLabel(wf["body"], self._steps_host)

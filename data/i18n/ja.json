@@ -3175,5 +3175,19 @@
   "ChromIQ Chart {patchcount} RGB target on {paper}": "ChromIQ Chart {patchcount} RGB target on {paper}",
   "Flip writing direction": "Flip writing direction",
   "Turns the clip-border content 180° from the way it normally reads. A clip border on the Right side is printed upside-down by default, so it reads the right way up when you look at the sheet from that side. If you'd rather it read the same direction as the info line stamped along the bottom of the sheet, tick this. It works on either side, so you can also flip a Left-side clip.": "Turns the clip-border content 180° from the way it normally reads. A clip border on the Right side is printed upside-down by default, so it reads the right way up when you look at the sheet from that side. If you'd rather it read the same direction as the info line stamped along the bottom of the sheet, tick this. It works on either side, so you can also flip a Left-side clip.",
-  "Flip 180°": "Flip 180°"
+  "Flip 180°": "Flip 180°",
+  "Shortcuts for getting around ChromIQ with the keyboard. ": "Shortcuts for getting around ChromIQ with the keyboard. ",
+  "On macOS ⌘ is the Command key.": "On macOS ⌘ is the Command key.",
+  "Run the current tab's main action (Generate · Print · Measure · Build · Check)": "Run the current tab's main action (Generate · Print · Measure · Build · Check)",
+  "Open Preferences (Settings)": "Open Preferences (Settings)",
+  "Open Help (this window)": "Open Help (this window)",
+  "While you are measuring a chart, the keyboard drives the instrument instead: Space reads the next patch, ← and → move between strips, Enter confirms and Esc stops. The shortcuts above pause until the measurement is finished.": "While you are measuring a chart, the keyboard drives the instrument instead: Space reads the next patch, ← and → move between strips, Enter confirms and Esc stops. The shortcuts above pause until the measurement is finished.",
+  "Undo — in the chart layout editor": "Undo — in the chart layout editor",
+  "Redo — in the chart layout editor": "Redo — in the chart layout editor",
+  "Keyboard shortcuts": "Keyboard shortcuts",
+  "Open the Tools menu": "Open the Tools menu",
+  "Every keyboard shortcut in ChromIQ, listed alphabetically.": "Every keyboard shortcut in ChromIQ, listed alphabetically.",
+  "Shortcut": "Shortcut",
+  "What it does": "What it does",
+  "Go to a tab (1 Create Chart · 2 Print Chart · 3 Measure · 4 Build Profile · 5 Check & Refine)": "Go to a tab (1 Create Chart · 2 Print Chart · 3 Measure · 4 Build Profile · 5 Check & Refine)"
 }
