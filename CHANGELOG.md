@@ -1,5 +1,17 @@
 # Changelog
 
+## v3.13.12-beta.32
+
+- **Measurement Report now takes i1Profiler measurements directly (Knut).** The
+  report's "Add measurement" was .ti3-only; it now accepts i1Profiler files —
+  .mxf, .txt or .cxf — and converts them for you, no export step. Add several
+  measurements from one i1Profiler folder to see a trend across them; the
+  instrument and measurement date are read from each file.
+- **Convert i1Profiler → TI3: the output name follows each file you pick
+  (Knut).** Picking a second measurement used to leave the save name stuck on
+  the first file's; it now updates to match the new file (while still keeping a
+  name you typed yourself).
+
 ## v3.13.12-beta.31
 
 - **Keyboard shortcuts (Knut/Sebastian).** ChromIQ now has app-wide shortcuts:
