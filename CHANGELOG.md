@@ -1,5 +1,52 @@
 # Changelog
 
+## v3.14.1
+
+- **Measurement Report — the cube corners are the chart's real ideals again
+  (Knut).** Expected values were being read out of the chart's `.ti2` in the
+  wrong colour space: printtarg records an RGB chart's design colours under D65,
+  but the report compared them in D50. Paper white came out as a bluish
+  Lab 100/-2.3/-19.3 instead of a neutral 100/0/0, and every corner looked
+  invented rather than the textbook ideal. The design reference is now adapted to
+  D50 first, so the corners match the sRGB primaries exactly and every ΔE in the
+  report is correct — this affected **all** reports built against a chart, not
+  just imported ones.
+- **Measurement Report — charts whose `.ti2` stores XYZ 0..1 are read correctly
+  (Knut).** printtarg writes the design colours either 0..100 or normalised
+  0..1, with nothing in the header to tell them apart. The normalised form was
+  taken at face value, making every expected colour 100× too dark (a chart's
+  white read as L\* 9) and its ΔE meaningless. The scale is now detected and
+  normalised.
+- **Measuring falls back to ArgyllCMS when ChromIQ's engine can't use your
+  instrument (mavtop).** v3.14.0 turned the ChromIQ chart-reading engine on by
+  default. If it could not drive a particular meter, measuring simply stopped
+  there — even when ArgyllCMS's own chartread would have worked. ChromIQ now
+  notices a failed start and quietly restarts the run on stock chartread, so you
+  can carry on measuring. It only ever does this before the first reading is
+  taken, never after a strip has been read, and never when you stopped the run
+  yourself.
+- **The calibration prompt now shows what your instrument actually asked for
+  (mavtop).** The engine reports the exact calibration step, but ChromIQ threw
+  that away and showed one generic message for every case. It now passes the
+  instrument's own instruction through, and offers a "Skip this step" button
+  when the instrument says the step is optional.
+- **Fixed unreadable characters in the calibration prompt.** For calibration
+  steps that carry no message of their own — an X-Rite ColorMunki asking for its
+  calibration position, for instance — the measuring engine sent uninitialised
+  data instead of an empty message, which would have appeared as random
+  characters in the dialog.
+- **Clip border — the text no longer runs into the patch area (Knut).** The
+  stacked lines were justified across the full strip width, which pushed the last
+  line's ink past the inner edge and over the patches. Lines now keep their
+  natural spacing and start at the outer text-edge distance, so the block always
+  stays inside the strip. Only the font size grows — until the longest line
+  reaches the text-edge along the strip, or the stack reaches it across.
+- **Clip border — deleting the blank lines between records now visibly tightens
+  the text (Knut).** Because the lines were stretched to fill the strip whatever
+  their number, removing the blank lines between them changed nothing on screen.
+- **Clip border — "Example custom table" is now called "Custom text example"
+  (Knut).**
+
 ## v3.14.0
 
 The chart-reading engine, the Measurement Report and the i1Profiler import

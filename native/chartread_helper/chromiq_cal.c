@@ -58,14 +58,19 @@ inst_code cq_handle_calibrate(inst *p, inst_cal_type calt, inst_cal_cond calc,
 	int doimmediately) {
 	inst_code ev;
 	int usermes = 0;
-	inst_calc_id_type idtype;
+	inst_calc_id_type idtype = inst_calc_id_none;
 	char id[200];
 	int ch;
 
 	a1logd(p->log, 1, "cq_handle_calibrate called\n");
 	p->last_cal_ec = 0;
+	id[0] = '\0';
 
 	for (;;) {
+		/* Cleared every round: a driver that sets no identifier must not leave
+		 * the previous round's — or the stack's — contents behind. */
+		idtype = inst_calc_id_none;
+		id[0] = '\0';
 		ev = p->calibrate(p, &calt, &calc, &idtype, id);
 
 		if ((ev & inst_mask) == inst_ok) {
@@ -99,7 +104,15 @@ inst_code cq_handle_calibrate(inst *p, inst_cal_type calt, inst_cal_cond calc,
 
 		} else {
 			char esc[256];
-			cq_json_escape(esc, sizeof(esc), id);
+			/* The identifier buffer is only filled for conditions that carry
+			 * one — idtype says which, and upstream prints it solely for
+			 * inst_calc_message. Serialising it regardless handed the GUI
+			 * whatever was on the stack: a real ColorMunki asking for its
+			 * calibration position produced "4k2\x9f\x01". Emit it only when
+			 * it means something. */
+			esc[0] = '\0';
+			if (idtype != inst_calc_id_none)
+				cq_json_escape(esc, sizeof(esc), id);
 			cq_emit_raw(
 				"{\"event\":\"cal_required\",\"cond\":\"%s\",\"id\":\"%s\","
 				"\"optional\":%s}",

@@ -1,6 +1,7 @@
 """Tab 3: Measure Chart."""
 from __future__ import annotations
 
+import html
 import json
 import subprocess
 import sys
@@ -873,6 +874,7 @@ class TabMeasure(QWidget):
         self._manager.mode_set_failed.connect(self._on_mode_set_failed)
         # B-status. Non-blocking informational messages
         self._manager.info_message.connect(self._on_info_message)
+        self._manager.engine_fell_back.connect(self._on_engine_fell_back)
         # D. Spot / XY mode defensive handlers
         self._manager.xy_place_sheet.connect(self._on_xy_place_sheet)
         self._manager.spot_ready.connect(self._on_spot_ready)
@@ -3566,6 +3568,19 @@ class TabMeasure(QWidget):
     def _on_mode_set_failed(self, msg: str) -> None:
         self._mode_set_failed_msg = msg
 
+    def _on_engine_fell_back(self, reason: str) -> None:
+        """ChromIQ's engine could not drive the instrument, so the run restarted
+        on stock ArgyllCMS chartread. Say so plainly — the measurement carries on
+        and the user needs no different handling, but they should know which
+        reader they are now using (the live preview stays off, for one)."""
+        self._log.appendPlainText(tr(
+            "[Engine] Switched to ArgyllCMS chartread because ChromIQ's own "
+            "measuring engine could not use your instrument ({reason}). "
+            "Measuring continues as normal; you can turn the ChromIQ engine off "
+            "for good in Settings if this keeps happening."
+        ).format(reason=reason))
+        self._log.ensureCursorVisible()
+
     def _on_info_message(self, category: str, text: str) -> None:
         # Log it and flash a status bar message (non-blocking).
         self._log.appendPlainText(f"[INFO] {text}")
@@ -3824,7 +3839,8 @@ class TabMeasure(QWidget):
         # On the save path chartread will exit on its own once 'y' is sent,
         # and _on_measure_done will then re-enable the UI and auto-arm resume.
 
-    def _on_calibration_prompt(self) -> None:
+    def _on_calibration_prompt(self, cond: str = "", message: str = "",
+                               optional: bool = False) -> None:
         from PyQt6.QtWidgets import QDialog, QDialogButtonBox, QLabel, QVBoxLayout
 
         QApplication.instance().removeEventFilter(self)
@@ -3848,14 +3864,44 @@ class TabMeasure(QWidget):
         msg.setWordWrap(True)
         layout.addWidget(msg)
 
+        # The instrument's own words for this particular step. Stock chartread
+        # prints them; showing them here means the user follows what their meter
+        # actually asked for rather than a generic instruction — which matters
+        # when a meter wants something unusual, like an i1Pro's white tile.
+        if message.strip():
+            own = QLabel(
+                f"<b>{tr('What your instrument asked for:')}</b><br>"
+                f"{html.escape(message.strip())}", dlg)
+            own.setTextFormat(Qt.TextFormat.RichText)
+            own.setWordWrap(True)
+            layout.addWidget(own)
+
+        if optional:
+            note = QLabel(tr(
+                "This calibration step is optional. You can skip it and carry "
+                "on measuring, but your readings may be a little less accurate "
+                "without it."), dlg)
+            note.setWordWrap(True)
+            layout.addWidget(note)
+
         btn_box = QDialogButtonBox()
         ok_btn = btn_box.addButton(tr("Start Calibration"), QDialogButtonBox.ButtonRole.AcceptRole)
         ok_btn.setObjectName("primary")
+        skip_btn = (btn_box.addButton(tr("Skip this step"),
+                                      QDialogButtonBox.ButtonRole.DestructiveRole)
+                    if optional else None)
         btn_box.accepted.connect(dlg.accept)
         layout.addWidget(btn_box)
 
         tint_dialog_primary(dlg, _TAB_COLOR)
-        if dlg.exec() == QDialog.DialogCode.Accepted:
+        result = dlg.exec()
+        if skip_btn is not None and btn_box.clickedButton() is skip_btn:
+            # Only offered when the instrument itself said the step is optional,
+            # so 's' is the answer chartread expects here.
+            self._manager.send_key("s")
+            self._arm_key_watchdog()
+            QApplication.instance().installEventFilter(self)
+        elif result == QDialog.DialogCode.Accepted:
             # "Start Calibration" — any key tells chartread to proceed.
             self._manager.send_key("\r")
             self._arm_key_watchdog()

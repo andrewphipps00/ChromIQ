@@ -31,10 +31,16 @@ from workflow.ti3_analysis import (
 
 log = get_logger(__name__)
 
+# 6: a .ti2 whose design XYZ is normalised 0..1 is rescaled to 0..100, and the
+#    .ti2 DESIGN reference is Bradford-adapted D65→D50 as well. printtarg
+#    writes an RGB chart's design XYZ as the sRGB estimate of the device values,
+#    which is D65, while xyz_to_lab and the measured .ti3 are D50 — so every
+#    expected value was skewed (paper white read as Lab 100/-2.3/-19.3 instead of
+#    a neutral 100/0/0, and the cube corners looked invented rather than ideal).
 # 5: device-derived reference is Bradford-adapted D65→D50, so imported
 #    measurements no longer carry a ~1.5 ΔE white-point error (Knut). Bumping the
 #    schema makes the dialog rebuild older saved reports from their run .ti3.
-REPORT_SCHEMA = 5
+REPORT_SCHEMA = 6
 
 # A cube corner counts as "present" in the chart when the nearest measured patch
 # sits within this many device units (0..100, per channel) of the ideal corner.
@@ -112,15 +118,71 @@ def _clean_instrument(raw: "str | None") -> str:
     return s or "Unknown instrument"
 
 
+# The CIE white points a chart's design XYZ may be expressed under, so the .ti2
+# can say which one it used (its APPROX_WHITE_POINT header).
+_WHITE_D65 = (95.047, 100.0, 108.883)
+_WHITE_D50 = (96.422, 100.0, 82.521)
+
+# Peak Y below which a .ti2's design XYZ can only be the normalised 0..1 form.
+_NORMALISED_XYZ_MAX_Y = 5.0
+
+
+def _design_xyz_to_100(xyz: np.ndarray) -> np.ndarray:
+    """A chart's design XYZ on the 0..100 scale the rest of the report assumes.
+
+    printtarg writes it either 0..100 or normalised 0..1 — both turn up in
+    charts from the same Argyll version — and no header distinguishes them
+    (APPROX_WHITE_POINT is 0..100 either way). A profiling chart always carries
+    a near-white patch, so a peak Y this small can only be the normalised form;
+    left unscaled it made every expected value 100× too dark (Knut)."""
+    if xyz.size:
+        peak = float(np.nanmax(xyz[:, 1]))
+        if 0.0 < peak <= _NORMALISED_XYZ_MAX_Y:
+            return xyz * 100.0
+    return xyz
+
+
+def _design_xyz_is_d65(keywords: "dict[str, str]") -> bool:
+    """True when a .ti2's design XYZ is expressed under D65 rather than D50.
+
+    ``printtarg`` derives an RGB chart's design XYZ from the device values via
+    sRGB, whose white point is **D65**, and records it in APPROX_WHITE_POINT —
+    but :func:`xyz_to_lab` and the measured .ti3 both work in **D50**. Reading
+    the header lets a D50 chart (a spectral/CMYK workflow) pass through
+    untouched while the far more common D65 one gets adapted. Undecidable
+    headers keep the old behaviour rather than guessing."""
+    raw = str(keywords.get("APPROX_WHITE_POINT", "")).strip().strip('"')
+    parts = raw.replace(",", " ").split()
+    if len(parts) != 3:
+        return False
+    try:
+        wp = tuple(float(v) for v in parts)
+    except ValueError:
+        return False
+    if wp[1] <= 0:
+        return False
+    near = lambda ref: sum((a - b) ** 2 for a, b in zip(wp, ref))  # noqa: E731
+    return near(_WHITE_D65) < near(_WHITE_D50)
+
+
 def _reference_labs(ti2_path: Path) -> "dict[str, tuple]":
-    """{SAMPLE_ID: expected Lab} from the chart's .ti2 design XYZ, or {}."""
+    """{SAMPLE_ID: expected Lab} from the chart's .ti2 design XYZ, or {}.
+
+    The design XYZ is adapted to D50 first when the chart recorded it under D65
+    (see :func:`_design_xyz_is_d65`), so the expected colours are the chart's
+    true ideals — a neutral paper white and the textbook cube corners — instead
+    of every value carrying the white-point skew (Knut)."""
     try:
         d = parse_ti3(ti2_path)
     except (Ti3ParseError, OSError):
         return {}
+    xyz = _design_xyz_to_100(np.asarray(d.xyz, dtype=float))
+    adapt = _design_xyz_is_d65(d.keywords)
     out = {}
     for i, sid in enumerate(d.sample_ids):
-        x, y, z = d.xyz[i]
+        x, y, z = xyz[i]
+        if adapt:
+            x, y, z = _bradford_d65_to_d50(x, y, z)
         out[sid] = xyz_to_lab((x / 100.0, y / 100.0, z / 100.0))
     return out
 

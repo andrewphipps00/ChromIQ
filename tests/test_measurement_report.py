@@ -221,3 +221,65 @@ def test_report_scope_clean_no_warnings():
     runs = [{"chart": "P", "created": "2026-01-01T09:00:00",
              "instrument": "i1 Pro", "corners": corners}]
     assert report_scope(runs)["warnings"] == []
+
+
+# --- design-reference colour space & scale (Knut's HP CLJ5550 charts) --------
+# printtarg records an RGB chart's design XYZ from sRGB, i.e. under D65, and
+# writes it either 0..100 or normalised 0..1. Both must land on the same D50
+# reference, or every expected value is skewed (white read as a bluish
+# 100/-2.3/-19.3) or 100x too dark.
+
+_D65_HEADER = 'APPROX_WHITE_POINT "95.106486 100.000000 108.844025"'
+
+def _ti2_d65(scale: float) -> str:
+    """A 3-patch D65 .ti2 whose XYZ is written at *scale* (1.0 or 0.01)."""
+    rows = [(1, "A1", (100, 100, 100), (95.10649, 100.0, 108.8440)),
+            (2, "A2", (0, 0, 0), (0.0, 0.0, 0.0)),
+            (3, "A3", (100, 0, 0), (41.24, 21.26, 1.93))]
+    body = "\n".join(
+        f'{i} "{loc}" {rgb[0]} {rgb[1]} {rgb[2]} '
+        f'{xyz[0] * scale:.6f} {xyz[1] * scale:.6f} {xyz[2] * scale:.6f}'
+        for i, loc, rgb, xyz in rows)
+    return (f"CTI1\n\n{_D65_HEADER}\n\nNUMBER_OF_FIELDS 7\nBEGIN_DATA_FORMAT\n"
+            "SAMPLE_ID SAMPLE_LOC RGB_R RGB_G RGB_B XYZ_X XYZ_Y XYZ_Z\n"
+            f"END_DATA_FORMAT\nNUMBER_OF_SETS 3\nBEGIN_DATA\n{body}\nEND_DATA\n")
+
+
+@pytest.mark.parametrize("scale", [1.0, 0.01], ids=["xyz_0_100", "xyz_0_1"])
+def test_d65_design_reference_expects_a_neutral_white(tmp_path: Path, scale):
+    """The chart's white is the ideal neutral, whichever scale the .ti2 used."""
+    (tmp_path / "c.ti2").write_text(_ti2_d65(scale))
+    (tmp_path / "c.ti3").write_text(_TI3)
+    r = build_report(tmp_path / "c.ti3")
+
+    assert r["reference_source"] == "design"
+    white = next(c for c in r["corners"] if c["name"] == "W")
+    L, a, b = white["expected_lab"]
+    assert L == pytest.approx(100.0, abs=0.5)
+    # Unadapted D65-as-D50 gave a=-2.3, b=-19.3 — the bug Knut spotted.
+    assert a == pytest.approx(0.0, abs=0.5)
+    assert b == pytest.approx(0.0, abs=0.5)
+
+
+def test_normalised_and_full_scale_ti2_agree(tmp_path: Path):
+    """A 0..1 .ti2 and its 0..100 twin produce identical expected values."""
+    out = []
+    for scale in (1.0, 0.01):
+        d = tmp_path / f"s{scale}"
+        d.mkdir()
+        (d / "c.ti2").write_text(_ti2_d65(scale))
+        (d / "c.ti3").write_text(_TI3)
+        out.append(build_report(d / "c.ti3"))
+    a, b = out
+    assert a["de00"]["avg_all"] == pytest.approx(b["de00"]["avg_all"], abs=0.01)
+    for ca, cb in zip(a["corners"], b["corners"]):
+        assert ca["expected_lab"] == pytest.approx(cb["expected_lab"], abs=0.01)
+
+
+def test_d50_design_reference_is_left_alone(chart):
+    """A .ti2 already in D50 (no D65 header) must not be adapted again."""
+    r = build_report(chart)
+    white = next(c for c in r["corners"] if c["name"] == "W")
+    assert white["expected_lab"][0] == pytest.approx(100.0, abs=0.5)
+    assert white["expected_lab"][1] == pytest.approx(0.0, abs=0.5)
+    assert white["expected_lab"][2] == pytest.approx(0.0, abs=0.5)

@@ -107,18 +107,38 @@ def test_clip_text_grows_to_fill_thickness_when_length_has_room():
     assert thickness_span > 0.5 * W                # grows to fill (was ~0.34·W)
 
 
-def test_clip_text_justifies_lines_to_fill_thickness_when_length_bound():
-    """A long line caps the font size (length-bound); the few lines must still
-    spread across the strip thickness so the outer lines reach the text-edge on
-    the sides, not sit packed in the middle (Knut, 8.1 mm → ~4 mm)."""
+_LONG_HEADER = ("ChromIQ Chart 667 RGB target on A4 - PRINT: borderless, "
+                "100% size (no scaling), color management OFF")
+
+
+def test_clip_text_never_crosses_into_the_patch_area():
+    """The stacked lines must stay INSIDE the strip thickness. They used to be
+    justified across it, which pushed the last line's ink over the inner edge and
+    into the patches (Knut: "the text crashes into the patch area")."""
     from workflow.layout_engine.raster import _vtext
     W, H = 260, 3413
-    long_header = ("ChromIQ Chart 667 RGB target on A4 - PRINT: borderless, "
-                   "100% size (no scaling), color management OFF")
-    txt = "\n".join([long_header, "date: ____", "profile name: ____"])
+    txt = "\n".join([_LONG_HEADER, "date: ____", "profile name: ____"])
     bbox = _vtext(txt, "Inter", W, H).getbbox()
     assert bbox is not None
-    assert (bbox[2] - bbox[0]) > 0.9 * W        # lines fill the strip thickness
+    assert bbox[0] >= 0 and bbox[2] <= W        # never past either edge
+    # …and it starts at the OUTER edge, so the first line borders the text-edge
+    # distance rather than sitting packed in the middle (Knut).
+    assert bbox[0] < 0.1 * W
+
+
+def test_deleting_blank_lines_tightens_the_clip_text():
+    """Removing the blank lines between records must visibly tighten the block.
+    While the lines were justified to fill the thickness the layout looked
+    identical either way, so deleting them appeared to do nothing (Knut)."""
+    from workflow.layout_engine.raster import _vtext
+    W, H = 260, 3413
+    rows = [_LONG_HEADER, "date: ____", "profile name: ____"]
+    spaced = _vtext("\n\n".join(rows), "Inter", W, H).getbbox()
+    tight = _vtext("\n".join(rows), "Inter", W, H).getbbox()
+    assert spaced is not None and tight is not None
+    # Same font size (both length-bound by the long header), fewer lines → a
+    # shorter stack across the strip.
+    assert (tight[2] - tight[0]) < (spaced[2] - spaced[0])
 
 
 def test_clip_flip_180_persists_and_flips_render(app):

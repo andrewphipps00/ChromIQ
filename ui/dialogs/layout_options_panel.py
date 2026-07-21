@@ -1150,7 +1150,7 @@ class LayoutOptionsPanel(QWidget):
         ccg = QGridLayout(self._clip_content_grp)
         self.clip_content_mode = NoScrollComboBox(self)
         for k, lbl in (("off", tr("Off")), ("text", tr("Custom text")),
-                       ("example", tr("Example custom table")),
+                       ("example", tr("Custom text example")),
                        ("branding", tr("ChromIQ branding")),
                        ("notes", tr("Notes box")), ("image", tr("Imported image"))):
             self.clip_content_mode.addItem(lbl, k)

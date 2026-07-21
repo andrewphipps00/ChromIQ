@@ -90,6 +90,30 @@ _ABORT_CONFIRM_RE      = re.compile(r"Abort\s*\?\s*-\s*Are you sure\s*\?\s*\[y/n
 _PATCH_NOT_FOUND_RE    = re.compile(r"Patch\s+'([^']+)'\s+not found", re.IGNORECASE)
 
 
+def _instrument_text(raw: object) -> str:
+    """An instrument-supplied instruction, or ``""`` when it isn't real text.
+
+    chartread's calibration call fills a "condition identifier" buffer that is
+    only meaningful for some conditions — stock Argyll prints it solely for
+    ``inst_calc_message``. The engine helper serialises it either way, so for a
+    condition that carries no identifier the buffer is whatever was on the stack:
+    a real ColorMunki asking for its calibration position sends
+    ``"4k2\\ufffd\\u0001"``. Showing that to someone is worse than showing
+    nothing, so anything that doesn't look like a human sentence is dropped and
+    the dialog falls back to its own wording.
+    """
+    text = str(raw or "").strip()
+    if len(text) < 4:                       # too short to be an instruction
+        return ""
+    if "�" in text:                    # arrived as undecodable bytes
+        return ""
+    if any(ch != "\n" and ch != "\t" and not ch.isprintable() for ch in text):
+        return ""
+    if not any(ch.isalpha() for ch in text):
+        return ""
+    return text
+
+
 @dataclass
 class MeasureParams:
     ti1_path: Path
@@ -117,7 +141,14 @@ class MeasureParams:
 class MeasureManager(QObject):
     stripe_changed         = pyqtSignal(str)  # emits strip ID string e.g. "A01"
     all_stripes_done       = pyqtSignal()    # emitted when chartread reports all rows read
-    calibration_prompt     = pyqtSignal()    # emitted when chartread asks user to position instrument
+    # Emitted when the instrument asks to be calibrated, carrying what it
+    # actually asked for: (condition, the instrument's own instruction, optional).
+    # The engine reports all three; stock chartread only has the bare prompt, so
+    # it sends ("", "", False) and the dialog falls back to its own wording.
+    calibration_prompt     = pyqtSignal(str, str, bool)
+    # The engine could not use the instrument, so the run was restarted on stock
+    # ArgyllCMS chartread. Carries the reason, for the log/status line.
+    engine_fell_back       = pyqtSignal(str)
     calibration_done       = pyqtSignal()    # emitted when instrument calibration completes
     strip_error            = pyqtSignal(str) # emitted on strip read failure; carries the reason string
     instrument_disconnected = pyqtSignal()   # emitted on USB communication failure
@@ -175,6 +206,14 @@ class MeasureManager(QObject):
         # ChromIQ chart-reading engine (#126): True while a --json helper
         # session is running; send_key() then translates keys to commands.
         self._engine_active: bool = False
+        # Engine → stock-chartread safety net (#126, mavtop): the instrument
+        # failure the engine reported, whether it ever read anything, whether
+        # the user stopped it, and whether we already retried once.
+        self._engine_fatal: str | None = None
+        self._engine_progress: bool = False
+        self._engine_saw_event: bool = False
+        self._engine_fallback_used: bool = False
+        self._user_quit: bool = False
 
     # ------------------------------------------------------------------
 
@@ -193,11 +232,31 @@ class MeasureManager(QObject):
         self._guided_state = "idle" if self._guided_strips else "disabled"
         self._engine_active = (params.engine_helper is not None
                                and not params.patch_by_patch)
+        # Engine → stock-chartread safety net (#126, mavtop). Reset per run.
+        self._engine_fatal = None
+        self._engine_progress = False
+        self._engine_saw_event = False
+        self._engine_fallback_used = False
+        self._user_quit = False
 
         def _on_finish(code: int) -> None:
             self._pending_post_retry_key = None
             self._save_partial_state = None
+            was_engine = self._engine_active
             self._engine_active = False
+            if was_engine and self._engine_should_fall_back(code):
+                self._engine_fallback_used = True
+                reason = self._engine_fatal or "unknown error"
+                log.warning("engine could not use the instrument (%s) — "
+                            "restarting on stock chartread", reason)
+                on_line(tr(
+                    "[Engine] ChromIQ's own measuring engine could not use your "
+                    "instrument ({reason}). Starting again with ArgyllCMS's "
+                    "chartread instead — just carry on measuring as usual."
+                ).format(reason=reason))
+                self.engine_fell_back.emit(reason)
+                self._launch_stock(args, cwd, on_line, _on_finish)
+                return
             on_finish(code)
 
         if self._engine_active:
@@ -218,15 +277,48 @@ class MeasureManager(QObject):
             )
             return
 
+        self._launch_stock(args, cwd, on_line, _on_finish)
+
+    def _launch_stock(self, args: list[str], cwd: Path,
+                      on_line: Callable[[str], None],
+                      on_finish: Callable[[int], None]) -> None:
+        """Run stock ArgyllCMS chartread over a PTY (the classic console path).
+
+        Chaining this from inside a finished-callback is safe: ArgyllRunner
+        captures the per-run callbacks before invoking them, precisely so a
+        follow-on run can register its own (same pattern as targen→printtarg)."""
         log.info("chartread: %s  [cwd=%s]", " ".join(args), cwd)
         self._runner.run(
             "chartread",
             args,
             cwd,
             on_line=lambda line: self._handle_line(line, on_line),
-            on_finish=_on_finish,
+            on_finish=on_finish,
             use_pty=True,
         )
+
+    def _engine_should_fall_back(self, code: int) -> bool:
+        """Whether a finished engine run should be retried on stock chartread.
+
+        Only when the engine reported an instrument-level failure and never got
+        as far as reading anything: restarting then costs the user nothing and
+        rescues instruments the engine can't drive but Argyll can (mavtop's
+        i1Pro1, which measures fine under stock chartread and spotread).
+
+        A helper that never spoke at all counts too: if it exits non-zero
+        without emitting a single event it never really ran (missing execute
+        permission, macOS quarantine, an immediate crash), and stock chartread
+        is exactly the right thing to try instead.
+
+        Deliberately NOT retried when the user stopped the run themselves, when
+        any reading was already taken (a restart would discard or duplicate it),
+        or when a fallback has already been tried — a failing instrument must
+        never put us in a restart loop."""
+        if code == 0 or self._engine_progress or self._user_quit:
+            return False
+        if self._engine_fallback_used:
+            return False
+        return self._engine_fatal is not None or not self._engine_saw_event
 
     def set_guided_strips(self, strips: list[str]) -> None:
         """Configure strips to auto-navigate during the next measurement run."""
@@ -239,6 +331,10 @@ class MeasureManager(QObject):
 
         With the engine active the key is translated to its JSON command —
         same semantics, so every existing call site works on both paths."""
+        if key in ("q", "Q", "\x1b"):
+            # A deliberate stop, so a non-zero exit must not look like an engine
+            # failure worth retrying on stock chartread.
+            self._user_quit = True
         if self._engine_active:
             from workflow.chartread_engine import command_for_key
             cmd = command_for_key(key)
@@ -329,6 +425,7 @@ class MeasureManager(QObject):
                 on_line(line)
             return
 
+        self._engine_saw_event = True
         kind = ev["event"]
 
         if kind == "session_start":
@@ -351,6 +448,7 @@ class MeasureManager(QObject):
                 self._guided_step(strip, on_line)
 
         elif kind == "strip_read":
+            self._engine_progress = True
             self.strip_measured.emit(ev)
             on_line(f" Strip read OK — {ev.get('strip', '?')} "
                     f"(worst patch ΔE {ev.get('worst_de', 0):.1f})")
@@ -358,6 +456,7 @@ class MeasureManager(QObject):
                 self._advance_guided_strip(on_line)
 
         elif kind == "saved":
+            self._engine_progress = True
             self.readings_saved.emit(ev.get("path", ""),
                                      int(ev.get("read_patches", 0)))
 
@@ -388,16 +487,27 @@ class MeasureManager(QObject):
             if ekind == "misread":
                 self.strip_error.emit(ev.get("detail") or "misread")
             elif ekind == "coms":
+                self._engine_fatal = "communication problem"
                 self.strip_error.emit("communication problem")
             elif ekind == "needs_cal":
                 on_line("[Engine] Instrument needs calibration…")
             elif ekind == "no_instrument":
+                self._engine_fatal = "no instrument detected"
                 self.no_instrument.emit()
             elif ekind == "cal_failed":
-                self.inst_init_failed.emit(ev.get("detail", ""))
+                detail = ev.get("detail", "")
+                self._engine_fatal = detail or "calibration failed"
+                self.inst_init_failed.emit(detail)
 
         elif kind == "cal_required":
-            self.calibration_prompt.emit()
+            self.calibration_prompt.emit(str(ev.get("cond", "")),
+                                         _instrument_text(ev.get("id")),
+                                         bool(ev.get("optional", False)))
+
+        elif kind == "aborted":
+            # The user stopped the run themselves — never treat that as an
+            # engine failure worth retrying on stock chartread.
+            self._user_quit = True
 
         elif kind in ("cal_done", "cal_message"):
             if kind == "cal_done":
@@ -438,7 +548,7 @@ class MeasureManager(QObject):
         if _ALL_DONE_RE.search(line) and not (self._is_resume and _STRIP_RE.search(line)):
             self.all_stripes_done.emit()
         if _CALIBRATION_PROMPT_RE.search(line):
-            self.calibration_prompt.emit()
+            self.calibration_prompt.emit("", "", False)
         if _CALIBRATION_RE.search(line):
             self.calibration_done.emit()
         m = _STRIP_ERROR_RE.search(line)

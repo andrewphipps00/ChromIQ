@@ -542,18 +542,23 @@ def _vtext(text: str, font_family: str, width_px: int, height_px: int,
         size = int(size * 0.95)
         if size <= 8:
             break
-    # Position the lines ACROSS the strip thickness. A long line caps the font
-    # size (it's length-bound), which would leave the few lines packed in the
-    # middle with big side margins; instead JUSTIFY them so the outer lines' ink
-    # reaches the text-edge on the sides too, filling the strip width (Knut).
-    fill_h = width_px * THICK
-    top = (width_px - fill_h) / 2
-    if n >= 2:
-        pad = size * 0.42                       # keep the outer glyphs' ink inside
-        first_c, last_c = top + pad, top + fill_h - pad
-        ys = [first_c + (last_c - first_c) * i / (n - 1) for i in range(n)]
-    else:
-        ys = [width_px / 2]
+    # Stack the lines ACROSS the strip thickness at their NATURAL spacing, from
+    # the OUTER edge inwards. The strip is turned 180° when it sits on the right
+    # edge, so canvas y=0 is the page-edge side either way: the first line borders
+    # the text-edge distance, and the block runs towards the patches without ever
+    # reaching them (the loop above already caps it at the strip width).
+    #
+    # Justifying the lines across the full thickness instead — the previous
+    # behaviour — was wrong on both counts (Knut): it spread them to fill the
+    # strip no matter how many there were, so deleting the blank lines between
+    # them changed nothing on screen, and it pushed the last line's ink over the
+    # inner edge into the patch area. Only the font SIZE may grow, until the
+    # longest line hits the text-edge along the strip or the stack hits it across.
+    line_h = size * 1.2
+    block_h = line_h * n
+    # The template caption keeps its centred block; clip text hugs the outer edge.
+    start = (width_px - block_h) / 2 if valign == "top" else 0.0
+    ys = [start + line_h * (i + 0.5) for i in range(n)]
     cx = (height_px * 0.04 if valign == "top" else height_px / 2)
     anchor = "lm" if valign == "top" else "mm"
     for ln, y in zip(lines, ys):
