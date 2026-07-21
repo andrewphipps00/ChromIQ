@@ -508,21 +508,38 @@ def _vtext(text: str, font_family: str, width_px: int, height_px: int,
     canvas = Image.new("RGBA", (max(1, height_px), max(1, width_px)), (0, 0, 0, 0))
     d = ImageDraw.Draw(canvas)
     lines = text.split("\n")
-    size = max(8, int(size_px) if size_px and size_px > 0 else int(width_px * 0.42))
+    n = max(1, len(lines))
+    # The clip AREA already sits the clip text-edge distance in from the page edge
+    # on EVERY side (geometry.clip_area_mm), so fill it: THICK across the strip
+    # (the stacked lines), LEN along it (the longest line). A small hair guards
+    # glyph overshoot. (Knut: the text must reach the text-edge on the sides too,
+    # not just top/bottom.)
+    THICK, LEN = 0.98, 0.99
+    if size_px and size_px > 0:
+        size = max(8, int(size_px))                      # manual size (#125)
+    else:
+        # AUTO: GROW the font to the largest size that fills both axes — measured
+        # once at a reference size and scaled (advance widths scale linearly), so
+        # it reaches the text-edge instead of stopping at a fixed fraction of the
+        # strip width (the old start-and-only-shrink capped it well short — Knut).
+        ref = 100
+        fref = _font(ref, font_family, bold=bold)
+        widest_ref = max((d.textlength(ln, font=fref) for ln in lines),
+                         default=1.0) or 1.0
+        size_thick = (width_px * THICK) / (1.2 * n)
+        size_len = ref * (height_px * LEN) / widest_ref
+        size = max(8, int(min(size_thick, size_len)))
     f = _font(size, font_family, bold=bold)
-    # shrink to fit the short dimension across all stacked lines
+    # Safety: shrink if rounding pushed a hair over (never grows past the fill
+    # size); also caps a too-large manual size so text can't overrun the strip.
     for _ in range(40):
         f = _font(size, font_family, bold=bold)
         line_h = size * 1.2
-        block_h = line_h * len(lines)
+        block_h = line_h * n
         widest = max((d.textlength(ln, font=f) for ln in lines), default=0)
-        # The clip AREA already sits the clip text-edge distance in from the page
-        # edge (geometry.clip_area_mm), so fill (almost) its full length before
-        # shrinking — a second inset here made the text stop well short of the
-        # text-edge limit the user set (Knut). A 1% hair guards glyph overshoot.
-        if block_h <= width_px * 0.9 and widest <= height_px * 0.99:
+        if block_h <= width_px * THICK and widest <= height_px * LEN:
             break
-        size = int(size * 0.9)
+        size = int(size * 0.95)
         if size <= 8:
             break
     line_h = size * 1.2

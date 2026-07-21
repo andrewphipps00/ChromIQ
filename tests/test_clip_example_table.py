@@ -93,6 +93,20 @@ def test_clip_text_fills_to_edge_distance():
     assert span > 0.96 * H                 # reaches near the area edge (was ≤0.95)
 
 
+def test_clip_text_grows_to_fill_thickness_when_length_has_room():
+    """Short clip text used to stop at a fixed fraction of the strip WIDTH (it
+    only ever shrank from a fixed start, never grew), leaving big side margins
+    even with length to spare. Now it grows to fill the thickness up to the clip
+    text-edge too, not just top/bottom (Knut)."""
+    from workflow.layout_engine.raster import _vtext
+    W, H = 300, 2000
+    overlay = _vtext("date:", "Inter", W, H)      # one short line, length to spare
+    bbox = overlay.getbbox()                       # image is width_px × height_px
+    assert bbox is not None
+    thickness_span = bbox[2] - bbox[0]             # stacked lines span the WIDTH
+    assert thickness_span > 0.5 * W                # grows to fill (was ~0.34·W)
+
+
 def test_clip_flip_180_persists_and_flips_render(app):
     """The clip flip-180 toggle round-trips through the recipe (so it saves as a
     default and inside a preset) and actually turns the clip content over (Knut)."""
