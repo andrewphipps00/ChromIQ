@@ -203,6 +203,23 @@ def main() -> int:
     from core.webengine_warmup import warm_up_webengine
     QTimer.singleShot(0, warm_up_webengine)
 
+    # Pre-warm the system-font map: the first chart render that uses a system
+    # (non-bundled) font makes Pillow enumerate every installed font file, a
+    # ~60 ms one-off hitch. It's pure Python (no Qt), so build the cache on a
+    # daemon thread at idle; the result is an idempotent module-global, so a
+    # concurrent on-demand build is harmless.
+    def _warm_font_map() -> None:
+        import threading
+
+        def _run() -> None:
+            try:
+                from workflow.layout_engine.raster import _system_font_map
+                _system_font_map()
+            except Exception:
+                pass
+        threading.Thread(target=_run, daemon=True).start()
+    QTimer.singleShot(1500, _warm_font_map)
+
     if settings.get("show_welcome_dialog", True):
         # Welcome dialog is non-modal (see MainWindow.open_welcome_dialog),
         # so it no longer blocks the event loop or preempts the maximize /

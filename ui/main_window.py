@@ -100,6 +100,11 @@ class MainWindow(QMainWindow):
         self._tab_profile = TabProfile(self._runner, self._settings, self)
         self._tab_check   = TabCheckRefine(self._runner, self._settings, self)
         self._load_state_snapshot: dict | None = None
+        # Which (tab → theme) the per-tab stylesheet has already been applied for,
+        # so a revisit doesn't pay the ~30 ms style re-polish again. Keyed on the
+        # theme so a theme switch (apply_theme sets the mode, then re-styles all
+        # tabs) correctly misses and re-applies. Perf: tab-switch snappiness.
+        self._styled_tab_theme: dict[int, str] = {}
 
         self._tabs.addTab(self._tab_chart,   tr("1. Create Chart"))
         self._tabs.addTab(self._tab_print,   tr("2. Print Chart"))
@@ -363,7 +368,7 @@ class MainWindow(QMainWindow):
             patch_count_color    = "#ffffff"   # _PALETTE_DARK["wordmark"]
             log_color            = color
 
-        tab_w.setStyleSheet(f"""
+        _sheet = f"""
                 QPushButton#primary {{
                     background: {color};
                     border: 1px solid {color};
@@ -443,7 +448,18 @@ class MainWindow(QMainWindow):
                     border-color: {color_hover};
                     color: {primary_text};
                 }}
-            """)
+            """
+
+        # The stylesheet is a pure function of (index, theme); a set stylesheet
+        # stays applied and cascades to children added later, so on a revisit for
+        # the same theme we can skip the costly re-`setStyleSheet` (~30 ms on the
+        # heavy Create Chart tree) without any visual change. ACCENT + the tooltip
+        # re-tint below still run every call: ACCENT is a class-global new dialogs
+        # read, and the loop covers any tooltip button added since (Knut/perf).
+        _mode = "light" if is_light else "dark"
+        if self._styled_tab_theme.get(index) != _mode:
+            tab_w.setStyleSheet(_sheet)
+            self._styled_tab_theme[index] = _mode
 
         TooltipButton.ACCENT = color
         for btn in tab_w.findChildren(TooltipButton):
