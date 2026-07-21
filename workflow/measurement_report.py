@@ -31,7 +31,10 @@ from workflow.ti3_analysis import (
 
 log = get_logger(__name__)
 
-REPORT_SCHEMA = 4
+# 5: device-derived reference is Bradford-adapted D65→D50, so imported
+#    measurements no longer carry a ~1.5 ΔE white-point error (Knut). Bumping the
+#    schema makes the dialog rebuild older saved reports from their run .ti3.
+REPORT_SCHEMA = 5
 
 # A cube corner counts as "present" in the chart when the nearest measured patch
 # sits within this many device units (0..100, per channel) of the ideal corner.
@@ -87,6 +90,20 @@ def _srgb_hex(xyz100: "tuple[float, float, float]") -> str:
         return max(0, min(255, round(c * 255.0)))
 
     return "#{:02x}{:02x}{:02x}".format(enc(r), enc(g), enc(b))
+
+
+def _bradford_d65_to_d50(x: float, y: float, z: float) -> "tuple[float, float, float]":
+    """Bradford-adapt an XYZ triple from a D65 white point to D50 (Lindbloom
+    matrix — the inverse of the D50→D65 adaptation in :func:`_srgb_hex`).
+
+    The device-derived reference comes from ``_patch_xyz`` (device RGB treated as
+    sRGB → XYZ under **D65**), but the measured values and ``xyz_to_lab`` work in
+    **D50**. Comparing the two directly put the reference white in the wrong place
+    and inflated every imported measurement's ΔE by ~1.5. Adapting here lands the
+    reference in the same D50 space, so a perfect print scores ≈ 0 (Knut)."""
+    return (1.0478112 * x + 0.0228866 * y - 0.0501270 * z,
+            0.0295424 * x + 0.9904844 * y - 0.0170491 * z,
+            -0.0092345 * x + 0.0150436 * y + 0.7521316 * z)
 
 
 def _clean_instrument(raw: "str | None") -> str:
@@ -212,7 +229,10 @@ def build_report(ti3_path: str | Path, worst_n: int = 16) -> dict:
         ref = {}
         for i, sid in enumerate(data.sample_ids):
             r, g, b = (float(v) for v in rgb100[i])
-            ref[sid] = xyz_to_lab(tuple(v / 100.0 for v in _patch_xyz(r, g, b)))
+            # _patch_xyz is sRGB→XYZ under D65; adapt to D50 so the reference
+            # sits in the same space as the measured values and xyz_to_lab (Knut).
+            xyz_d50 = _bradford_d65_to_d50(*_patch_xyz(r, g, b))
+            ref[sid] = xyz_to_lab(tuple(v / 100.0 for v in xyz_d50))
         ref_source = "device"
     # "design" = compared against the chart's own .ti2; "device" = compared
     # against the sRGB estimate of the file's DEVICE (design) values — the fixed

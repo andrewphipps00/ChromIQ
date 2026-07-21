@@ -15,8 +15,9 @@ from workflow.reference_convert import (
 )
 
 # An i1Profiler-style measurement .ti3 (as txt2ti3 would produce): device RGB on
-# the 0..255 code-value scale, no sibling .ti2. White/black measured near their
-# sRGB estimate; the red patch measured off.
+# the 0..255 code-value scale, no sibling .ti2. Measured XYZ are D50 (as a real
+# .ti3 is): white and black sit on their D50 sRGB reference (near-zero ΔE); the
+# red patch is measured off, so it's the worst.
 _TI3_255 = """CTI3
 
 NUMBER_OF_FIELDS 7
@@ -25,8 +26,8 @@ SAMPLE_ID SAMPLE_LOC RGB_R RGB_G RGB_B XYZ_X XYZ_Y XYZ_Z
 END_DATA_FORMAT
 NUMBER_OF_SETS 3
 BEGIN_DATA
-1 "A1" 255 255 255 95.0 100.0 108.0
-2 "A2" 0 0 0 0.3 0.3 0.3
+1 "A1" 255 255 255 96.42 100.0 82.53
+2 "A2" 0 0 0 0.96 1.0 0.83
 3 "A3" 255 0 0 36.0 18.0 3.0
 END_DATA
 """
