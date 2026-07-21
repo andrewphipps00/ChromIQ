@@ -1,5 +1,32 @@
 # Changelog
 
+## v3.13.12-beta.29
+
+- **Space bar no longer trips a button you didn't mean to press (Knut).** When a
+  tab or dialog opened, whatever button happened to take the initial focus would
+  fire on the space bar — saving defaults, opening a file picker, popping a
+  tooltip. Icon and help buttons are no longer keyboard-focusable, and a single
+  guard clears that stray focus on every dialog and tab. Input fields keep their
+  focus, and Enter still triggers a dialog's default button.
+- **Import i1Profiler's native measurements directly (.mxf), no export step
+  (Basti).** i1Profiler saves measurements as .mxf (CxF3); ChromIQ now reads them
+  straight into a .ti3 — everywhere you can load an i1Profiler measurement (the
+  Convert i1Profiler → TI3 tool, Build Profile, and the scanner-target import).
+  The .txt and .cxf paths still work too.
+- **Convert i1Profiler → TI3 now carries the instrument and the measurement date
+  across.** The real measuring instrument (e.g. “i1Pro 2”) and the date the chart
+  was measured are read from the i1Profiler file and stamped into the .ti3, so the
+  Measurement Report shows the right instrument and plots each run on the date it
+  was actually measured (not the day you converted it). This also fixes two
+  beta.27 cases where the instrument wasn't stamped and the date was lost.
+- **Measurement Report — trend threshold labels.** When a Pass threshold lands on
+  a y-axis number, the Avg / Max labels no longer overlap it — both move just above
+  their line instead.
+- **Create Chart — clip border.** Blank lines in the clip-border text are kept now,
+  so you can leave writing space between hand-filled fields. And a clip border on
+  the Right side is now exactly its set width (it used to come out wider than the
+  Left side).
+
 ## v3.13.12-beta.28
 
 - **Measurement Report — fixed: a project full of valid charts showed "no design
