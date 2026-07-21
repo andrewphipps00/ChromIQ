@@ -32,6 +32,8 @@ def _shortcuts() -> list[tuple[str, str]]:
         ("⌘1 … ⌘5",
          tr("Go to a tab (1 Create Chart · 2 Print Chart · 3 Measure · "
             "4 Build Profile · 5 Check & Refine)")),
+        ("← / →", tr("Move between tabs (when the tab strip has focus — e.g. "
+                     "right after ⌘1–5)")),
         ("F1  ·  ⌘?", tr("Open Help (this window)")),
         ("⌘,", tr("Open Preferences (Settings)")),
         ("⌘T", tr("Open the Tools menu")),

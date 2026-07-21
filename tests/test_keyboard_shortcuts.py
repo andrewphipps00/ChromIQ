@@ -91,6 +91,21 @@ def test_all_shortcuts_carry_a_modifier_or_are_fkeys(win):
     assert not unsafe, f"unsafe bare-key shortcuts: {unsafe}"
 
 
+def test_cmd_tab_focuses_bar_so_arrows_move_between_tabs(win, qapp):
+    """After ⌘N the tab strip takes focus, so ← / → then move between tabs (the
+    arrows did nothing before — Basti)."""
+    from PyQt6.QtCore import Qt
+    from PyQt6.QtTest import QTest
+
+    win._go_to_tab(2)                                  # ⌘3
+    assert win._tabs.currentIndex() == 2
+    assert win._tabs.tabBar().hasFocus()
+    QTest.keyClick(win._tabs.tabBar(), Qt.Key.Key_Left)
+    assert win._tabs.currentIndex() == 1               # ← → previous tab
+    QTest.keyClick(win._tabs.tabBar(), Qt.Key.Key_Right)
+    assert win._tabs.currentIndex() == 2               # → → next tab
+
+
 def test_cmd_digits_are_bound_for_each_tab(win):
     bound = {sc.key().toString() for sc in win.findChildren(QShortcut)}
     for i in range(1, win._tabs.count() + 1):

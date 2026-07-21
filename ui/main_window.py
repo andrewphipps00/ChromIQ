@@ -90,6 +90,9 @@ class MainWindow(QMainWindow):
         self._tabs = QTabWidget(central)
         self._tabs.setDocumentMode(True)
         self._tabs.setTabBar(SpectrumTabBar(self._tabs))
+        # Focusable tab strip so ⌘1–5 (and Tab) can land on it and ← / → then move
+        # between tabs — independent of the macOS "Full Keyboard Access" setting.
+        self._tabs.tabBar().setFocusPolicy(Qt.FocusPolicy.StrongFocus)
 
         self._tab_chart   = TabChart(self._runner, self._file_mgr, self._settings, self)
         self._tab_print   = TabPrint(self._settings, self)
@@ -213,7 +216,7 @@ class MainWindow(QMainWindow):
 
         # ⌘1…⌘5 — jump straight to a tab (Qt maps Ctrl→⌘ on macOS).
         for _i in range(self._tabs.count()):
-            sc(f"Ctrl+{_i + 1}", lambda i=_i: self._tabs.setCurrentIndex(i))
+            sc(f"Ctrl+{_i + 1}", lambda i=_i: self._go_to_tab(i))
         # Settings / Help / Tools. Explicit sequences (not StandardKey) so the
         # binding is deterministic — the platform "Preferences"/"HelpContents"
         # standard keys resolve to bare media keys under some Qt platforms. Qt
@@ -239,6 +242,13 @@ class MainWindow(QMainWindow):
         tab = self._tabs.currentWidget()
         attr = self._PRIMARY_ACTION_ATTR.get(type(tab).__name__)
         return getattr(tab, attr, None) if attr else None
+
+    def _go_to_tab(self, i: int) -> None:
+        """Switch to tab *i* and put keyboard focus on the tab strip, so ← / →
+        then move between tabs (Basti: after ⌘N the arrow keys had nothing to act
+        on). QTabBar navigates with the arrows natively once it has focus."""
+        self._tabs.setCurrentIndex(i)
+        self._tabs.tabBar().setFocus(Qt.FocusReason.ShortcutFocusReason)
 
     def _trigger_primary_action(self) -> None:
         """Click the current tab's primary button (Generate / Print / Measure /
