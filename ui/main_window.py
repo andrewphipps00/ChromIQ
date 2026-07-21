@@ -5,6 +5,7 @@ import colorsys
 from pathlib import Path
 
 from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtGui import QKeySequence, QShortcut
 from PyQt6.QtWidgets import (
     QApplication,
     QFrame,
@@ -192,12 +193,59 @@ class MainWindow(QMainWindow):
         self.statusBar().hide()
         self._status_msg: str = ""
 
+        self._install_shortcuts()
         self._check_argyll_binaries(initial=True)
         self._startup_update_checker: UpdateChecker | None = None
         QTimer.singleShot(0, lambda: self._apply_title_bar(self._title_bar_mode))
         QTimer.singleShot(0, self._apply_calibration_mode)
         QTimer.singleShot(3000, self._check_for_updates_on_startup)
         log.info("MainWindow initialised")
+
+    def _install_shortcuts(self) -> None:
+        """App-wide keyboard shortcuts. Every binding carries the ⌘ modifier (or
+        is an F-key) so none can collide with the single keys chartread claims
+        during a measurement (Space / Enter / Esc / ← / → and letters): while
+        measuring, the Measure tab's application-level key filter owns the
+        keyboard and these simply stand down. Kept in sync with the Welcome
+        window's "Keyboard shortcuts" Help card."""
+        def sc(seq, slot) -> None:
+            QShortcut(QKeySequence(seq), self, activated=slot)
+
+        # ⌘1…⌘5 — jump straight to a tab (Qt maps Ctrl→⌘ on macOS).
+        for _i in range(self._tabs.count()):
+            sc(f"Ctrl+{_i + 1}", lambda i=_i: self._tabs.setCurrentIndex(i))
+        # Settings / Help / Tools. Explicit sequences (not StandardKey) so the
+        # binding is deterministic — the platform "Preferences"/"HelpContents"
+        # standard keys resolve to bare media keys under some Qt platforms. Qt
+        # still renders "Ctrl" as ⌘ on macOS.
+        sc("Ctrl+,", self._open_settings)                            # ⌘,
+        sc("F1", self.open_welcome_dialog)                           # F1
+        sc("Ctrl+?", self.open_welcome_dialog)                       # ⌘? (mac Help)
+        sc("Ctrl+T", self._open_tools_menu)                          # Tools popup
+        # ⌘Return / ⌘Enter — run the current tab's main action.
+        sc("Ctrl+Return", self._trigger_primary_action)
+        sc("Ctrl+Enter", self._trigger_primary_action)
+
+    # Each tab's main action button, for the ⌘Return shortcut. (The many other
+    # objectName="primary" buttons live inside per-tab sub-dialogs.)
+    _PRIMARY_ACTION_ATTR = {
+        "TabChart": "_generate_btn", "TabPrint": "_print_page_btn",
+        "TabMeasure": "_start_btn", "TabProfile": "_build_btn",
+        "TabCheckRefine": "_run_btn",
+    }
+
+    def _primary_action_button(self):
+        """The current tab's primary button, or None."""
+        tab = self._tabs.currentWidget()
+        attr = self._PRIMARY_ACTION_ATTR.get(type(tab).__name__)
+        return getattr(tab, attr, None) if attr else None
+
+    def _trigger_primary_action(self) -> None:
+        """Click the current tab's primary button (Generate / Print / Measure /
+        Build / Check), if it has one and it's usable."""
+        btn = self._primary_action_button()
+        if btn is not None and btn.isEnabled() and btn.isVisible():
+            btn.click()
 
     def resizeEvent(self, event) -> None:  # type: ignore[override]
         super().resizeEvent(event)

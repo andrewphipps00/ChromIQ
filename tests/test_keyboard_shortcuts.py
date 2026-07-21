@@ -1,0 +1,98 @@
+"""App-wide keyboard shortcuts (Knut/Sebastian keyboard-accessibility pass).
+
+Every binding carries the ⌘ modifier (or is an F-key) so it never collides with
+the single keys chartread claims during a measurement. These check the wiring:
+⌘1–5 switch tabs and ⌘Return runs the current tab's primary action.
+
+The MainWindow is built once (module-scoped) and never closed — its closeEvent
+pulls in WebEngine/timer teardown that segfaults under offscreen Qt, and these
+tests only need the constructed widget tree, not a clean shutdown."""
+import os
+
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+import pytest
+from PyQt6.QtCore import QSettings
+from PyQt6.QtGui import QKeySequence, QShortcut
+from PyQt6.QtWidgets import QApplication, QPushButton
+
+
+@pytest.fixture(scope="module")
+def qapp():
+    return QApplication.instance() or QApplication([])
+
+
+@pytest.fixture(scope="module")
+def win(qapp, tmp_path_factory):
+    from core.settings import AppSettings
+    from ui.main_window import MainWindow
+
+    # Stub the offscreen-incompatible edges only: the ArgyllCMS-missing modal and
+    # the native Cocoa title-bar tint (does Objective-C messaging on a window with
+    # no native handle under offscreen Qt → segfault). Neither is under test.
+    MainWindow._show_argyll_not_found_dialog = lambda self: None
+    MainWindow._apply_title_bar = lambda self, mode: None
+    tmp = tmp_path_factory.mktemp("kbd")
+    s = AppSettings()
+    s._qs = QSettings(str(tmp / "t.ini"), QSettings.Format.IniFormat)
+    s.set("custom_output_path", str(tmp / "out"))
+    s.set("restore_last_session", False)
+    w = MainWindow(s)
+    w.show()                                          # so button isVisible() is true
+    qapp.processEvents()
+    return w                                          # never closed — see module docstring
+
+
+def test_every_tab_resolves_a_primary_button(win):
+    """The ⌘Return dispatcher must find a real button on each tab — guards against
+    a renamed attribute silently disabling the shortcut."""
+    for i in range(win._tabs.count()):
+        win._tabs.setCurrentIndex(i)
+        btn = win._primary_action_button()
+        assert isinstance(btn, QPushButton), f"tab {i} has no primary button"
+
+
+def test_cmd_return_clicks_the_current_tab_primary(win):
+    win._tabs.setCurrentIndex(0)                      # Create Chart
+    btn = win._primary_action_button()
+    btn.setEnabled(True)
+    fired = []
+    btn.clicked.connect(lambda: fired.append(True))
+    win._trigger_primary_action()
+    assert fired == [True]
+
+
+def test_cmd_return_noop_when_primary_disabled(win):
+    win._tabs.setCurrentIndex(0)
+    btn = win._primary_action_button()
+    btn.setEnabled(False)
+    fired = []
+    btn.clicked.connect(lambda: fired.append(True))
+    win._trigger_primary_action()
+    assert fired == []                               # disabled → nothing happens
+    btn.setEnabled(True)
+
+
+def test_all_shortcuts_carry_a_modifier_or_are_fkeys(win):
+    """The core safety rule: no bare Space/Enter/Esc/arrow/letter shortcut, so
+    none can steal a key chartread needs mid-measurement."""
+    from PyQt6.QtCore import Qt
+
+    unsafe = set()
+    for sc in win.findChildren(QShortcut):
+        seq = sc.key()
+        for i in range(seq.count()):
+            kc = seq[i]                              # QKeyCombination
+            key = kc.key()
+            is_fkey = Qt.Key.Key_F1 <= key <= Qt.Key.Key_F35
+            if (kc.keyboardModifiers() == Qt.KeyboardModifier.NoModifier
+                    and not is_fkey):
+                unsafe.add(seq.toString())
+    assert not unsafe, f"unsafe bare-key shortcuts: {unsafe}"
+
+
+def test_cmd_digits_are_bound_for_each_tab(win):
+    bound = {sc.key().toString() for sc in win.findChildren(QShortcut)}
+    for i in range(1, win._tabs.count() + 1):
+        want = QKeySequence(f"Ctrl+{i}").toString()
+        assert want in bound, f"missing tab shortcut {want}"
