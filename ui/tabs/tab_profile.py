@@ -343,7 +343,9 @@ class TabProfile(QWidget):
         from ui.widgets import MeasuredChartButton, RevealFolderButton
         self._load_btn = MeasuredChartButton(SPEC_CYAN, self)
         self._load_btn.setToolTip(tr(
-            "Load your measurement data (.ti3, or an i1Profiler .txt export).\n\n"
+            "Load your measurement data — a ChromIQ .ti3, or an i1Profiler "
+            "measurement which ChromIQ converts for you: i1Profiler's own saved "
+            "file (.mxf, no export step needed), or a .txt / .cxf export.\n\n"
             "This is the file the Measure tab saved after reading your printed "
             "chart — the patch colours your instrument actually measured. "
             "ChromIQ builds the ICC profile from it. If a matching chart (.ti2) "
