@@ -93,6 +93,40 @@ def test_clip_text_fills_to_edge_distance():
     assert span > 0.96 * H                 # reaches near the area edge (was ≤0.95)
 
 
+def test_clip_flip_180_persists_and_flips_render(app):
+    """The clip flip-180 toggle round-trips through the recipe (so it saves as a
+    default and inside a preset) and actually turns the clip content over (Knut)."""
+    import numpy as np
+    from dataclasses import replace
+    from workflow.layout_engine import geometry, instruments, raster
+    from workflow.layout_engine.ti1_reader import ColorTarget
+
+    # Persistence: both the recipe dict (defaults / presets) and the build-kwargs
+    # dict carry the flag.
+    r = replace(LayoutRecipe(instrument="i1", paper="A4"), clip_flip_180=True)
+    assert LayoutRecipe.from_dict(r.to_dict()).clip_flip_180 is True
+    assert LayoutRecipe.from_build_kwargs(r.build_kwargs()).clip_flip_180 is True
+
+    # Render: same side, flip toggled → the clip region is exactly the 180° turn.
+    target = ColorTarget(color_rep="iRGB", device_fields=["RGB_R", "RGB_G", "RGB_B"],
+                         patches=[((50.0, 50.0, 50.0), (40.0, 45.0, 50.0))
+                                  for _ in range(60)])
+    geom = instruments.build("i1")            # clip_side defaults to "left"
+    lay = geometry.compute(geom, 210.0, 297.0, 60)
+    ax, ay, aw, ah = geometry.clip_area_px(geom, 297.0, 150, 210.0)
+
+    def _clip(flip):
+        res = raster.render_pages(
+            target, lay, geom, seed=1, randomize=False,
+            paper_w_mm=210.0, paper_h_mm=297.0, dpi=150,
+            clip_content_mode="text", clip_text="TOP edge", clip_flip_180=flip)
+        return np.asarray(res.images[0])[ay:ay + ah, ax:ax + aw]
+
+    a0, a1 = _clip(False), _clip(True)
+    assert not np.array_equal(a0, a1)                 # the toggle changed the strip
+    assert np.array_equal(a1, a0[::-1, ::-1])         # …by exactly 180°
+
+
 def test_clip_text_keeps_interior_blank_lines():
     """Blank lines between text lines survive (writing space for hand-filled
     fields); leading/trailing blanks are trimmed (Knut beta.28)."""

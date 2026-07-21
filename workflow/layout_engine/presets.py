@@ -136,6 +136,11 @@ class LayoutRecipe:
     clip_image_scale: float = 100.0      # % of fit-to-band (100 = fit)
     clip_image_offset_x_mm: float = 0.0  # move across the band (mm)
     clip_image_offset_y_mm: float = 0.0  # move along the band (mm)
+    # Flip the clip content 180° from its per-side default reading direction. A
+    # right-side clip is auto-turned 180° (read from the far side of the sheet);
+    # this lets the user turn any clip the other way so its text reads the same
+    # direction as the bottom stamp (Knut).
+    clip_flip_180: bool = False
     nolimit: bool = False
     strip_pattern: str = permutation.DEFAULT_STRIP_PATTERN
     patch_pattern: str = permutation.DEFAULT_PATCH_PATTERN
@@ -240,6 +245,7 @@ class LayoutRecipe:
             clip_image_scale=float(d.get("clip_image_scale") or 100.0),
             clip_image_offset_x_mm=float(d.get("clip_image_offset_x") or 0.0),
             clip_image_offset_y_mm=float(d.get("clip_image_offset_y") or 0.0),
+            clip_flip_180=bool(d.get("clip_flip_180", False)),
             nolimit=bool(d.get("nolimit", False)),
             strip_pattern=d.get("strip_pattern") or permutation.DEFAULT_STRIP_PATTERN,
             patch_pattern=d.get("patch_pattern") or permutation.DEFAULT_PATCH_PATTERN,
@@ -353,6 +359,7 @@ class LayoutRecipe:
             "clip_image_scale": self.clip_image_scale or 100.0,
             "clip_image_offset_x": self.clip_image_offset_x_mm,
             "clip_image_offset_y": self.clip_image_offset_y_mm,
+            "clip_flip_180": self.clip_flip_180,
             "nolimit": self.nolimit,
             "strip_pattern": self.strip_pattern,
             "patch_pattern": self.patch_pattern,

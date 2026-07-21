@@ -778,6 +778,7 @@ def render_pages(
     clip_image_scale: float = 100.0,
     clip_image_offset_x_mm: float = 0.0,
     clip_image_offset_y_mm: float = 0.0,
+    clip_flip_180: bool = False,
     strip_label_offset_mm: float = 0.0,
     text_ctx: "dict | None" = None,
     collect_device_geom: bool = False,
@@ -1097,8 +1098,11 @@ def render_pages(
                     image_offset_y_mm=clip_image_offset_y_mm)
                 # On the right edge the band sits on the far side of the sheet, so
                 # turn the content 180° to keep it the right way up for the reader
-                # (Knut, #93). Left clips are unchanged.
-                if getattr(geom, "clip_side", "left") == "right":
+                # (Knut, #93). The user can override with clip_flip_180 (XOR), e.g.
+                # to make a right-side clip read the same direction as the bottom
+                # stamp. Left clips are upright by default; flip turns them over.
+                _flip = (getattr(geom, "clip_side", "left") == "right") ^ bool(clip_flip_180)
+                if _flip:
                     _clip = _clip.rotate(180, expand=True)
                 img.paste(_clip, (_ax, _ay))
                 if collect_device_geom:      # colour the notes strip in device ink

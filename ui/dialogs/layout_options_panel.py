@@ -1160,6 +1160,11 @@ class LayoutOptionsPanel(QWidget):
         self.clip_side.addItem(tr("Right"), "right")
         self.clip_side.currentIndexChanged.connect(self._update_clip_margin_conflict)
         self.clip_side.currentIndexChanged.connect(self._emit)
+        # Flip the clip content 180° from its per-side default reading direction
+        # (a right-side clip is auto-turned upside-down to read from the far side
+        # of the sheet; this lets the user turn any clip the other way). (Knut)
+        self.clip_flip_180 = QCheckBox(tr("Flip 180°"), self)
+        self.clip_flip_180.toggled.connect(self._emit)
         from PyQt6.QtWidgets import QPlainTextEdit
         # Multi-line so a record like the "Example custom table" template (many
         # lines) is comfortable to view and edit; ~4 lines tall with a scrollbar
@@ -1221,7 +1226,21 @@ class LayoutOptionsPanel(QWidget):
                        "branding stamps the wordmark; Imported image places a "
                        "logo. Export template gives you an exact-size PNG and PDF "
                        "to design a graphic in another tool."), self))
-        add_row(ccg, 1, tr("Side:"), self.clip_side,
+        _clip_side_w = QWidget(self)
+        _cs = QHBoxLayout(_clip_side_w)
+        _cs.setContentsMargins(0, 0, 0, 0); _cs.setSpacing(8)
+        _cs.addWidget(self.clip_side, 1)
+        _cs.addWidget(self.clip_flip_180)
+        _cs.addWidget(TooltipButton(
+            tr("Flip writing direction"),
+            tr("Turns the clip-border content 180° from the way it normally "
+               "reads. A clip border on the Right side is printed upside-down by "
+               "default, so it reads the right way up when you look at the sheet "
+               "from that side. If you'd rather it read the same direction as the "
+               "info line stamped along the bottom of the sheet, tick this. It "
+               "works on either side, so you can also flip a Left-side clip."),
+            self))
+        add_row(ccg, 1, tr("Side:"), _clip_side_w,
                 tip=TooltipButton(
                     tr("Clip border side"),
                     tr("Which edge of the page the clip border / notes band sits "
@@ -2532,6 +2551,7 @@ class LayoutOptionsPanel(QWidget):
         self.clip_content_mode.setCurrentIndex(_cc if _cc >= 0 else 0)
         _cs = self.clip_side.findData(getattr(r, "clip_side", "left") or "left")
         self.clip_side.setCurrentIndex(_cs if _cs >= 0 else 0)
+        self.clip_flip_180.setChecked(bool(getattr(r, "clip_flip_180", False)))
         self.clip_text.setPlainText(r.clip_text)
         _cf = self.clip_text_font.findData(r.clip_text_font)
         self.clip_text_font.setCurrentIndex(_cf if _cf >= 0 else 0)
@@ -2633,6 +2653,7 @@ class LayoutOptionsPanel(QWidget):
         r.clip_border_width_mm = self.clip_width.value()
         r.clip_content_mode = self.clip_content_mode.currentData() or "off"
         r.clip_side = self.clip_side.currentData() or "left"
+        r.clip_flip_180 = self.clip_flip_180.isChecked()
         r.clip_text = self.clip_text.toPlainText()
         r.clip_text_font = self.clip_text_font.currentData() or "Inter"
         r.clip_text_size_mm = pt_to_mm(self.clip_text_size.value())

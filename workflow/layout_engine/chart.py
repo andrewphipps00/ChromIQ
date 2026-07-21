@@ -158,6 +158,7 @@ def build_chart(
     clip_image_scale: float = 100.0,
     clip_image_offset_x: float = 0.0,
     clip_image_offset_y: float = 0.0,
+    clip_flip_180: bool = False,
     strip_pattern: str = permutation.DEFAULT_STRIP_PATTERN,
     patch_pattern: str = permutation.DEFAULT_PATCH_PATTERN,
     cal_path: str | Path | None = None,
@@ -291,6 +292,7 @@ def build_chart(
         clip_image_rotation=clip_image_rotation, clip_image_scale=clip_image_scale,
         clip_image_offset_x_mm=clip_image_offset_x,
         clip_image_offset_y_mm=clip_image_offset_y,
+        clip_flip_180=clip_flip_180,
         text_ctx=_ctx,
         # CMYK / CMYK+N targets get a device-native separated TIFF (Tier D, #72);
         # RGB/CMY/Gray keep the exact display-RGB raster. n>=4 ⇒ the display path
