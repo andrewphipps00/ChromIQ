@@ -1,5 +1,20 @@
 # Changelog
 
+## v3.13.12-beta.35
+
+- **Clip border — the text reaches the edges on the sides too (Knut).** Short
+  clip records with one long line (e.g. the Example table's header) left the
+  lines packed in the middle of the strip. The lines are now spread across the
+  strip's width so they reach the "Text distance from edge" on the left/right as
+  well, not just top and bottom.
+- **Snappier tab switching.** Switching to a tab no longer re-computes its
+  styling from scratch every time — it's remembered per theme — so the heavier
+  tabs (Create Chart, Build Profile) come up faster. Theme changes still restyle
+  everything.
+- **Smoother first chart render with a custom font.** The list of installed fonts
+  is now prepared quietly in the background just after launch, so the first chart
+  that uses a system font doesn't pause to gather them.
+
 ## v3.13.12-beta.34
 
 - **Keyboard — arrows move between tabs (Basti).** After ⌘1–5 (or Tab to the tab
