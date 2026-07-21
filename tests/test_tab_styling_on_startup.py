@@ -38,6 +38,7 @@ class _StubWindow:
 
     def __init__(self, n_tabs: int, mode: str = "light") -> None:
         self._title_bar_mode = mode
+        self._styled_tab_theme: dict[int, str] = {}   # perf cache the method reads
         self._tabs = QTabWidget()
         for i in range(n_tabs):
             self._tabs.addTab(QWidget(), f"tab{i}")
