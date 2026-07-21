@@ -1,5 +1,49 @@
 # Changelog
 
+## v3.14.0
+
+The chart-reading engine, the Measurement Report and the i1Profiler import
+features that have matured across the 3.13.12 beta series are now on by default
+and part of the stable release. Highlights since v3.13.11:
+
+- **New: chart-reading engine, on by default.** ChromIQ now reads strips itself,
+  with a live split preview of the chart, per-strip autosave, click a patch to
+  jump there and re-read, and clearer stripe detection. (The classic ArgyllCMS
+  reader is still available in Settings.)
+- **New: Measurement Report tool (Tools → Measurement report).** Measure a chart
+  and get a clear Pass/Fail report of how accurately it reproduced — average,
+  worst and spread of the colour difference (ΔE00), the worst patches, paper
+  white & black and the cube corners. Add several measurements of the same
+  printer and it plots the drift over time, so you can see when ageing inks or a
+  wandering printer make it worth re-profiling. Save it as a PDF. A dated report
+  can be written automatically after every measurement (Settings → Reports).
+- **New: read i1Profiler measurements directly.** Everywhere ChromIQ asks for a
+  measurement — Build Profile, the Measurement Report, Convert, the
+  scanner-target import — you can now hand it i1Profiler's own files
+  (.mxf / .txt / .cxf) and ChromIQ converts them for you, no export step needed.
+  Handy if you measure with an i1iSis or i1iO.
+- **New: keyboard shortcuts + a "Keyboard shortcuts" Help card.** App-wide
+  shortcuts (all carrying ⌘ or an F-key so they never clash with the instrument
+  during a measurement), ⌘1–5 to jump between tabs and then the arrow keys to
+  move along the tab strip.
+- **Chart layout & clip border.** The ChromIQ layout engine gained a reworked
+  clip border — auto-filled record strip, a 180° flip so a right-side border
+  reads the right way up, text that now reaches the edges on every side — plus
+  instrument-margin handling and an editable example table.
+- **Profiles for CMYK and CMYK+N printers.** End-to-end support for printers
+  driven by their inks, including a built-in profile engine for six inks and
+  beyond, N-channel profcheck and a gamut helper.
+- **Tidier working folders.** Each profile now keeps its reports, exports and
+  tool intermediates in their own sub-folders; older projects are migrated
+  automatically the first time you open them.
+- **Snappier UI.** Faster tab switching (styling is remembered per theme) and a
+  smoother first chart render with a custom font.
+- **Fully translated into twelve languages** — German, Spanish, French, Italian,
+  Japanese, Dutch, Norwegian, Polish, Portuguese, Russian, Swedish and Simplified
+  Chinese — including every tooltip and the long in-app help texts.
+
+The per-beta detail for everything above is retained below.
+
 ## v3.13.12-beta.35
 
 - **Clip border — the text reaches the edges on the sides too (Knut).** Short
