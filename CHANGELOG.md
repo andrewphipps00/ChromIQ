@@ -1,5 +1,20 @@
 # Changelog
 
+## v3.13.12-beta.34
+
+- **Keyboard — arrows move between tabs (Basti).** After ⌘1–5 (or Tab to the tab
+  strip), the ← / → keys now switch tabs. The Keyboard-shortcuts card lists it.
+- **Scanner-target import takes i1Profiler's .mxf/.cxf directly (Knut).** The
+  measurement picker only offered .ti3/.txt even though ChromIQ already converts
+  the others; it now lists .mxf / .txt / .cxf, with matching help text.
+- **Measurement Report — the PDF saves in a sensible place (Knut).** An imported
+  i1Profiler measurement is converted in a temporary folder, and the report used
+  to try to save there. It now defaults to a "reports" folder next to the file
+  you loaded (created if missing).
+- **Measurement Report — tidier header with many measurements (Knut).** Loading a
+  whole folder of measurements no longer prints a long list of names in the page
+  header; past a handful it shows the run count and date range instead.
+
 ## v3.13.12-beta.33
 
 - **Measurement Report — add many measurements at once (Knut).** The picker is
