@@ -1398,8 +1398,15 @@ class I1ProfilerToTi3Dialog(_ToolDialogBase):
         if p:
             self._txt = p
             self._txt_field.setText(str(p))
-            if not self._output.name:
+            # Auto-fill the output name from the input stem, and KEEP it in sync
+            # when a different file is picked next — but never clobber a name the
+            # user typed themselves (recognised because it no longer matches the
+            # last stem we filled in). (Knut: picking a second file left the name
+            # stuck on the first file's.)
+            prev_auto = getattr(self, "_auto_name", "")
+            if not self._output.name or self._output.name == prev_auto:
                 self._output._name_edit.setText(p.stem)
+                self._auto_name = p.stem
             # Default the destination to the i1Profiler file's own folder, so the
             # converted .ti3 lands beside the measurement — keeping i1Profiler
             # data together and away from ChromIQ profile folders (Knut).

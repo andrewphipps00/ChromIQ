@@ -456,8 +456,10 @@ class MeasurementReportDialog(QDialog):
         add_row.addWidget(TooltipButton(
             tr("Adding profiles' measurements"),
             tr("Build the report from one or more profiles' measurements.\n\n"
-               "Add Profile's Measurements… — pick any measurement file (.ti3) "
-               "from a profile. ChromIQ gathers EVERY saved measurement of that "
+               "Add Profile's Measurements… — pick any measurement file — a "
+               ".ti3, or an i1Profiler measurement (.mxf, .txt or .cxf) which "
+               "ChromIQ converts for you. From a ChromIQ profile's .ti3 it "
+               "gathers EVERY saved measurement of that "
                "profile (all its runs) and adds the profile to the list below. "
                "You can add as many profiles as you like.\n\n"
                "Where the runs come from: a ChromIQ profile lives in its own "
@@ -471,12 +473,13 @@ class MeasurementReportDialog(QDialog):
                "file (the fixed code values sent to the printer, identical for "
                "every run) — so you still get the full ΔE comparison against a "
                "static reference.\n\n"
-               "Using i1Profiler measurements: export each measurement from "
-               "i1Profiler and convert it with Tools → “Convert i1Profiler → TI3”, "
-               "then add each .ti3 here. No .ti2 is required — ChromIQ derives the "
-               "reference from the measured values, and reads the instrument from "
-               "the i1Profiler file during conversion. Convert into the i1Profiler "
-               "file's own folder to keep everything together.\n\n"
+               "Using i1Profiler measurements: just add each measurement here "
+               "directly — i1Profiler's own saved file (.mxf), a text/CGATS "
+               "export (.txt) or a CxF file (.cxf). No export or convert step is "
+               "needed. No .ti2 is required either — ChromIQ derives the "
+               "reference from the measured values, and reads the instrument "
+               "from the i1Profiler file. Add several measurements to see a trend "
+               "across them.\n\n"
                "Remove Profile's Measurements… — select a profile in the list and "
                "remove it (its runs leave the report). Clear List empties the "
                "whole report.\n\n"
@@ -724,11 +727,35 @@ class MeasurementReportDialog(QDialog):
 
     def _on_add_project(self) -> None:
         path = open_file_dialog(
-            self, tr("Add a profile's measurements (pick any of its .ti3 files)"),
-            tr("Measurement files (*.ti3)"),
+            self, tr("Add a measurement (.ti3, or an i1Profiler .mxf / .txt / .cxf)"),
+            tr("Measurement data (*.ti3 *.mxf *.txt *.cxf);;All files (*)"),
             extra_path=self._settings.get("custom_output_path", ""))
-        if path:
-            self._add_source(Path(path))
+        if not path:
+            return
+        ti3 = self._as_ti3(Path(path))
+        if ti3 is not None:
+            self._add_source(ti3)
+
+    def _as_ti3(self, src: Path) -> "Path | None":
+        """A .ti3 is used as-is; an i1Profiler measurement (.mxf / .txt / .cxf) is
+        converted first — no export step (Knut). Each conversion lands in its own
+        temp folder so several measurements from ONE i1Profiler folder can each be
+        added (the report keys its sources by folder), giving a trend across
+        them."""
+        from workflow.reference_convert import (convert_i1profiler_measurement,
+                                                is_ti3)
+        if is_ti3(src):
+            return src
+        import tempfile
+        out_dir = Path(tempfile.mkdtemp(prefix="chromiq_report_"))
+        argyll = self._settings.get("argyll_bin_path", "/Applications/Argyll/bin")
+        try:
+            return convert_i1profiler_measurement(src, argyll, out_dir)
+        except Exception as exc:  # noqa: BLE001
+            self._view.setHtml(self._error_html(
+                tr("Could not read “{name}” as an i1Profiler measurement:\n{err}")
+                .format(name=src.name, err=str(exc))))
+            return None
 
     def _on_remove_profile(self) -> None:
         rows = sorted((self._profile_list.row(i)
