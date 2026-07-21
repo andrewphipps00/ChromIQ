@@ -1,5 +1,18 @@
 # Changelog
 
+## v3.13.12-beta.31
+
+- **Keyboard shortcuts (Knut/Sebastian).** ChromIQ now has app-wide shortcuts:
+  ⌘1–⌘5 jump straight to a tab, ⌘, opens Preferences, ⌘T opens the Tools menu,
+  F1 (or ⌘?) opens Help, and ⌘Return runs the current tab's main action
+  (Generate / Print / Measure / Build / Check). Every shortcut uses ⌘ (or an
+  F-key) on purpose, so none can clash with the keys that drive the instrument
+  while you measure (Space reads a patch, ← / → move between strips, Enter
+  confirms, Esc stops).
+- **New "Keyboard shortcuts" Help card.** The Welcome / Help window now lists
+  every shortcut, alphabetically, with a note that the keyboard drives the meter
+  during a measurement.
+
 ## v3.13.12-beta.30
 
 - **Clip border — the writing lines fill the whole strip now (Knut).** The clip
