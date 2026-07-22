@@ -669,7 +669,7 @@ class Ti3InfoDialog(QDialog):
                "not just a single XYZ value. Spectral data lets ChromIQ "
                "recompute the colours under different lighting (see below)."))
         if kw.get("CREATED"):
-            self._row_kv(tr("Measured"), kw["CREATED"], tr(
+            self._row_kv(tr("Measured on"), kw["CREATED"], tr(
                 "When the chart was read. Inks and paper can drift over time, so "
                 "an old measurement may no longer match today's prints."))
 
