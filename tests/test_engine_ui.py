@@ -395,6 +395,156 @@ def test_show_only_measured_blanks_unread(monkeypatch):
     assert tab._preview._show_only_measured is True
 
 
+# ---------------------------------------------------------------------------
+# "Show patch values on hover" info tile
+# ---------------------------------------------------------------------------
+
+def test_patch_info_tile_builds_rows_per_mode():
+    """The tile shows expected + measured + ΔE in the split view, and only the
+    matching colour (no ΔE) in the single-colour views."""
+    from ui.tiff_preview import _PatchInfoTile
+    tile = _PatchInfoTile(None)
+    info = {"loc": "B4", "exp_rgb": (200, 10, 20), "meas_rgb": (190, 20, 30),
+            "exp_lab": (50.0, 60.0, 40.0), "meas_lab": (51.0, 55.0, 38.0),
+            "de": 2.34}
+
+    tile.set_content(info, "both")
+    texts = " | ".join(t for _s, t in tile._rows)
+    assert len(tile._rows) == 8            # header + 3 exp + 3 meas + ΔE
+    assert "B4" in texts and "2.34" in texts
+    assert tile.width() > 0 and tile.height() > 0
+
+    tile.set_content(info, "expected")
+    texts = " | ".join(t for _s, t in tile._rows)
+    assert len(tile._rows) == 4            # header + 3 (expected only)
+    assert "2.34" not in texts             # ΔE needs both colours on screen
+
+    tile.set_content(info, "measured")
+    assert len(tile._rows) == 4
+
+
+def test_patch_info_accumulates_and_replaces_like_overlay():
+    """set_patch_info follows the same accumulate/replace-by-box rule as the
+    overlay, so the tile numbers stay in lockstep with the split it explains."""
+    pv = _make_preview()
+    pv.set_patch_info(0, [(QRect(0, 0, 4, 4), {"loc": "A1", "de": 1})])
+    pv.set_patch_info(0, [(QRect(10, 0, 4, 4), {"loc": "A2", "de": 2})])
+    assert len(pv._patch_info[0]) == 2                     # different box → adds
+    pv.set_patch_info(0, [(QRect(0, 0, 4, 4), {"loc": "A1", "de": 9})])
+    assert len(pv._patch_info[0]) == 2                     # same box → replaced
+    by_loc = {info["loc"]: info for _r, info in pv._patch_info[0]}
+    assert by_loc["A1"]["de"] == 9
+
+
+def test_hover_tile_shows_over_measured_patch_only_when_enabled():
+    pv = _make_preview()
+    pv._current = 0
+    box = QRect(50, 50, 30, 30)
+    info = {"loc": "A1", "exp_rgb": (10, 20, 30), "meas_rgb": (12, 22, 32),
+            "exp_lab": (30.0, 1.0, -2.0), "meas_lab": (31.0, 0.5, -1.5),
+            "de": 1.1}
+    pv.set_patch_info(0, [(box, info)])
+
+    s, ox, oy = pv._paint_geom
+    lx = int(ox + (box.x() + box.width() / 2) * s)
+    ly = int(oy + (box.y() + box.height() / 2) * s)
+    on_patch = pv._img_label.mapTo(pv, QPoint(lx, ly))
+
+    # Option OFF: no tile even while pointing right at the patch.
+    pv._update_patch_tile(on_patch)
+    assert pv._patch_tile is None or pv._patch_tile.isHidden()
+
+    # Option ON: the tile appears over the patch…
+    pv.set_show_patch_tile(True)
+    pv._update_patch_tile(on_patch)
+    assert pv._patch_tile is not None and not pv._patch_tile.isHidden()
+
+    # …and hides again when the pointer leaves the patch.
+    off_patch = pv._img_label.mapTo(pv, QPoint(2, 2))
+    pv._update_patch_tile(off_patch)
+    assert pv._patch_tile.isHidden()
+
+    # Turning the option off hides any visible tile at once.
+    pv._update_patch_tile(on_patch)
+    assert not pv._patch_tile.isHidden()
+    pv.set_show_patch_tile(False)
+    assert pv._patch_tile.isHidden()
+
+
+def test_strip_measured_feeds_tile_numbers(monkeypatch):
+    """_on_strip_measured hands the preview per-patch numbers (loc, RGB, L*a*b*,
+    ΔE) for the hover tile, keyed to each patch's own box."""
+    tab = _make_tab()
+    tab._page_stripe_rects = [[QRect(0, 0, 210, 20), QRect(0, 30, 210, 20)]]
+    tab._strips_per_page = [2]
+    tab._engine_strips = [{"strip": "A"}, {"strip": "B"}]
+    tab._patch_boxes = [{f"B{i}": QRect(5 * i, 30, 4, 18) for i in range(1, 4)}]
+    ev = {"strip": "B", "worst_de": 2.0, "reversed": False, "verifiable": True,
+          "patches": [{"id": str(i), "loc": f"B{i}", "xyz": [40, 42, 44],
+                       "exyz": [50, 50, 50], "de": 1.5 + i}
+                      for i in range(1, 4)]}
+    tab._on_strip_measured(ev)
+    info = tab._preview._patch_info.get(0)
+    assert info and len(info) == 3
+    first = info[0][1]
+    assert first["loc"] == "B1"
+    assert set(first) >= {"loc", "exp_rgb", "meas_rgb", "exp_lab", "meas_lab", "de"}
+    assert len(first["exp_lab"]) == 3 and len(first["meas_rgb"]) == 3
+
+
+def test_patch_tile_option_wires_and_persists(monkeypatch):
+    tab = _make_tab()
+    monkeypatch.setattr(tab, "_current_mode", lambda: "manual")
+    tab._m_patch_tile.setChecked(True)
+    assert tab._preview._show_patch_tile is True
+
+    # Part of the manual preset snapshot.
+    assert tab._m_collect_preset_data()["patch_tile"] is True
+    tab._m_apply_preset_data({"patch_tile": False})
+    assert tab._m_patch_tile.isChecked() is False
+
+    # Saved as a manual default and restored.
+    tab._m_patch_tile.setChecked(True)
+    tab._on_save_defaults()
+    tab._m_patch_tile.setChecked(False)
+    tab._restore_defaults()
+    assert tab._m_patch_tile.isChecked() is True
+
+    # Guided has its own independent flag, saved + restored too.
+    monkeypatch.setattr(tab, "_current_mode", lambda: "guided")
+    tab._g_patch_tile.setChecked(True)
+    assert tab._preview._show_patch_tile is True
+    tab._on_save_defaults()
+    tab._g_patch_tile.setChecked(False)
+    tab._restore_defaults()
+    assert tab._g_patch_tile.isChecked() is True
+
+
+def test_file_tooltip_suppressed_over_image_during_measurement():
+    """The chart path/name tooltip must not pop up over the chart while a read
+    runs (it gets in the way of swiping + the hover tile); it stays on the
+    header text and returns to the image once the measurement ends."""
+    pv = _make_preview()
+    pv._update_filename_label([Path("/tmp/proj/runs/run1/chart_01.tif")])
+    assert "Folder:" in pv._img_label.toolTip()
+
+    pv.set_suppress_file_tooltip(True)
+    assert pv._img_label.toolTip() == ""                 # gone from the chart
+    assert "Folder:" in pv._filename_lbl.toolTip()       # still on the header
+
+    pv.set_suppress_file_tooltip(False)
+    assert "Folder:" in pv._img_label.toolTip()          # back after the read
+
+
+def test_measure_read_toggles_file_tooltip_suppression():
+    """Starting a read suppresses the image tooltip; ending it restores it."""
+    tab = _make_tab()
+    tab._set_settings_enabled(False)                     # read starts
+    assert tab._preview._suppress_file_tooltip is True
+    tab._set_settings_enabled(True)                      # read ends
+    assert tab._preview._suppress_file_tooltip is False
+
+
 def test_patch_warn_threshold_comes_from_settings():
     """The ΔE at which a patch gets the red warn outline is the user-set
     'patch_read_warn_de' limit, not a hard-coded constant (Knut)."""

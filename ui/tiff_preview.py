@@ -300,6 +300,121 @@ class _CursorOverlay(QWidget):
         p.end()
 
 
+class _PatchInfoTile(QWidget):
+    """A small floating card that shows the numbers behind a measured patch.
+
+    When "Show patch values on hover" is on, this tile follows the pointer and
+    prints the expected and measured colour of the patch underneath it — each
+    as sRGB (the colour you see on screen) and as exact L*a*b* — plus the ΔE
+    between them. Which rows it shows follows the "Each patch shows" mode, so it
+    always matches the split you are looking at. It is transparent to the mouse,
+    so it never gets in the way of hovering or clicking (#126 follow-up)."""
+
+    _PAD = 8
+    _SWATCH = 13
+    _GUTTER = 8
+
+    def __init__(self, parent: QWidget) -> None:
+        super().__init__(parent)
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+        self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, True)
+        self._mode: str = "dark"
+        # Each row is (swatch QColor | None, text). A None swatch means the row
+        # is a plain text line (header, RGB/Lab detail, or the ΔE footer).
+        self._rows: list[tuple["QColor | None", str]] = []
+        self._font = QFont("Menlo")
+        self._font.setPixelSize(11)
+        self._font_hdr = QFont("Menlo")
+        self._font_hdr.setPixelSize(11)
+        self._font_hdr.setBold(True)
+
+    def set_theme(self, mode: str) -> None:
+        self._mode = "light" if mode == "light" else "dark"
+
+    @staticmethod
+    def _fmt_rgb(rgb) -> str:
+        r, g, b = (int(v) for v in rgb[:3])
+        return f"RGB  {r:>3} {g:>3} {b:>3}"
+
+    @staticmethod
+    def _fmt_lab(lab) -> str:
+        L, a, b = (float(v) for v in lab[:3])
+        return f"Lab  {L:>5.1f} {a:>5.1f} {b:>5.1f}"
+
+    def set_content(self, info: dict, view_mode: str) -> None:
+        """Build the rows for one patch and resize to fit them exactly."""
+        from PyQt6.QtGui import QFontMetrics
+
+        rows: list[tuple["QColor | None", str]] = []
+        loc = str(info.get("loc", "")).strip()
+        rows.append((None, tr("Patch {loc}").format(loc=loc) if loc
+                     else tr("Patch")))
+
+        def add_colour(label: str, rgb, lab) -> None:
+            rows.append((QColor(*(int(v) for v in rgb[:3])), label))
+            rows.append((None, "  " + self._fmt_rgb(rgb)))
+            rows.append((None, "  " + self._fmt_lab(lab)))
+
+        show_exp = view_mode in ("both", "expected")
+        show_meas = view_mode in ("both", "measured")
+        if show_exp:
+            add_colour(tr("Expected"), info.get("exp_rgb", (0, 0, 0)),
+                       info.get("exp_lab", (0, 0, 0)))
+        if show_meas:
+            add_colour(tr("Measured"), info.get("meas_rgb", (0, 0, 0)),
+                       info.get("meas_lab", (0, 0, 0)))
+        # ΔE compares the two colours, so only show it when both are on screen.
+        if view_mode == "both":
+            rows.append((None, tr("ΔE  {de:.2f}").format(de=float(info.get("de", 0.0)))))
+
+        self._rows = rows
+
+        fm = QFontMetrics(self._font)
+        line_h = fm.height() + 2
+        text_x = self._PAD + self._SWATCH + self._GUTTER
+        width = 0
+        for _sw, text in rows:
+            width = max(width, fm.horizontalAdvance(text))
+        self._line_h = line_h
+        self._text_x = text_x
+        w = text_x + width + self._PAD
+        h = self._PAD + line_h * len(rows) + self._PAD
+        self.resize(int(w), int(h))
+        self.update()
+
+    def paintEvent(self, _ev) -> None:  # noqa: N802
+        if not self._rows:
+            return
+        if self._mode == "light":
+            bg, border, fg = QColor(255, 255, 255, 244), QColor("#c9c4be"), QColor("#2a2a2a")
+            sw_border = QColor("#b8b3ad")
+        else:
+            bg, border, fg = QColor(34, 34, 34, 246), QColor("#4a4a4a"), QColor("#ececec")
+            sw_border = QColor("#5a5a5a")
+        from PyQt6.QtGui import QPen
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        p.setPen(QPen(border, 1.0))
+        p.setBrush(bg)
+        p.drawRoundedRect(QRectF(0.5, 0.5, self.width() - 1, self.height() - 1), 5, 5)
+
+        from PyQt6.QtGui import QFontMetrics
+        fm = QFontMetrics(self._font)
+        y = self._PAD
+        for i, (sw, text) in enumerate(self._rows):
+            row_top = y + i * self._line_h
+            baseline = row_top + fm.ascent() + 1
+            if sw is not None:
+                sy = row_top + (self._line_h - self._SWATCH) / 2.0
+                p.setPen(QPen(sw_border, 1.0))
+                p.setBrush(sw)
+                p.drawRect(QRectF(self._PAD, sy, self._SWATCH, self._SWATCH))
+            p.setFont(self._font_hdr if (i == 0 or sw is not None) else self._font)
+            p.setPen(fg)
+            p.drawText(int(self._text_x), int(baseline), text)
+        p.end()
+
+
 # ---------------------------------------------------------------------------
 # Widget
 # ---------------------------------------------------------------------------
@@ -344,6 +459,18 @@ class TiffPreview(QWidget):
         # "Show only measured patches" (#126, Knut): unread patches drawn white
         # with a thin outline so reading progress is obvious.
         self._show_only_measured: bool = False
+        # Per-patch numbers for the hover info tile: {page: [(image-px QRect,
+        # info-dict)]}, kept in lockstep with _patch_overlay. Empty ⇒ no tile.
+        self._patch_info: dict[int, list] = {}
+        # "Show patch values on hover": a small card near the pointer with the
+        # expected/measured RGB + L*a*b* and ΔE of the patch underneath it.
+        self._show_patch_tile: bool = False
+        self._patch_tile: "_PatchInfoTile | None" = None
+        # Chart path/name tooltip (shown on the caption/filename/image widgets).
+        # Suppressed over the image during a measurement so it doesn't pop up
+        # while swiping/inspecting patches (Basti).
+        self._file_tooltip: str = ""
+        self._suppress_file_tooltip: bool = False
         self.stripe_clicked_page = -1  # last emit bookkeeping (tests)
         self._stripe_arrow_mode: str = "base"
         # SpectroScan hexagonal charts: the strip highlight traces the column's
@@ -630,6 +757,7 @@ class TiffPreview(QWidget):
             self._filename_lbl.clear()
             self._filename_lbl.setVisible(False)
             self._header_image_gap.setVisible(False)
+            self._file_tooltip = ""
             for w in (self._caption_lbl, self._filename_lbl, self._img_label):
                 w.setToolTip("")
                 w.unsetCursor()
@@ -641,15 +769,34 @@ class TiffPreview(QWidget):
             folder = first.resolve().parent
         except Exception:
             folder = first.parent
-        tooltip = "\n".join([f"Folder: {folder}", "", *(p.name for p in paths)])
-        for w in (self._caption_lbl, self._filename_lbl, self._img_label):
-            w.setToolTip(tooltip)
+        self._file_tooltip = "\n".join([f"Folder: {folder}", "",
+                                        *(p.name for p in paths)])
+        self._apply_file_tooltip()
         # Help cursor on the header text only — image gets a tooltip but keeps
         # its arrow cursor so it doesn't suggest the dark area itself is clickable.
         self._caption_lbl.setCursor(Qt.CursorShape.WhatsThisCursor)
         self._filename_lbl.setCursor(Qt.CursorShape.WhatsThisCursor)
         self._filename_lbl.setVisible(True)
         self._header_image_gap.setVisible(True)
+
+    def _apply_file_tooltip(self) -> None:
+        """Push the stored chart-file tooltip to the caption/filename/image
+        widgets, honouring :meth:`set_suppress_file_tooltip`. While a
+        measurement runs the tooltip is dropped from the IMAGE only — so it
+        never pops up over the chart while you swipe or inspect patches — but
+        stays on the header text, where the file is still easy to check."""
+        tip = self._file_tooltip
+        self._caption_lbl.setToolTip(tip)
+        self._filename_lbl.setToolTip(tip)
+        self._img_label.setToolTip("" if self._suppress_file_tooltip else tip)
+
+    def set_suppress_file_tooltip(self, on: bool) -> None:
+        """Hide the chart path/name tooltip over the image while `on` (used to
+        keep it out of the way during a measurement) (Basti)."""
+        on = bool(on)
+        if on != self._suppress_file_tooltip:
+            self._suppress_file_tooltip = on
+            self._apply_file_tooltip()
 
     @staticmethod
     def _elide_middle(text: str, max_len: int) -> str:
@@ -715,7 +862,88 @@ class TiffPreview(QWidget):
 
     def clear_patch_overlay(self) -> None:
         self._patch_overlay = {}
+        self._patch_info = {}
+        self._hide_patch_tile()
         self._schedule_refresh()
+
+    def set_patch_info(self, page: int,
+                       items: "list[tuple[QRect, dict]]",
+                       replace_page: bool = False) -> None:
+        """Per-patch numbers for the hover info tile on `page`: each item is
+        (image-px rect, info-dict with loc / exp_rgb / meas_rgb / exp_lab /
+        meas_lab / de). Kept in lockstep with :meth:`set_patch_overlay` — the
+        same accumulate/replace-by-box rule, so re-reading a strip refreshes its
+        patches' numbers instead of stacking a stale copy (#126 follow-up)."""
+        if replace_page or page not in self._patch_info:
+            self._patch_info[page] = list(items)
+        else:
+            new_boxes = {(r.x(), r.y(), r.width(), r.height()) for r, _ in items}
+            self._patch_info[page] = [
+                it for it in self._patch_info[page]
+                if (it[0].x(), it[0].y(), it[0].width(), it[0].height()) not in new_boxes
+            ] + list(items)
+
+    def set_show_patch_tile(self, on: bool) -> None:
+        """Turn the hover info tile on/off. When off, any visible tile hides at
+        once; when on, it appears the next time the pointer is over a measured
+        patch (#126 follow-up, Basti)."""
+        self._show_patch_tile = bool(on)
+        if not self._show_patch_tile:
+            self._hide_patch_tile()
+
+    def _ensure_patch_tile(self) -> "_PatchInfoTile":
+        if self._patch_tile is None:
+            self._patch_tile = _PatchInfoTile(self)
+        return self._patch_tile
+
+    def _hide_patch_tile(self) -> None:
+        # Guard on isHidden() (the explicit shown/hidden flag), not isVisible()
+        # (which also goes False when the parent is hidden) — so the tile is
+        # reliably taken down whenever it isn't already down.
+        if self._patch_tile is not None and not self._patch_tile.isHidden():
+            self._patch_tile.hide()
+
+    def _update_patch_tile(self, pos: QPoint) -> None:
+        """Show/move/hide the hover info tile for the patch under `pos` (a point
+        in this widget's own coordinates)."""
+        if not self._show_patch_tile or self._pixmap is None:
+            self._hide_patch_tile()
+            return
+        info_items = self._patch_info.get(self._current)
+        if not info_items:
+            self._hide_patch_tile()
+            return
+        label_pos = self._img_label.mapFrom(self, pos)
+        px = self._image_px_at(label_pos)
+        if px is None:
+            self._hide_patch_tile()
+            return
+        ix, iy = px
+        hit = None
+        for rect, info in info_items:
+            if rect.contains(ix, iy):
+                hit = info
+                break
+        if hit is None:
+            self._hide_patch_tile()
+            return
+        tile = self._ensure_patch_tile()
+        tile.set_theme(self._mode)
+        tile.set_content(hit, self._overlay_mode)
+        tw, th = tile.width(), tile.height()
+        # Sit just off the pointer, but flip/clamp so the whole card stays inside
+        # the preview instead of being cut off at an edge.
+        x = pos.x() + 18
+        y = pos.y() + 18
+        if x + tw > self.width():
+            x = pos.x() - 18 - tw
+        if y + th > self.height():
+            y = pos.y() - 18 - th
+        x = max(2, min(x, self.width() - tw - 2))
+        y = max(2, min(y, self.height() - th - 2))
+        tile.move(int(x), int(y))
+        tile.raise_()
+        tile.show()
 
     def set_page_patch_boxes(self, mapping: "dict[int, list[QRect]]") -> None:
         """Exact per-patch pixel boxes per page (#126, Basti).
@@ -924,6 +1152,7 @@ class TiffPreview(QWidget):
         if 0 <= index < len(self._pages) and index != self._current:
             self._current = index
             self._active_stripe = -1
+            self._hide_patch_tile()   # its patch is on the page we just left
             self._update_nav()
             self._schedule_refresh()
             self.page_changed.emit(self._current)
@@ -948,6 +1177,8 @@ class TiffPreview(QWidget):
         self._stripe_rects = []
         self._stripe_arrow_mode = "base"
         self._page_patch_boxes = {}
+        self._patch_info = {}
+        self._hide_patch_tile()
         self._pixmap = None
         self._ink_channels = None
         self._img_label.setText(tr("No preview"))
@@ -1933,6 +2164,7 @@ class TiffPreview(QWidget):
                 # (Basti). The debounce is kept for bulk changes elsewhere.
                 self._repaint_label()
         self._update_ink_readout(event)   # per-ink cursor readout (#72)
+        self._update_patch_tile(event.position().toPoint())  # hover value tile
         if self._coord_readout and self._pixmap is not None:
             self._coord_pos = self._img_label.mapFrom(
                 self, event.position().toPoint())
@@ -1949,6 +2181,7 @@ class TiffPreview(QWidget):
             self._coord_pos = None
             if self._cursor_overlay is not None:
                 self._cursor_overlay.show_cursor(None, None)
+        self._hide_patch_tile()
         super().leaveEvent(event)
 
     def mouseReleaseEvent(self, event) -> None:  # type: ignore[override]

@@ -927,10 +927,13 @@ class TabMeasure(QWidget):
         prefix = "g" if self._current_mode() == "guided" else "m"
         combo = getattr(self, f"_{prefix}_overlay_mode", None)
         only = getattr(self, f"_{prefix}_only_measured", None)
+        tile = getattr(self, f"_{prefix}_patch_tile", None)
         if combo is not None:
             self._preview.set_overlay_mode(combo.currentData())
         if only is not None:
             self._preview.set_show_only_measured(only.isChecked())
+        if tile is not None:
+            self._preview.set_show_patch_tile(tile.isChecked())
 
     def _on_view_control_changed(self, prefix: str) -> None:
         """A Live-preview control changed. Only the ACTIVE module's controls
@@ -1460,7 +1463,7 @@ class TabMeasure(QWidget):
         the scrolling parameter area, so it stays visible and usable while a
         measurement locks the parameters, and its state saves as defaults / in a
         preset. Stores self._{prefix}_view_grp / _engine_row / _overlay_mode /
-        _only_measured."""
+        _only_measured / _patch_tile."""
         grp = QGroupBox(tr("Live preview"), self)
         grp.setFlat(True)
         gv = QVBoxLayout(grp)
@@ -1506,10 +1509,17 @@ class TabMeasure(QWidget):
         only = QCheckBox(tr("Show only measured patches"), row)
         only.toggled.connect(
             lambda _on, p=prefix: self._on_view_control_changed(p))
+        tile = QCheckBox(tr("Show patch values on hover"), row)
+        tile.toggled.connect(
+            lambda _on, p=prefix: self._on_view_control_changed(p))
+        # Two options share this row: "only measured" on the left with its help
+        # icon right beside it, then a stretch, then "values on hover" with its
+        # own help icon on the right (Basti).
         om_row = QHBoxLayout()
         om_row.setContentsMargins(0, 0, 0, 0)
+        om_row.setSpacing(0)
         om_row.addWidget(only)
-        om_row.addStretch(1)
+        om_row.addSpacing(10)   # a little breathing room before the help icon
         om_row.addWidget(TooltipButton(
             tr("Show only measured patches"),
             tr("Turn this on to see your progress through the chart at a glance: "
@@ -1521,6 +1531,26 @@ class TabMeasure(QWidget):
             "whole printed chart again. It only changes the preview, never your "
             "readings."),
             row))
+        om_row.addStretch(1)
+        om_row.addWidget(tile)
+        om_row.addSpacing(10)   # same breathing room before its help icon
+        om_row.addWidget(TooltipButton(
+            tr("Show patch values on hover"),
+            tr("Turn this on to inspect any patch you've already measured: point "
+            "at it and a small card appears next to your mouse with the exact "
+            "numbers behind the two colours in the split — what the chart "
+            "expected, and what your instrument actually read.\n\n"
+            "For each colour the card shows RGB (roughly the colour you see on "
+            "screen) and L*a*b* (the exact measurement), plus the ΔE between "
+            "them — how far the print landed from the target for that single "
+            "patch. A large ΔE on a strong, saturated colour is normal (paper "
+            "simply can't reach every colour a screen can); what you're really "
+            "looking for is one patch that sits far off its neighbours.\n\n"
+            "The card follows the 'Each patch shows' setting above: with "
+            "'Expected & measured (split)' you get both colours and the ΔE; with "
+            "'Expected colour only' or 'Measured colour only' you get just that "
+            "one. It only reads out numbers — it never changes your readings."),
+            row))
         v.addLayout(om_row)
 
         gv.addWidget(row)
@@ -1528,6 +1558,7 @@ class TabMeasure(QWidget):
         setattr(self, f"_{prefix}_engine_row", row)
         setattr(self, f"_{prefix}_overlay_mode", combo)
         setattr(self, f"_{prefix}_only_measured", only)
+        setattr(self, f"_{prefix}_patch_tile", tile)
         return grp
 
     # ------------------------------------------------------------------
@@ -1910,6 +1941,7 @@ class TabMeasure(QWidget):
             # preset restores the whole workspace look the user prefers.
             "overlay_mode":  self._m_overlay_mode.currentData(),
             "only_measured": self._m_only_measured.isChecked(),
+            "patch_tile":    self._m_patch_tile.isChecked(),
         }
         for opt in self._m_chartread_opts:
             if opt.checkbox:
@@ -1937,6 +1969,7 @@ class TabMeasure(QWidget):
         if _om >= 0:
             self._m_overlay_mode.setCurrentIndex(_om)
         self._m_only_measured.setChecked(bool(data.get("only_measured", False)))
+        self._m_patch_tile.setChecked(bool(data.get("patch_tile", False)))
         for opt in self._m_chartread_opts:
             if opt.checkbox:
                 opt.checkbox.setChecked(bool(data.get(f"{opt.key}_enabled", False)))
@@ -1975,6 +2008,7 @@ class TabMeasure(QWidget):
             if _om >= 0:
                 self._m_overlay_mode.setCurrentIndex(_om)
             self._m_only_measured.setChecked(bool(s.get("manual2_only_measured", False)))
+            self._m_patch_tile.setChecked(bool(s.get("manual2_patch_tile", False)))
             for opt in self._m_chartread_opts:
                 if opt.checkbox:
                     opt.checkbox.setChecked(bool(s.get(f"manual2_chartread_{opt.key}_enabled", False)))
@@ -2946,6 +2980,9 @@ class TabMeasure(QWidget):
                 w.setEnabled(enabled)
         self._file_grp.setEnabled(enabled)
         self._save_defaults_btn.setEnabled(enabled)
+        # Keep the chart path/name tooltip from popping up over the chart while a
+        # read runs — it gets in the way of swiping and the patch hover tile.
+        self._preview.set_suppress_file_tooltip(not enabled)
 
     def _on_start(self) -> None:
         if not self._ti1_path:
@@ -5292,19 +5329,34 @@ class TabMeasure(QWidget):
         # floor alone, so it never adds false alarms (Nelson/pharmacist: a good
         # print was flagged almost everywhere against sRGB).
         fence = _strip_outlier_fence([float(p.get("de", 0)) for p in patches])
+        from workflow.icc_info import xyz_to_lab
         items = []
+        info_items = []
         for p in patches:
             box = boxes.get(str(p.get("loc", "")))
             if box is None:
                 continue
             de_p = float(p.get("de", 0))
             warn = de_p >= warn_de and de_p >= fence
-            items.append((box,
-                          _QC(*_xyz_d50_to_srgb8(p.get("exyz", [0, 0, 0]))),
-                          _QC(*_xyz_d50_to_srgb8(p.get("xyz", [0, 0, 0]))),
-                          warn))
+            exyz = p.get("exyz", [0, 0, 0])
+            mxyz = p.get("xyz", [0, 0, 0])
+            exp_rgb = _xyz_d50_to_srgb8(exyz)
+            meas_rgb = _xyz_d50_to_srgb8(mxyz)
+            items.append((box, _QC(*exp_rgb), _QC(*meas_rgb), warn))
+            # Numbers behind the split, for the "values on hover" tile. The tile
+            # shows the SAME sRGB as the swatch (so card and patch always agree)
+            # plus the exact D50 L*a*b* and the engine's own ΔE for the patch.
+            info_items.append((box, {
+                "loc": str(p.get("loc", "")),
+                "exp_rgb": exp_rgb,
+                "meas_rgb": meas_rgb,
+                "exp_lab": xyz_to_lab(tuple(float(v) / 100.0 for v in exyz[:3])),
+                "meas_lab": xyz_to_lab(tuple(float(v) / 100.0 for v in mxyz[:3])),
+                "de": de_p,
+            }))
         if items:
             self._preview.set_patch_overlay(page, items)
+            self._preview.set_patch_info(page, info_items)
         self._update_engine_read_map()
 
     def _update_engine_read_map(self) -> None:
@@ -5464,6 +5516,7 @@ class TabMeasure(QWidget):
             s.set("measure_patch_by_patch",    self._pbp_cb.isChecked())
             s.set("measure_overlay_mode",      self._g_overlay_mode.currentData())
             s.set("measure_only_measured",     self._g_only_measured.isChecked())
+            s.set("measure_patch_tile",        self._g_patch_tile.isChecked())
             for opt in self._chartread_opts:
                 if opt.checkbox:
                     s.set(f"measure_{opt.key}_enabled", opt.checkbox.isChecked())
@@ -5481,6 +5534,7 @@ class TabMeasure(QWidget):
             s.set("manual2_chartread_pbp",      self._m_pbp_cb.isChecked())
             s.set("manual2_overlay_mode",       self._m_overlay_mode.currentData())
             s.set("manual2_only_measured",      self._m_only_measured.isChecked())
+            s.set("manual2_patch_tile",         self._m_patch_tile.isChecked())
             for opt in self._m_chartread_opts:
                 if opt.checkbox:
                     s.set(f"manual2_chartread_{opt.key}_enabled", opt.checkbox.isChecked())
@@ -5509,6 +5563,7 @@ class TabMeasure(QWidget):
         if _gom >= 0:
             self._g_overlay_mode.setCurrentIndex(_gom)
         self._g_only_measured.setChecked(bool(s.get("measure_only_measured", False)))
+        self._g_patch_tile.setChecked(bool(s.get("measure_patch_tile", False)))
         for opt in self._chartread_opts:
             if opt.checkbox:
                 enabled = bool(s.get(f"measure_{opt.key}_enabled", False))
@@ -5544,6 +5599,7 @@ class TabMeasure(QWidget):
         if _om >= 0:
             self._m_overlay_mode.setCurrentIndex(_om)
         self._m_only_measured.setChecked(bool(s.get("manual2_only_measured", False)))
+        self._m_patch_tile.setChecked(bool(s.get("manual2_patch_tile", False)))
         for opt in self._m_chartread_opts:
             if opt.checkbox:
                 enabled = bool(s.get(f"manual2_chartread_{opt.key}_enabled", False))

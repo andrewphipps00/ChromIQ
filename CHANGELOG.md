@@ -1,5 +1,20 @@
 # Changelog
 
+## v3.14.4
+
+- **See the numbers behind any measured patch, right in the preview.** With the
+  ChromIQ chart-reading engine, the Measure preview already splits each patch
+  into the colour the chart expected and the colour your instrument read. A new
+  **“Show patch values on hover”** option (Measure → Live preview) adds a small
+  card that follows your mouse and shows, for the patch under it, both colours
+  as RGB and as exact L\*a\*b\*, plus the ΔE between them — so you can check a
+  suspicious patch without leaving the measuring screen. It follows the “Each
+  patch shows” setting, saves as a default, and travels in a preset.
+- **The chart’s file path no longer pops up over the chart while you measure.**
+  The path/name tooltip used to appear on the chart image during a read, getting
+  in the way of swiping and the new hover card; it is now held back until the
+  measurement finishes (and still sits on the header text throughout).
+
 ## v3.14.3
 
 - **The number of automatic calibration retries is now adjustable (mavtop).**
